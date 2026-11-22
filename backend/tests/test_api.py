@@ -35,3 +35,33 @@ def test_non_pdf_filename_rejected(pdf_bytes):
         "revised": ("b.pdf", pdf_bytes([["Hello"]]), "application/pdf"),
     })
     assert res.status_code == 415
+
+
+def test_api_response_is_not_cacheable(pdf_bytes):
+    res = client.post("/api/compare", files={
+        "original": ("a.pdf", pdf_bytes([["Deadline: 13 December 2026"]]), "application/pdf"),
+        "revised": ("b.pdf", pdf_bytes([["Deadline: 14 December 2026"]]), "application/pdf"),
+    })
+    assert res.status_code == 200
+    assert res.headers["cache-control"] == "no-store"
+    assert res.headers["x-content-type-options"] == "nosniff"
+    field = res.json()["findings"][0]["field_changes"][0]
+    assert field["kind"] == "date"
+    assert field["outcome"] == "changed"
+
+
+def test_api_rejects_too_large_upload(pdf_bytes):
+    res = client.post("/api/compare", files={
+        "original": ("a.pdf", b"%PDF-" + b"0" * (10 * 1024 * 1024), "application/pdf"),
+        "revised": ("b.pdf", pdf_bytes([["Hello"]]), "application/pdf"),
+    })
+    assert res.status_code == 413
+
+
+def test_api_strips_untrusted_paths_from_filenames(pdf_bytes):
+    res = client.post("/api/compare", files={
+        "original": ("C:\\sensitive\\old.pdf", pdf_bytes([["Deadline: 13 Dec 2026"]]), "application/pdf"),
+        "revised": ("b.pdf", pdf_bytes([["Deadline: 14 Dec 2026"]]), "application/pdf"),
+    })
+    assert res.status_code == 200
+    assert res.json()["documents"][0]["filename"] == "old.pdf"

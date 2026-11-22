@@ -64,3 +64,45 @@ def test_does_not_infer_authority_from_upload_order(pdf_bytes):
     findings = compare_documents(a, b).findings
     assert findings[0].status == "confirmed_change"
     assert not any(f.authority_verified for f in findings)
+
+
+def test_reordered_duplicate_deadlines_preserve_exact_statements(pdf_bytes):
+    a = extract_pdf(pdf_bytes([["Deadline: 13 December 2026", "Deadline: 14 December 2026"]]),
+                    document_id="original", filename="a.pdf")
+    b = extract_pdf(pdf_bytes([["Deadline: 14 December 2026", "Deadline: 13 December 2026"]]),
+                    document_id="revised", filename="b.pdf")
+    report = compare_documents(a, b)
+    assert not any(f.status in {"confirmed_change", "possible_change"} for f in report.findings)
+
+
+def test_duplicate_context_is_not_confirmed_change(pdf_bytes):
+    a = extract_pdf(pdf_bytes([["Deadline: 13 December 2026", "Deadline: 14 December 2026"]]),
+                    document_id="original", filename="a.pdf")
+    b = extract_pdf(pdf_bytes([["Deadline: 15 December 2026", "Deadline: 16 December 2026"]]),
+                    document_id="revised", filename="b.pdf")
+    changes = [f for f in compare_documents(a, b).findings if f.revised and f.original]
+    assert len(changes) == 2
+    assert all(f.status == "possible_change" for f in changes)
+
+
+def test_numeric_ambiguity_does_not_create_false_contradiction(pdf_bytes):
+    a = extract_pdf(pdf_bytes([["Deadline: 01/02/2026", "Deadline: 02/01/2026"]]),
+                    document_id="original", filename="a.pdf")
+    b = extract_pdf(pdf_bytes([["Deadline: 01/02/2026"]]),
+                    document_id="revised", filename="b.pdf")
+    assert not any(f.status == "contradiction" for f in compare_documents(a, b).findings)
+
+
+def test_syntactic_date_delta_is_included_in_finding(pdf_bytes):
+    report = compare_documents(
+        *_pair(pdf_bytes, "Deadline: 13 December 2026", "Deadline: 14 December 2026")
+    )
+    assert report.findings[0].field_changes[0].outcome == "changed"
+
+
+def test_equivalent_date_written_differently_is_not_value_change(pdf_bytes):
+    report = compare_documents(
+        *_pair(pdf_bytes, "Deadline: 13 December 2026", "Deadline: 13/12/2026")
+    )
+    assert len(report.findings) == 1
+    assert report.findings[0].field_changes[0].outcome == "same_value"

@@ -1,5 +1,6 @@
 """Extract line-level, page-linked PDF evidence without OCR or persistent storage."""
 
+import math
 from dataclasses import dataclass
 
 import fitz
@@ -9,6 +10,8 @@ from .models import DocumentSummary, Evidence, ExtractedLine
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_PAGES = 80
 MAX_EXTRACTED_LINES = 12000
+MAX_LINE_CHARACTERS = 5000
+MAX_TOTAL_CHARACTERS = 1_000_000
 
 
 class InvalidDocument(ValueError):
@@ -35,6 +38,7 @@ def extract_pdf(contents: bytes, *, document_id: str, filename: str) -> Extracte
         raise InvalidDocument("Malformed or unreadable PDF") from exc
     lines: list[ExtractedLine] = []
     warnings: list[str] = []
+    total_characters = 0
     try:
         if pdf.is_encrypted or pdf.needs_pass:
             raise InvalidDocument("Encrypted PDFs are not supported")
@@ -52,8 +56,15 @@ def extract_pdf(contents: bytes, *, document_id: str, filename: str) -> Extracte
                     text = " ".join(s.get("text", "").strip() for s in spans).strip()
                     if not text:
                         continue
+                    if len(text) > MAX_LINE_CHARACTERS:
+                        raise InvalidDocument("PDF contains an excessively long text line")
+                    total_characters += len(text)
+                    if total_characters > MAX_TOTAL_CHARACTERS:
+                        raise InvalidDocument("PDF contains too much extractable text")
                     box = rawline.get("bbox")
-                    if not box or len(box) != 4:
+                    if not box or len(box) != 4 or not all(
+                        math.isfinite(float(c)) for c in box
+                    ):
                         continue
                     evidence = Evidence(
                         document_id=document_id,

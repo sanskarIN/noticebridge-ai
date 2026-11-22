@@ -30,6 +30,20 @@ class DocumentSummary(BaseModel):
     has_extractable_text: bool
 
 
+class ParsedValue(BaseModel):
+    kind: Literal["date", "amount"]
+    raw: str
+    canonical: str | None = None
+    confidence: Literal["parsed", "ambiguous", "invalid"]
+
+
+class ValueChange(BaseModel):
+    kind: Literal["date", "amount"]
+    original: ParsedValue
+    revised: ParsedValue
+    outcome: Literal["changed", "same_value", "uncertain"]
+
+
 class Finding(BaseModel):
     id: str
     status: FindingStatus
@@ -41,6 +55,7 @@ class Finding(BaseModel):
     supporting_evidence: list[Evidence] = Field(default_factory=list)
     similarity: float = Field(ge=0, le=1)
     authority_verified: bool = False
+    field_changes: list[ValueChange] = Field(default_factory=list)
 
 
 class ChecklistItem(BaseModel):

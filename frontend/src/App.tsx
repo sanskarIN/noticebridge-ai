@@ -1,18 +1,24 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 type Language = 'en' | 'hi';
-type Evidence = { document_id: string; filename: string; page: number; text: string; bbox: [number, number, number, number] };
+type DocumentRole = 'original' | 'revised';
+type Evidence = { document_id: DocumentRole; filename: string; page: number; text: string; bbox: [number, number, number, number] };
+type ParsedValue = { kind: 'date' | 'amount'; raw: string; canonical: string | null; confidence: 'parsed' | 'ambiguous' | 'invalid' };
+type ValueChange = { kind: 'date' | 'amount'; original: ParsedValue; revised: ParsedValue; outcome: 'changed' | 'same_value' | 'uncertain' };
 type Finding = {
   id: string; status: 'confirmed_change' | 'possible_change' | 'contradiction' | 'missing_information';
   category: string; summary_en: string; summary_hi: string;
-  original: Evidence | null; revised: Evidence | null; supporting_evidence: Evidence[]; similarity: number; authority_verified: boolean;
+  original: Evidence | null; revised: Evidence | null; supporting_evidence: Evidence[];
+  similarity: number; authority_verified: boolean; field_changes: ValueChange[];
 };
 type Checklist = { description_en: string; description_hi: string; finding_id: string; requires_human_verification: boolean };
 type Report = {
   documents: { id: string; filename: string; page_count: number; line_count: number; has_extractable_text: boolean }[];
   findings: Finding[]; checklist: Checklist[]; warnings: string[]; verification_policy: string;
 };
+type Preview = { url: string; filename: string; page: number; text: string; bbox: Evidence['bbox'] };
 
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const translations = {
   en: {
     eyebrow: 'EVIDENCE-FIRST DOCUMENT INTELLIGENCE',
@@ -25,6 +31,11 @@ const translations = {
     checklist: 'Review checklist', source: 'Source evidence', noFindings: 'No differences identified by the current matcher.',
     page: 'Page', verify: 'Verify against the issuing organization before acting on a deadline or eligibility change.',
     authority: 'Authority not verified', warnings: 'Processing warnings',
+    openPage: 'Open PDF page', closePreview: 'Close preview', newTab: 'Open PDF in new tab',
+    previewNote: 'This opens the locally selected PDF at the referenced page. Bounding boxes are preserved in the report; a graphical highlight overlay is not available yet.',
+    export: 'Export evidence report (JSON)', progress: 'Reviewed',
+    values: 'Extracted values (syntactic check only)', uncertain: 'Uncertain',
+    invalidFile: 'Select a PDF no larger than 10 MiB.',
   },
   hi: {
     eyebrow: 'स्रोत-आधारित दस्तावेज़ विश्लेषण',
@@ -37,15 +48,23 @@ const translations = {
     checklist: 'सत्यापन सूची', source: 'मूल प्रमाण', noFindings: 'वर्तमान मिलान विधि ने कोई अंतर नहीं पहचाना।',
     page: 'पृष्ठ', verify: 'तिथि या पात्रता में बदलाव के आधार पर कदम उठाने से पहले जारीकर्ता से पुष्टि करें।',
     authority: 'आधिकारिक प्राथमिकता अप्रमाणित', warnings: 'प्रोसेसिंग चेतावनियाँ',
+    openPage: 'PDF पृष्ठ खोलें', closePreview: 'पूर्वावलोकन बंद करें', newTab: 'नए टैब में PDF खोलें',
+    previewNote: 'चुनी हुई PDF का संबंधित पृष्ठ दिखाया गया है। स्रोत का बॉक्स रिपोर्ट में सुरक्षित है; चित्र पर हाइलाइट अभी उपलब्ध नहीं है।',
+    export: 'प्रमाण रिपोर्ट डाउनलोड करें (JSON)', progress: 'समीक्षा पूरी',
+    values: 'निकाले गए मान (केवल प्रारूप की जाँच)', uncertain: 'अनिश्चित',
+    invalidFile: 'केवल 10 MiB तक की PDF चुनें।',
   },
 };
 
-function EvidenceCard({ evidence, label, page }: { evidence: Evidence | null; label: string; page: string }) {
+function EvidenceCard({ evidence, label, page, openPage, onOpen }: {
+  evidence: Evidence | null; label: string; page: string; openPage: string; onOpen: (e: Evidence) => void;
+}) {
   return <div className="evidence-card">
     <div className="evidence-label">{label}</div>
     {evidence ? <>
       <div className="page-ref">{evidence.filename} · {page} {evidence.page}</div>
       <blockquote>{evidence.text}</blockquote>
+      <button type="button" className="source-button" onClick={() => onOpen(evidence)}>{openPage} ↗</button>
     </> : <p className="muted">—</p>}
   </div>;
 }
@@ -58,24 +77,74 @@ export default function App() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [checked, setChecked] = useState<string[]>([]);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
   const t = translations[language];
+
+  useEffect(() => {
+    return () => { if (preview) URL.revokeObjectURL(preview.url); };
+  }, [preview]);
+  useEffect(() => () => controllerRef.current?.abort(), []);
+
+  function setSource(role: DocumentRole, file: File | null) {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    setPending(false); setReport(null); setChecked([]); setPreview(null); setError('');
+    if (file && (!file.name.toLowerCase().endsWith('.pdf') || file.size > MAX_FILE_BYTES)) {
+      setError(t.invalidFile);
+      if (role === 'original') setOriginal(null); else setRevised(null);
+      return;
+    }
+    if (role === 'original') setOriginal(file); else setRevised(file);
+  }
+
+  function openEvidence(evidence: Evidence) {
+    const file = evidence.document_id === 'original' ? original : revised;
+    if (!file) return;
+    setPreview({
+      url: URL.createObjectURL(file), filename: evidence.filename,
+      page: evidence.page, text: evidence.text, bbox: evidence.bbox,
+    });
+  }
+
+  function exportReport() {
+    if (!report) return;
+    const payload = { ...report, review: checked, exported_at: new Date().toISOString() };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'noticebridge-evidence-report.json';
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!original || !revised) return;
-    setPending(true); setError(''); setReport(null); setChecked([]);
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setPending(true); setError(''); setReport(null); setChecked([]); setPreview(null);
     try {
       const body = new FormData();
       body.append('original', original); body.append('revised', revised);
-      const response = await fetch('/api/compare', { method: 'POST', body });
+      const response = await fetch('/api/compare', { method: 'POST', body, signal: controller.signal });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
         throw new Error(typeof payload?.detail === 'string' ? payload.detail : `Request failed (${response.status})`);
       }
-      setReport(await response.json() as Report);
+      const result = await response.json() as Report;
+      if (controllerRef.current === controller) setReport(result);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not compare documents');
-    } finally { setPending(false); }
+      if (controllerRef.current === controller && !controller.signal.aborted) {
+        setError(cause instanceof Error ? cause.message : 'Could not compare documents');
+      }
+    } finally {
+      if (controllerRef.current === controller) {
+        setPending(false);
+        controllerRef.current = null;
+      }
+    }
   }
 
   return <div className="app-shell">
@@ -100,12 +169,12 @@ export default function App() {
         <div className="section-heading"><div><span className="section-number">01 / ANALYZE</span><h2>Document comparison</h2></div><div className="section-hint">PDF → EVIDENCE → FINDINGS</div></div>
         <form onSubmit={submit}>
           <div className="upload-grid">
-            {([['original', original, setOriginal, t.original], ['revised', revised, setRevised, t.revised]] as const).map(([id, file, setter, label], i) =>
+            {([['original', original, t.original], ['revised', revised, t.revised]] as const).map(([id, file, label], i) =>
               <label className="upload-card" key={id} htmlFor={id}>
                 <span className="upload-icon">{i === 0 ? '01' : '02'}</span><strong>{label}</strong>
                 <span className="upload-detail">{file ? file.name : t.drop}</span>
                 <span className="upload-action">{file ? '↻ Replace' : '+ Browse file'}</span>
-                <input id={id} type="file" accept=".pdf,application/pdf" onChange={(e) => setter(e.target.files?.[0] ?? null)} />
+                <input id={id} type="file" accept=".pdf,application/pdf" onChange={(e) => setSource(id, e.target.files?.[0] ?? null)} />
               </label>)}
           </div>
           <div className="upload-footer"><p>{t.note}</p><button type="submit" disabled={!original || !revised || pending} className="primary-button">{pending ? t.comparing : t.button}<span>→</span></button></div>
@@ -113,7 +182,7 @@ export default function App() {
         </form>
       </section>
       {report && <section className="results" aria-live="polite">
-        <div className="section-heading"><div><span className="section-number">02 / REVIEW</span><h2>{t.findings}</h2></div><div className="section-hint">{report.findings.length} RESULTS</div></div>
+        <div className="section-heading"><div><span className="section-number">02 / REVIEW</span><h2>{t.findings}</h2></div><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button></div>
         <div className="metrics">
           <div><b>{report.findings.length}</b><span>{t.findings}</span></div>
           <div><b>{report.findings.filter(f => f.status === 'confirmed_change').length}</b><span>{t.confirmed}</span></div>
@@ -124,13 +193,23 @@ export default function App() {
         <div className="findings-list">{report.findings.map(f => <article className="finding" key={f.id}>
           <div className="finding-header"><div><span className={`status ${f.status}`}>{f.status.replaceAll('_', ' ')}</span><span className="category">{f.category.toUpperCase()}</span></div><span className="match-score">{Math.round(f.similarity * 100)}% context match</span></div>
           <p className="finding-summary">{language === 'hi' ? f.summary_hi : f.summary_en}</p>
-          <div className="evidence-grid"><EvidenceCard evidence={f.original} label={t.original} page={t.page} /><EvidenceCard evidence={f.revised} label={t.revised} page={t.page} /></div>
-          {f.supporting_evidence.length > 0 && <div className="evidence-grid">{f.supporting_evidence.map((e, i) => <EvidenceCard key={`${e.filename}-${e.page}-${i}`} evidence={e} label={`${t.source} ${i + 1}`} page={t.page} />)}</div>}
+          {f.field_changes.length > 0 && <div className="value-changes"><b>{t.values}</b>{f.field_changes.map((delta, i) => <p key={i}><span className="value-outcome">{delta.kind}: {delta.outcome.replaceAll('_', ' ')}</span> {delta.original.raw} → {delta.revised.raw} {delta.outcome === 'uncertain' ? `(${t.uncertain})` : `(${delta.original.canonical} → ${delta.revised.canonical})`}</p>)}</div>}
+          <div className="evidence-grid"><EvidenceCard evidence={f.original} label={t.original} page={t.page} openPage={t.openPage} onOpen={openEvidence} /><EvidenceCard evidence={f.revised} label={t.revised} page={t.page} openPage={t.openPage} onOpen={openEvidence} /></div>
+          {f.supporting_evidence.length > 0 && <div className="evidence-grid">{f.supporting_evidence.map((e, i) => <EvidenceCard key={`${e.document_id}-${e.page}-${i}`} evidence={e} label={`${t.source} ${i + 1}`} page={t.page} openPage={t.openPage} onOpen={openEvidence} />)}</div>}
         </article>)}</div>
-        {report.checklist.length > 0 && <div className="checklist"><h3>{t.checklist}</h3>{report.checklist.map(item => <label key={item.finding_id} className="checklist-item"><input type="checkbox" checked={checked.includes(item.finding_id)} onChange={(e) => setChecked(old => e.target.checked ? [...old, item.finding_id] : old.filter(x => x !== item.finding_id))} /><span>{language === 'hi' ? item.description_hi : item.description_en}</span></label>)}</div>}
+        {report.checklist.length > 0 && <div className="checklist"><h3>{t.checklist} · {checked.length}/{report.checklist.length} {t.progress}</h3>{report.checklist.map(item => <label key={item.finding_id} className="checklist-item"><input type="checkbox" checked={checked.includes(item.finding_id)} onChange={(e) => setChecked(old => e.target.checked ? [...old, item.finding_id] : old.filter(x => x !== item.finding_id))} /><span>{language === 'hi' ? item.description_hi : item.description_en}</span></label>)}</div>}
         {report.warnings.length > 0 && <aside className="warnings"><h3>{t.warnings}</h3>{report.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</aside>}
       </section>}
     </main>
+    {preview && <div className="preview-backdrop" role="presentation">
+      <section className="preview-dialog" role="dialog" aria-modal="true" aria-label={`${preview.filename} · ${t.page} ${preview.page}`}>
+        <div className="preview-top"><strong>{preview.filename} · {t.page} {preview.page}</strong><button type="button" onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
+        <iframe title={`${preview.filename} · ${t.page} ${preview.page}`} src={`${preview.url}#page=${preview.page}`} />
+        <p className="preview-quote">{preview.text}</p>
+        <p className="preview-help">{t.previewNote}</p>
+        <a href={`${preview.url}#page=${preview.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>
+      </section>
+    </div>}
     <footer><span>NoticeBridge AI · Open-source / Apache-2.0</span><span>Understand change. Verify evidence.</span></footer>
   </div>;
 }
