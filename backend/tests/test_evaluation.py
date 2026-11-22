@@ -17,6 +17,7 @@ def test_fictional_notice_evaluation_matrix():
 
 def test_fictional_demo_pdf_pair_is_truthfully_evidence_linked(tmp_path):
     from generate_demo import generate_pair
+
     from noticebridge.compare import compare_documents
     from noticebridge.extract import extract_pdf
 
