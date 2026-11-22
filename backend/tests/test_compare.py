@@ -106,3 +106,33 @@ def test_equivalent_date_written_differently_is_not_value_change(pdf_bytes):
     )
     assert len(report.findings) == 1
     assert report.findings[0].field_changes[0].outcome == "same_value"
+
+
+def test_ocr_sources_are_not_automatically_confirmed(pdf_bytes):
+    from noticebridge.models import Evidence, ExtractedLine
+
+    old, new = _pair(
+        pdf_bytes, "Deadline: 13 December 2026", "Deadline: 14 December 2026"
+    )
+    old_line = old.lines[0]
+    old.lines[0] = ExtractedLine(text=old_line.text, evidence=Evidence(
+        **{**old_line.evidence.model_dump(), "extraction_method": "ocr"}
+    ))
+    report = compare_documents(old, new)
+    assert report.findings[0].status == "possible_change"
+    assert report.findings[0].field_changes[0].outcome == "uncertain"
+
+
+def test_ocr_sourced_deadlines_cannot_claim_a_contradiction(pdf_bytes):
+    from noticebridge.models import Evidence, ExtractedLine
+
+    old = extract_pdf(pdf_bytes([["Deadline: 13 December 2026", "Deadline: 14 December 2026"]]),
+                      document_id="original", filename="a.pdf")
+    new = extract_pdf(pdf_bytes([["Deadline: 13 December 2026"]]),
+                      document_id="revised", filename="b.pdf")
+    item = old.lines[1]
+    old.lines[1] = ExtractedLine(text=item.text, evidence=Evidence(
+        **{**item.evidence.model_dump(), "extraction_method": "ocr"}
+    ))
+    report = compare_documents(old, new)
+    assert not any(f.status == "contradiction" for f in report.findings)

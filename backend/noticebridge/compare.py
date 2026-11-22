@@ -152,7 +152,14 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         revised = new.lines[ni]
         if normalize(original.text) == normalize(revised.text):
             continue
-        strong = score >= 0.85 and not ambiguous
+        # OCR is machine transcription. Never mark OCR-related text as a
+        # confirmed change solely because the text matcher is confident.
+        strong = (
+            score >= 0.85
+            and not ambiguous
+            and original.evidence.extraction_method == "native"
+            and revised.evidence.extraction_method == "native"
+        )
         status = "confirmed_change" if strong else "possible_change"
         findings.append(
             Finding(
@@ -171,9 +178,17 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                 original=original.evidence,
                 revised=revised.evidence,
                 similarity=round(score, 3),
-                field_changes=field_changes(
-                    original.text, revised.text, category=category_for(original.text)
-                ),
+                field_changes=[
+                    delta.model_copy(update={"outcome": "uncertain"})
+                    if (
+                        original.evidence.extraction_method == "ocr"
+                        or revised.evidence.extraction_method == "ocr"
+                    )
+                    else delta
+                    for delta in field_changes(
+                        original.text, revised.text, category=category_for(original.text)
+                    )
+                ],
             )
         )
 
@@ -203,7 +218,10 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
     for document in (old, new):
         grouped: dict[str, list[tuple[str, object]]] = defaultdict(list)
         for line in document.lines:
-            if category_for(line.text) != "deadline":
+            if (
+                category_for(line.text) != "deadline"
+                or line.evidence.extraction_method != "native"
+            ):
                 continue
             dates = date_tokens(line.text)
             if len(dates) == 1 and dates[0].canonical is not None:

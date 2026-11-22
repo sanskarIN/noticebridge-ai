@@ -1,10 +1,10 @@
 # NoticeBridge AI — evidence and verification contract
 
-This note documents the conservative behavior of the second engineering milestone. It does **not** certify notices, eligibility, official deadlines, or source precedence.
+This note documents the conservative behavior of the third engineering milestone. It does **not** certify notices, eligibility, official deadlines, or source precedence.
 
 ## Data integrity invariants
 
-1. The parser never invents a page number or bounding box. `Evidence` is constructed only from a real, extractable PDF text line.
+1. The parser never invents a page number or bounding box. `Evidence` comes from a PDF text line or an explicitly labeled OCR-transcribed page, with original page dimensions and rotation.
 2. Each matched finding carries the original and revised source passage, both of which can be inspected by page.
 3. Text equality is reconciled **before** variable masking. Reordering duplicate deadline statements therefore does not alone imply changed wording.
 4. A `confirmed_change` status establishes a textual difference in a strongly matched passage, **not** that the updated document is authoritative.
@@ -12,6 +12,9 @@ This note documents the conservative behavior of the second engineering mileston
 6. `field_changes[].outcome == "changed"` means two *syntactically parseable and unambiguous* field tokens differ. An uncertain numeric date is never converted to a definite calendar value.
 7. Contradictions are emitted only for different valid calendar dates under the same deadline label **within a single PDF**, not simply because two uploaded files disagree.
 8. A checklist is an optional user-facing review aid, not an official validation stamp.
+9. Every document summary includes a SHA-256 of the submitted bytes, for reproducible source identification. No digital signature or issuer authenticity is inferred from the hash.
+10. OCR is opt-in and used only for native-text-empty pages, with bounded page count and estimated rendering pixels. Its output is labeled `ocr`; it cannot alone produce a `confirmed_change` or a contradiction.
+11. Browser PDF.js rendering uses a locally selected File and same-origin worker; highlights are omitted for rotated pages rather than guessed.
 
 ## How date and fee tokens are interpreted
 
@@ -40,14 +43,15 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 ## Security and privacy scope
 
 - API: two PDFs at most 10 MiB each; at most 80 pages and 12,000 extracted text lines per PDF; bounded text length; encrypted or malformed files rejected.
-- Backend keeps input bytes and extracted content in a request-local context and does not intentionally persist documents to disk. No-cache headers discourage intermediaries from caching API responses but cannot control every infrastructure component.
-- Browser source preview is generated from a local `File` object URL, with URL revocation after preview closure. JSON export remains local to the browser unless a user independently shares it.
+- Backend retains extracted content only in the request context and does not intentionally persist it. Starlette can spool multipart uploads temporarily to OS disk; operators must protect and clean temporary storage. No-cache headers discourage response caching but cannot control every intermediary.
+- OCR uses Tesseract on the server, not a third-party API; it is not guaranteed to be fast, sandboxed, or reproducible across Tesseract versions.
+- Browser source preview uses local PDF.js rendering with a same-origin bundled worker, while the open-in-new-tab fallback uses a local `File` object URL that is revoked after preview closure. JSON export remains local to the browser unless a user independently shares it.
 - The service is **not hardened for arbitrary public internet exposure**: no authentication, rate limiting, malware isolation, sandbox worker pool, or operational monitoring strategy exists yet.
 - Uploaded source text is treated as data, never as instructions to change verification policy.
 
 ## Automated regression suites
 
-- `backend/tests/test_extract.py`: source locations, malformed/scanned/password-protected/oversized-page PDFs.
+- `backend/tests/test_extract.py`: source locations, SHA-256, malformed/scanned/password-protected/oversized-page PDFs, OCR gating/budgets/error paths, and an integration OCR scan that skips if Tesseract language packs are missing.
 - `backend/tests/test_compare.py`: changed/unchanged statements, reordered lines, duplicated deadline labels, ambiguity handling, source location and lack of authority inference.
 - `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, date ambiguity, invalid calendar dates, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py`: health, live multipart comparisons, bad uploads, upload size, filename sanitization, response no-store headers.
@@ -56,4 +60,4 @@ Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tes
 
 ## Still not implemented
 
-OCR; trustworthy amendment/issuer provenance resolution; LLM-powered semantic matching with independent verification; page-level bbox highlights; production-grade secure PDF worker isolation; persistent projects/checklists; calendar export; comprehensive browser E2E tests; independent real-world benchmark accuracy measurements.
+Trustworthy amendment/issuer provenance resolution; LLM-powered semantic matching with independent verification; rotated/cropped-page coordinate-accurate highlights; calibrated OCR confidence; production-grade PDF/OCR worker isolation and timeouts; persistent projects/checklists; calendar export; comprehensive browser E2E tests; independent real-world benchmark accuracy measurements.

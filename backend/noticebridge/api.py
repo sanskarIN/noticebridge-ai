@@ -3,7 +3,7 @@
 import asyncio
 from typing import Annotated
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
@@ -51,7 +51,9 @@ async def _read_pdf(upload: UploadFile) -> bytes:
 
 @app.post("/api/compare", response_model=ComparisonReport)
 async def compare(
-    original: Annotated[UploadFile, File()], revised: Annotated[UploadFile, File()]
+    original: Annotated[UploadFile, File()],
+    revised: Annotated[UploadFile, File()],
+    enable_ocr: Annotated[bool, Form()] = False,
 ) -> ComparisonReport:
     try:
         a = await _read_pdf(original)
@@ -63,10 +65,10 @@ async def compare(
             # Move PDF extraction off the ASGI event loop. No uploads are
             # persisted; buffers are scoped to this request.
             old_doc = await run_in_threadpool(
-                extract_pdf, a, document_id="original", filename=old_name
+                extract_pdf, a, document_id="original", filename=old_name, enable_ocr=enable_ocr
             )
             new_doc = await run_in_threadpool(
-                extract_pdf, b, document_id="revised", filename=new_name
+                extract_pdf, b, document_id="revised", filename=new_name, enable_ocr=enable_ocr
             )
             return await run_in_threadpool(compare_documents, old_doc, new_doc)
     except InvalidDocument as exc:

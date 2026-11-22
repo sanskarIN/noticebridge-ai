@@ -1,8 +1,9 @@
+import PdfEvidencePreview from './PdfEvidencePreview';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 type Language = 'en' | 'hi';
 type DocumentRole = 'original' | 'revised';
-type Evidence = { document_id: DocumentRole; filename: string; page: number; text: string; bbox: [number, number, number, number] };
+type Evidence = { document_id: DocumentRole; filename: string; page: number; text: string; bbox: [number, number, number, number]; extraction_method: 'native' | 'ocr'; page_width: number; page_height: number; page_rotation: 0 | 90 | 180 | 270 };
 type ParsedValue = { kind: 'date' | 'amount'; raw: string; canonical: string | null; confidence: 'parsed' | 'ambiguous' | 'invalid' };
 type ValueChange = { kind: 'date' | 'amount'; original: ParsedValue; revised: ParsedValue; outcome: 'changed' | 'same_value' | 'uncertain' };
 type Finding = {
@@ -13,10 +14,10 @@ type Finding = {
 };
 type Checklist = { description_en: string; description_hi: string; finding_id: string; requires_human_verification: boolean };
 type Report = {
-  documents: { id: string; filename: string; page_count: number; line_count: number; has_extractable_text: boolean }[];
+  documents: { id: string; filename: string; page_count: number; line_count: number; has_extractable_text: boolean; sha256: string; ocr_page_count: number }[];
   findings: Finding[]; checklist: Checklist[]; warnings: string[]; verification_policy: string;
 };
-type Preview = { url: string; filename: string; page: number; text: string; bbox: Evidence['bbox'] };
+type Preview = { url: string; file: File; evidence: Evidence };
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const translations = {
@@ -36,6 +37,9 @@ const translations = {
     export: 'Export evidence report (JSON)', progress: 'Reviewed',
     values: 'Extracted values (syntactic check only)', uncertain: 'Uncertain',
     invalidFile: 'Select a PDF no larger than 10 MiB.',
+    ocr: 'Enable local OCR for scanned pages (English + Hindi)',
+    ocrNote: 'Optional. Tesseract and the eng/hin language packs must be installed on the server. OCR text can be wrong; it never establishes an authoritative change. Up to 12 scanned pages per PDF.',
+    ocrSource: 'Machine OCR — verify transcription',
   },
   hi: {
     eyebrow: 'स्रोत-आधारित दस्तावेज़ विश्लेषण',
@@ -53,16 +57,20 @@ const translations = {
     export: 'प्रमाण रिपोर्ट डाउनलोड करें (JSON)', progress: 'समीक्षा पूरी',
     values: 'निकाले गए मान (केवल प्रारूप की जाँच)', uncertain: 'अनिश्चित',
     invalidFile: 'केवल 10 MiB तक की PDF चुनें।',
+    ocr: 'स्कैन किए गए पन्नों के लिए स्थानीय OCR चालू करें (हिंदी + अंग्रेज़ी)',
+    ocrNote: 'वैकल्पिक। सर्वर पर Tesseract और eng/hin भाषा डेटा आवश्यक है। OCR में गलतियाँ हो सकती हैं। प्रत्येक PDF के अधिकतम 12 पन्ने।',
+    ocrSource: 'मशीन OCR — पाठ की जाँच करें',
   },
 };
 
-function EvidenceCard({ evidence, label, page, openPage, onOpen }: {
-  evidence: Evidence | null; label: string; page: string; openPage: string; onOpen: (e: Evidence) => void;
+function EvidenceCard({ evidence, label, page, openPage, ocrSource, onOpen }: {
+  evidence: Evidence | null; label: string; page: string; openPage: string; ocrSource: string; onOpen: (e: Evidence) => void;
 }) {
   return <div className="evidence-card">
     <div className="evidence-label">{label}</div>
     {evidence ? <>
       <div className="page-ref">{evidence.filename} · {page} {evidence.page}</div>
+      {evidence.extraction_method === 'ocr' && <p className="ocr-source">{ocrSource}</p>}
       <blockquote>{evidence.text}</blockquote>
       <button type="button" className="source-button" onClick={() => onOpen(evidence)}>{openPage} ↗</button>
     </> : <p className="muted">—</p>}
@@ -75,6 +83,7 @@ export default function App() {
   const [revised, setRevised] = useState<File | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [pending, setPending] = useState(false);
+  const [enableOcr, setEnableOcr] = useState(false);
   const [error, setError] = useState('');
   const [checked, setChecked] = useState<string[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -102,8 +111,7 @@ export default function App() {
     const file = evidence.document_id === 'original' ? original : revised;
     if (!file) return;
     setPreview({
-      url: URL.createObjectURL(file), filename: evidence.filename,
-      page: evidence.page, text: evidence.text, bbox: evidence.bbox,
+      url: URL.createObjectURL(file), file, evidence,
     });
   }
 
@@ -128,6 +136,7 @@ export default function App() {
     try {
       const body = new FormData();
       body.append('original', original); body.append('revised', revised);
+      body.append('enable_ocr', String(enableOcr));
       const response = await fetch('/api/compare', { method: 'POST', body, signal: controller.signal });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
@@ -177,6 +186,7 @@ export default function App() {
                 <input id={id} type="file" accept=".pdf,application/pdf" onChange={(e) => setSource(id, e.target.files?.[0] ?? null)} />
               </label>)}
           </div>
+          <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => setEnableOcr(e.target.checked)} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
           <div className="upload-footer"><p>{t.note}</p><button type="submit" disabled={!original || !revised || pending} className="primary-button">{pending ? t.comparing : t.button}<span>→</span></button></div>
           {error && <p role="alert" className="error-banner">{error}</p>}
         </form>
@@ -194,20 +204,19 @@ export default function App() {
           <div className="finding-header"><div><span className={`status ${f.status}`}>{f.status.replaceAll('_', ' ')}</span><span className="category">{f.category.toUpperCase()}</span></div><span className="match-score">{Math.round(f.similarity * 100)}% context match</span></div>
           <p className="finding-summary">{language === 'hi' ? f.summary_hi : f.summary_en}</p>
           {f.field_changes.length > 0 && <div className="value-changes"><b>{t.values}</b>{f.field_changes.map((delta, i) => <p key={i}><span className="value-outcome">{delta.kind}: {delta.outcome.replaceAll('_', ' ')}</span> {delta.original.raw} → {delta.revised.raw} {delta.outcome === 'uncertain' ? `(${t.uncertain})` : `(${delta.original.canonical} → ${delta.revised.canonical})`}</p>)}</div>}
-          <div className="evidence-grid"><EvidenceCard evidence={f.original} label={t.original} page={t.page} openPage={t.openPage} onOpen={openEvidence} /><EvidenceCard evidence={f.revised} label={t.revised} page={t.page} openPage={t.openPage} onOpen={openEvidence} /></div>
-          {f.supporting_evidence.length > 0 && <div className="evidence-grid">{f.supporting_evidence.map((e, i) => <EvidenceCard key={`${e.document_id}-${e.page}-${i}`} evidence={e} label={`${t.source} ${i + 1}`} page={t.page} openPage={t.openPage} onOpen={openEvidence} />)}</div>}
+          <div className="evidence-grid"><EvidenceCard evidence={f.original} label={t.original} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /><EvidenceCard evidence={f.revised} label={t.revised} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /></div>
+          {f.supporting_evidence.length > 0 && <div className="evidence-grid">{f.supporting_evidence.map((e, i) => <EvidenceCard key={`${e.document_id}-${e.page}-${i}`} evidence={e} label={`${t.source} ${i + 1}`} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} />)}</div>}
         </article>)}</div>
         {report.checklist.length > 0 && <div className="checklist"><h3>{t.checklist} · {checked.length}/{report.checklist.length} {t.progress}</h3>{report.checklist.map(item => <label key={item.finding_id} className="checklist-item"><input type="checkbox" checked={checked.includes(item.finding_id)} onChange={(e) => setChecked(old => e.target.checked ? [...old, item.finding_id] : old.filter(x => x !== item.finding_id))} /><span>{language === 'hi' ? item.description_hi : item.description_en}</span></label>)}</div>}
         {report.warnings.length > 0 && <aside className="warnings"><h3>{t.warnings}</h3>{report.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</aside>}
       </section>}
     </main>
     {preview && <div className="preview-backdrop" role="presentation">
-      <section className="preview-dialog" role="dialog" aria-modal="true" aria-label={`${preview.filename} · ${t.page} ${preview.page}`}>
-        <div className="preview-top"><strong>{preview.filename} · {t.page} {preview.page}</strong><button type="button" onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
-        <iframe title={`${preview.filename} · ${t.page} ${preview.page}`} src={`${preview.url}#page=${preview.page}`} />
-        <p className="preview-quote">{preview.text}</p>
-        <p className="preview-help">{t.previewNote}</p>
-        <a href={`${preview.url}#page=${preview.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>
+      <section className="preview-dialog" role="dialog" aria-modal="true" aria-label={`${preview.evidence.filename} · ${t.page} ${preview.evidence.page}`}>
+        <div className="preview-top"><strong>{preview.evidence.filename} · {t.page} {preview.evidence.page}</strong><button type="button" onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
+        <PdfEvidencePreview file={preview.file} evidence={preview.evidence} language={language} />
+        <p className="preview-quote">{preview.evidence.text}</p>
+        <a href={`${preview.url}#page=${preview.evidence.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>
       </section>
     </div>}
     <footer><span>NoticeBridge AI · Open-source / Apache-2.0</span><span>Understand change. Verify evidence.</span></footer>

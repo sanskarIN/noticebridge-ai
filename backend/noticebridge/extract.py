@@ -1,5 +1,6 @@
-"""Extract line-level, page-linked PDF evidence without OCR or persistent storage."""
+"""Extract bounded, page-linked PDF evidence with optional local OCR."""
 
+import hashlib
 import math
 from dataclasses import dataclass
 
@@ -12,6 +13,10 @@ MAX_PAGES = 80
 MAX_EXTRACTED_LINES = 12000
 MAX_LINE_CHARACTERS = 5000
 MAX_TOTAL_CHARACTERS = 1_000_000
+MAX_OCR_PAGES = 12
+MAX_OCR_RENDER_PIXELS = 16_000_000
+OCR_DPI = 150
+OCR_LANGUAGES = "eng+hin"
 
 
 class InvalidDocument(ValueError):
@@ -25,7 +30,9 @@ class ExtractedDocument:
     warnings: list[str]
 
 
-def extract_pdf(contents: bytes, *, document_id: str, filename: str) -> ExtractedDocument:
+def extract_pdf(
+    contents: bytes, *, document_id: str, filename: str, enable_ocr: bool = False
+) -> ExtractedDocument:
     if not contents or len(contents) > MAX_UPLOAD_BYTES:
         raise InvalidDocument("PDF must be nonempty and at most 10 MiB")
     if not contents.lstrip().startswith(b"%PDF-"):
@@ -39,6 +46,8 @@ def extract_pdf(contents: bytes, *, document_id: str, filename: str) -> Extracte
     lines: list[ExtractedLine] = []
     warnings: list[str] = []
     total_characters = 0
+    ocr_page_count = 0
+    ocr_attempts = 0
     try:
         if pdf.is_encrypted or pdf.needs_pass:
             raise InvalidDocument("Encrypted PDFs are not supported")
@@ -46,8 +55,45 @@ def extract_pdf(contents: bytes, *, document_id: str, filename: str) -> Extracte
             raise InvalidDocument(f"PDF must contain 1 to {MAX_PAGES} pages")
         for index, page in enumerate(pdf):
             page_lines = 0
-            # Only text blocks; image blocks are intentionally ignored.
+            # Original text is always preferred. OCR only runs for pages with
+            # no native text, avoiding duplicate lines and false certainty.
             data = page.get_text("dict", sort=True)
+            native_has_text = any(
+                span.get("text", "").strip()
+                for block in data.get("blocks", []) if block.get("type") == 0
+                for line in block.get("lines", [])
+                for span in line.get("spans", [])
+            )
+            method = "native"
+            if not native_has_text and enable_ocr:
+                if ocr_attempts >= MAX_OCR_PAGES:
+                    warnings.append(
+                        f"{document_id}: page {index + 1} was not OCR-scanned: "
+                        f"per-document OCR limit of {MAX_OCR_PAGES} pages reached"
+                    )
+                elif (
+                    page.rect.width * page.rect.height * (OCR_DPI / 72) ** 2
+                    > MAX_OCR_RENDER_PIXELS
+                ):
+                    warnings.append(
+                        f"{document_id}: page {index + 1} was not OCR-scanned: "
+                        "page would exceed OCR pixel limit"
+                    )
+                else:
+                    ocr_attempts += 1
+                    try:
+                        textpage = page.get_textpage_ocr(
+                            language=OCR_LANGUAGES, dpi=OCR_DPI, full=True
+                        )
+                        data = page.get_text("dict", textpage=textpage, sort=True)
+                        method = "ocr"
+                    except (RuntimeError, ValueError, OSError) as exc:
+                        # OCR packs and Tesseract are not present on all hosts.
+                        # Don't return guessed or unverified text as evidence.
+                        warnings.append(
+                            f"{document_id}: page {index + 1} OCR unavailable "
+                            f"({type(exc).__name__}); install Tesseract eng+hin language data"
+                        )
             for block in data.get("blocks", []):
                 if block.get("type") != 0:
                     continue
@@ -72,16 +118,27 @@ def extract_pdf(contents: bytes, *, document_id: str, filename: str) -> Extracte
                         page=index + 1,
                         text=text,
                         bbox=tuple(round(float(c), 2) for c in box),
+                        extraction_method=method,
+                        page_width=round(float(page.rect.width), 2),
+                        page_height=round(float(page.rect.height), 2),
+                        page_rotation=page.rotation,
                     )
                     lines.append(ExtractedLine(text=text, evidence=evidence))
                     page_lines += 1
                     if len(lines) > MAX_EXTRACTED_LINES:
                         raise InvalidDocument("PDF contains too many text lines")
+            if method == "ocr" and page_lines:
+                ocr_page_count += 1
             if page_lines == 0:
                 warnings.append(
                     f"{document_id}: page {index + 1} has no extractable text; "
-                    "OCR not enabled"
+                    "OCR not enabled" if not enable_ocr else "comparison may be incomplete"
                 )
+        if ocr_page_count:
+            warnings.append(
+                f"{document_id}: {ocr_page_count} page(s) used machine OCR; "
+                "transcription can be inaccurate and needs manual checking"
+            )
     finally:
         pdf.close()
     return ExtractedDocument(
@@ -91,6 +148,8 @@ def extract_pdf(contents: bytes, *, document_id: str, filename: str) -> Extracte
             page_count=index + 1,
             line_count=len(lines),
             has_extractable_text=bool(lines),
+            sha256=hashlib.sha256(contents).hexdigest(),
+            ocr_page_count=ocr_page_count,
         ),
         lines=lines,
         warnings=warnings,

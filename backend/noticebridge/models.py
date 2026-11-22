@@ -15,6 +15,10 @@ class Evidence(BaseModel):
     page: int = Field(ge=1)
     text: str
     bbox: tuple[float, float, float, float]
+    extraction_method: Literal["native", "ocr"] = "native"
+    page_width: float = Field(gt=0)
+    page_height: float = Field(gt=0)
+    page_rotation: Literal[0, 90, 180, 270]
 
 
 class ExtractedLine(BaseModel):
@@ -28,6 +32,8 @@ class DocumentSummary(BaseModel):
     page_count: int
     line_count: int
     has_extractable_text: bool
+    sha256: str
+    ocr_page_count: int = Field(default=0, ge=0)
 
 
 class ParsedValue(BaseModel):
