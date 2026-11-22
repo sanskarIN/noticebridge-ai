@@ -1,6 +1,7 @@
-"""Stateless FastAPI service. Uploaded documents are held in memory for one request."""
+"""Request-scoped API. Multipart parsing may temporarily spool uploads to OS disk."""
 
 import asyncio
+import unicodedata
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -40,6 +41,22 @@ def health() -> dict[str, str]:
     return {"status": "ok", "version": "0.1.0"}
 
 
+def safe_filename(filename: str | None, *, fallback: str) -> str:
+    """Drop paths, controls and bidi-spoofing characters from display names.
+
+    The resulting name is display metadata, never an authority assertion.
+    """
+    basename = (filename or fallback).replace("\\", "/").split("/")[-1]
+    normalized = unicodedata.normalize("NFKC", basename)
+    # Preserve legitimate Indic combining marks and ZWJ while removing
+    # explicit bidirectional display controls that can spoof extensions.
+    bidi_controls = {"\u200e", "\u200f", "\u202a", "\u202b", "\u202c",
+                     "\u202d", "\u202e", "\u2066", "\u2067", "\u2068", "\u2069"}
+    cleaned = "".join(c for c in normalized if unicodedata.category(c) != "Cc"
+                      and c not in bidi_controls).strip(" .")[:200]
+    return cleaned or fallback
+
+
 async def _read_pdf(upload: UploadFile) -> bytes:
     if not upload.filename or not upload.filename.casefold().endswith(".pdf"):
         raise HTTPException(status_code=415, detail="Only PDF filenames are supported")
@@ -59,11 +76,11 @@ async def compare(
         a = await _read_pdf(original)
         b = await _read_pdf(revised)
         # Never display an upload-controlled path as a filename in evidence.
-        old_name = (original.filename or "original.pdf").replace("\\", "/").split("/")[-1][:200]
-        new_name = (revised.filename or "revised.pdf").replace("\\", "/").split("/")[-1][:200]
+        old_name = safe_filename(original.filename, fallback="original.pdf")
+        new_name = safe_filename(revised.filename, fallback="revised.pdf")
         async with parse_slots:
-            # Move PDF extraction off the ASGI event loop. No uploads are
-            # persisted; buffers are scoped to this request.
+            # Move PDF extraction off the ASGI event loop. No durable app
+            # storage is used; multipart parsing may spool temporary files.
             old_doc = await run_in_threadpool(
                 extract_pdf, a, document_id="original", filename=old_name, enable_ocr=enable_ocr
             )

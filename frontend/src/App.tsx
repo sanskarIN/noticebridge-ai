@@ -29,7 +29,8 @@ const translations = {
     button: 'Compare documents', comparing: 'Comparing source passages…',
     note: 'Your PDFs are processed in memory on the server; they are not intentionally stored by this application.',
     findings: 'Findings', confirmed: 'Matched text changes', possible: 'Possible changes',
-    checklist: 'Review checklist', source: 'Source evidence', noFindings: 'No differences identified by the current matcher.',
+    checklist: 'Review checklist', source: 'Source evidence', noFindings: 'No wording differences were identified in extractable text. This does not prove that the PDFs are equivalent.',
+    insufficient: 'Comparison is inconclusive because one or both PDFs have no extractable text. Enable OCR for scanned pages or supply text-based PDFs.',
     page: 'Page', verify: 'Verify against the issuing organization before acting on a deadline or eligibility change.',
     authority: 'Authority not verified', warnings: 'Processing warnings',
     openPage: 'Open PDF page', closePreview: 'Close preview', newTab: 'Open PDF in new tab',
@@ -49,7 +50,8 @@ const translations = {
     button: 'दस्तावेज़ों की तुलना करें', comparing: 'स्रोत अंशों की तुलना जारी…',
     note: 'PDF सर्वर की मेमोरी में प्रोसेस होती हैं; यह ऐप उन्हें जानबूझकर स्टोर नहीं करता।',
     findings: 'निष्कर्ष', confirmed: 'मिलते अंशों में बदलाव', possible: 'संभावित बदलाव',
-    checklist: 'सत्यापन सूची', source: 'मूल प्रमाण', noFindings: 'वर्तमान मिलान विधि ने कोई अंतर नहीं पहचाना।',
+    checklist: 'सत्यापन सूची', source: 'मूल प्रमाण', noFindings: 'निकाले जा सकने वाले पाठ में अंतर नहीं मिला। इससे दोनों PDF एक जैसी सिद्ध नहीं होतीं।',
+    insufficient: 'तुलना अधूरी है क्योंकि किसी एक या दोनों PDF से पाठ नहीं मिला। स्कैन किए पन्नों के लिए OCR चालू करें या पाठ वाली PDF चुनें।',
     page: 'पृष्ठ', verify: 'तिथि या पात्रता में बदलाव के आधार पर कदम उठाने से पहले जारीकर्ता से पुष्टि करें।',
     authority: 'आधिकारिक प्राथमिकता अप्रमाणित', warnings: 'प्रोसेसिंग चेतावनियाँ',
     openPage: 'PDF पृष्ठ खोलें', closePreview: 'पूर्वावलोकन बंद करें', newTab: 'नए टैब में PDF खोलें',
@@ -199,7 +201,7 @@ export default function App() {
           <div><b>{report.findings.filter(f => f.status === 'possible_change').length}</b><span>{t.possible}</span></div>
         </div>
         <div className="caution"><span>!</span><p>{t.verify} <strong>{t.authority}.</strong></p></div>
-        {report.findings.length === 0 && <p className="no-findings">{t.noFindings}</p>}
+        {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
         <div className="findings-list">{report.findings.map(f => <article className="finding" key={f.id}>
           <div className="finding-header"><div><span className={`status ${f.status}`}>{f.status.replaceAll('_', ' ')}</span><span className="category">{f.category.toUpperCase()}</span></div><span className="match-score">{Math.round(f.similarity * 100)}% context match</span></div>
           <p className="finding-summary">{language === 'hi' ? f.summary_hi : f.summary_en}</p>

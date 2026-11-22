@@ -20,7 +20,7 @@ OCR_LANGUAGES = "eng+hin"
 
 
 class InvalidDocument(ValueError):
-    """The input cannot be safely processed by this first milestone."""
+    """The input cannot be processed within the configured prototype limits."""
 
 
 @dataclass(frozen=True)

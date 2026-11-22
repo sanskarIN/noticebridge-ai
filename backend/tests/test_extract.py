@@ -166,3 +166,47 @@ def test_rotated_source_geometry_is_marked_for_viewer():
     assert evidence.page_width == 600
     assert evidence.page_height == 300
     assert evidence.extraction_method == "native"
+
+
+def test_real_hindi_scan_ocr_with_installed_language_pack():
+    """Optional integration smoke test: all text must come from raster OCR."""
+    import shutil
+    import subprocess
+    from io import BytesIO
+    from pathlib import Path
+
+    import fitz
+
+    if not shutil.which("tesseract"):
+        pytest.skip("Tesseract is optional")
+    langs = subprocess.run(["tesseract", "--list-langs"], check=True,
+                           capture_output=True, text=True).stdout
+    if not {"eng", "hin"}.issubset(set(langs.splitlines())):
+        pytest.skip("Both OCR language packs are required")
+    image_module = pytest.importorskip("PIL.Image")
+    draw_module = pytest.importorskip("PIL.ImageDraw")
+    font_module = pytest.importorskip("PIL.ImageFont")
+
+    font_path = Path("/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf")
+    if not font_path.exists():
+        pytest.skip("Fixture font not available")
+    image = image_module.new("RGB", (1700, 260), "white")
+    drawer = draw_module.Draw(image)
+    font = font_module.truetype(str(font_path), 46)
+    drawer.text((35, 45), "अंतिम तिथि १५ दिसंबर २०२६", fill="black",
+                font=font, language="hi")
+    buffer = BytesIO()
+    image.save(buffer, "PNG")
+    document = fitz.open()
+    page = document.new_page(width=850, height=130)
+    page.insert_image(page.rect, stream=buffer.getvalue())
+    payload = document.tobytes()
+    document.close()
+
+    result = extract_pdf(payload, document_id="original", filename="hindi.pdf",
+                         enable_ocr=True)
+    assert result.summary.ocr_page_count == 1
+    assert result.lines
+    assert all(line.evidence.extraction_method == "ocr" for line in result.lines)
+    # Correct Hindi OCR is a quality benchmark, not guaranteed: readers still
+    # need to verify numbers against the scanned original.

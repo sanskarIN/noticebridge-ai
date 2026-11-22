@@ -51,7 +51,7 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 
 ## Automated regression suites
 
-- `backend/tests/test_extract.py`: source locations, SHA-256, malformed/scanned/password-protected/oversized-page PDFs, OCR gating/budgets/error paths, and an integration OCR scan that skips if Tesseract language packs are missing.
+- `backend/tests/test_extract.py`: source locations, SHA-256, malformed/scanned/password-protected/oversized-page PDFs, OCR gating/budgets/error paths, and English/Hindi OCR integration scans that skip if Tesseract language packs or fixture fonts are missing.
 - `backend/tests/test_compare.py`: changed/unchanged statements, reordered lines, duplicated deadline labels, ambiguity handling, source location and lack of authority inference.
 - `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, date ambiguity, invalid calendar dates, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py`: health, live multipart comparisons, bad uploads, upload size, filename sanitization, response no-store headers.

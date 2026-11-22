@@ -89,3 +89,23 @@ def test_api_ocr_form_flag_is_forwarded(pdf_bytes, monkeypatch):
     assert response.status_code == 200
     assert enabled == [True, True]
     assert len(response.json()["documents"][0]["sha256"]) == 64
+
+
+def test_blank_pdfs_do_not_claim_successful_comparison(pdf_bytes):
+    response = client.post("/api/compare", files={
+        "original": ("empty1.pdf", pdf_bytes([[]]), "application/pdf"),
+        "revised": ("empty2.pdf", pdf_bytes([[]]), "application/pdf"),
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert not data["findings"]
+    assert all(not document["has_extractable_text"] for document in data["documents"])
+    assert any("comparison is incomplete" in warning for warning in data["warnings"])
+
+
+def test_display_filename_filters_bidi_and_ascii_controls():
+    from noticebridge.api import safe_filename
+
+    assert safe_filename("C:\\private\\\u202ecorrected.pdf", fallback="original.pdf") == "corrected.pdf"
+    assert safe_filename("\r\n", fallback="original.pdf") == "original.pdf"
+    assert safe_filename("सूचना.pdf", fallback="original.pdf") == "सूचना.pdf"
