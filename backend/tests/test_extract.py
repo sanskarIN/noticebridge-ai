@@ -93,6 +93,7 @@ def test_missing_tesseract_is_reported_not_fabricated(pdf_bytes, monkeypatch):
 
 def test_per_document_ocr_budget_is_visible(pdf_bytes, monkeypatch):
     import fitz
+
     from noticebridge import extract
 
     def unavailable(*args, **kwargs):
