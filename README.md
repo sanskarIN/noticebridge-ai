@@ -19,6 +19,7 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 - Human-verification checklist for changed deadlines, fees, eligibility, and instructions.
 - React/TypeScript comparison workspace with side-by-side evidence, locally rendered source pages, an explicit OCR opt-in, portable JSON evidence export, and review controls.
 - Stateless FastAPI endpoint with bounded PDF parsing concurrency, no-cache responses, Pytest regression tests, and CI configuration.
+- **Browser end-to-end tests** (Playwright/Chromium) verifying upload, evidence display, local PDF.js canvas/highlights, Hindi switching, and JSON export.
 - A reproducible **12-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
 
 ## Local development
@@ -47,6 +48,9 @@ pytest -q backend/tests
 ruff check backend
 PYTHONPATH=backend python backend/benchmarks/evaluate.py
 cd frontend && npm run build
+# Optional live browser tests (after Tesseract setup if OCR is desired):
+npx playwright install chromium
+npm run test:e2e
 ```
 
 ## API

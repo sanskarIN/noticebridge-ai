@@ -56,7 +56,7 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 - `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, date ambiguity, invalid calendar dates, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py`: health, live multipart comparisons, bad uploads, upload size, filename sanitization, response no-store headers.
 
-Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tests` and `ruff check backend` from repository root. GitHub Actions also runs the React/TypeScript production build.
+Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tests` and `ruff check backend` from repository root. GitHub Actions also runs the React/TypeScript production build and a Playwright/Chromium browser job against a locally running FastAPI + Vite stack, using two generated fictional PDF notices. The browser suite checks rendering, highlighting, export and Hindi explanation switching. Browser coverage is intentionally small and does not certify all PDFs or platforms.
 
 ## Synthetic evaluation (not representative accuracy)
 
