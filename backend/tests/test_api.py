@@ -106,6 +106,9 @@ def test_blank_pdfs_do_not_claim_successful_comparison(pdf_bytes):
 def test_display_filename_filters_bidi_and_ascii_controls():
     from noticebridge.api import safe_filename
 
-    assert safe_filename("C:\\private\\\u202ecorrected.pdf", fallback="original.pdf") == "corrected.pdf"
+    assert (
+        safe_filename("C:\\private\\\u202ecorrected.pdf", fallback="original.pdf")
+        == "corrected.pdf"
+    )
     assert safe_filename("\r\n", fallback="original.pdf") == "original.pdf"
     assert safe_filename("सूचना.pdf", fallback="original.pdf") == "सूचना.pdf"

@@ -10,11 +10,11 @@
 
 **Problem:** Official educational notices can contain revised deadlines and important instructions spread across multiple PDFs. Applicants often struggle to see exactly what changed and why a summary should be trusted.
 
-**Solution:** NoticeBridge AI compares two notices, identifies changed text, links findings to page-level passages from both files, and generates English/Hindi explanations plus a verification checklist. The current prototype relies on deterministic text matching, not yet on an LLM. Future phases add OCR, semantic AI matching, verified conflict rules, and a PDF evidence viewer.
+**Solution:** NoticeBridge AI compares two notices, identifies changed text, links findings to page-level passages from both files, and generates English/Hindi explanations plus a verification checklist. The current prototype relies on deterministic text matching, not yet on an LLM. It includes optional local English/Hindi OCR for scanned pages and a PDF.js evidence viewer with source highlights for unrotated pages. OCR findings remain uncertain, and neither file order nor SHA-256 fingerprints prove official authority. Future phases will add independently verified semantic AI matching, stronger document-issuer provenance checks, and production-grade parser isolation.
 
-**How built:** Python, FastAPI, PyMuPDF, Pydantic, Pytest, React, TypeScript, Vite. Explain which parts were AI-assisted at submission time and link the code repository.
+**How built:** Python, FastAPI, PyMuPDF, Tesseract (optional for OCR), Pydantic, Pytest, React, TypeScript, Vite, PDF.js, Playwright. Explain which parts were AI-assisted at submission time and link the code repository.
 
-**Demo flow (up to 3 minutes):** Show an original fictional notice; show revised fictional notice with a deadline update; upload both; demonstrate evidence links for before/after passages; switch to Hindi; show safety warnings and checklist; mention limits honestly.
+**Demo flow (up to 3 minutes):** Generate the clearly fictional sample PDFs with `PYTHONPATH=backend python backend/benchmarks/generate_demo.py --output demo-output`; show their deadline and fee differences; upload both; demonstrate evidence links, PDF.js highlights, and SHA-256 source fingerprints; switch to Hindi; show safety warnings and checklist; mention the lack of LLM verification, optional OCR and deployment limits honestly.
 
 **Code:** https://github.com/sanskarIN/noticebridge-ai
 

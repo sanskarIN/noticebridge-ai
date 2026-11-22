@@ -81,6 +81,16 @@ All evidence references point to source text extracted from the uploaded PDFs, i
 
 See [engineering verification notes](docs/verification-matrix.md) for design invariants, test coverage, and accepted limitations.
 
+## Reproducible fictional demo
+
+Generate two attractive **fictional** sample PDFs to demonstrate the changed-deadline/changed-fee workflow without using real applicants' documents or confusing anyone with an actual official notice:
+
+```bash
+PYTHONPATH=backend python backend/benchmarks/generate_demo.py --output demo-output
+```
+
+The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The 12-case synthetic benchmark and Chromium browser tests are separate checks.
+
 ## Hackathon
 
 Planned for **GenHacks 2026**, AI/Agentic Systems/Cybersecurity/Dev Tools track. Eligibility is student-only, ages 13+. Devpost currently shows **conflicting deadline statements**, so we use **25 December 2026** as an internal safe submission target; confirm the organizer's actual submission cutoff. Required: public code, project description, up-to-3-minute embedded video, team and technology disclosures. See `docs/devpost-draft.md`.
