@@ -11,7 +11,9 @@ def _pair(pdf_bytes, a, b):
 
 def test_evidence_linked_deadline_change(pdf_bytes):
     report = compare_documents(*_pair(
-        pdf_bytes, "Application deadline: 12 December 2026", "Application deadline: 19 December 2026"
+        pdf_bytes,
+        "Application deadline: 12 December 2026",
+        "Application deadline: 19 December 2026",
     ))
     assert len(report.findings) == 1
     f = report.findings[0]

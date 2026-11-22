@@ -7,7 +7,9 @@ from .compare import compare_documents
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument, extract_pdf
 from .models import ComparisonReport
 
-app = FastAPI(title="NoticeBridge AI", version="0.1.0", description="Evidence-first PDF comparisons")
+app = FastAPI(
+    title="NoticeBridge AI", version="0.1.0", description="Evidence-first PDF comparisons"
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -37,8 +39,12 @@ async def compare(
     try:
         a = await _read_pdf(original)
         b = await _read_pdf(revised)
-        original_doc = extract_pdf(a, document_id="original", filename=original.filename or "original.pdf")
-        revised_doc = extract_pdf(b, document_id="revised", filename=revised.filename or "revised.pdf")
+        original_doc = extract_pdf(
+            a, document_id="original", filename=original.filename or "original.pdf"
+        )
+        revised_doc = extract_pdf(
+            b, document_id="revised", filename=revised.filename or "revised.pdf"
+        )
         return compare_documents(original_doc, revised_doc)
     except InvalidDocument as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

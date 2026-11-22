@@ -67,7 +67,10 @@ def extract_pdf(contents: bytes, *, document_id: str, filename: str) -> Extracte
                     if len(lines) > MAX_EXTRACTED_LINES:
                         raise InvalidDocument("PDF contains too many text lines")
             if page_lines == 0:
-                warnings.append(f"{document_id}: page {index + 1} has no extractable text; OCR not enabled")
+                warnings.append(
+                    f"{document_id}: page {index + 1} has no extractable text; "
+                    "OCR not enabled"
+                )
     finally:
         pdf.close()
     return ExtractedDocument(

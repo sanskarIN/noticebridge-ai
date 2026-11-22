@@ -4,7 +4,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 FindingStatus = Literal[
     "confirmed_change", "possible_change", "contradiction", "missing_information"
 ]

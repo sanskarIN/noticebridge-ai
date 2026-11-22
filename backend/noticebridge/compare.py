@@ -1,9 +1,9 @@
 """Conservative deterministic PDF comparison. No AI inference masquerading as verification."""
 
-from collections import defaultdict, deque
-from difflib import SequenceMatcher
 import re
 import unicodedata
+from collections import defaultdict, deque
+from difflib import SequenceMatcher
 
 from .extract import ExtractedDocument
 from .models import ChecklistItem, ComparisonReport, Finding
@@ -21,7 +21,13 @@ NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
 SPACE = re.compile(r"\s+")
 
 CATEGORIES = (
-    ("deadline", ("deadline", "last date", "closing date", "due date", "apply by", "अंतिम तिथि", "अंतिम तारीख")),
+    (
+        "deadline",
+        (
+            "deadline", "last date", "closing date", "due date", "apply by",
+            "अंतिम तिथि", "अंतिम तारीख",
+        ),
+    ),
     ("eligibility", ("eligib", "qualification", "required degree", "पात्रता", "योग्यता")),
     ("fee", ("application fee", "fee", "payment", "शुल्क", "फीस")),
     ("time", ("exam time", "reporting time", "time of", "समय")),
@@ -125,7 +131,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                 status=status,
                 category=category_for(original.text),
                 summary_en=(
-                    "Document wording differs at matched source passages. Authority is not verified."
+                    "Document wording differs at matched source passages. "
+                    "Authority is not verified."
                     if strong else "Possibly related passages differ; check the source context."
                 ),
                 summary_hi=(
@@ -145,8 +152,14 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                 id=f"f{len(findings)+1}",
                 status="missing_information",
                 category=category_for(revised.text),
-                summary_en="Statement present only in revised document; addition is not independently verified.",
-                summary_hi="यह कथन केवल संशोधित दस्तावेज़ में मिला; जोड़ की स्वतंत्र पुष्टि नहीं है।",
+                summary_en=(
+                    "Statement present only in revised document; "
+                    "addition is not independently verified."
+                ),
+                summary_hi=(
+                    "यह कथन केवल संशोधित दस्तावेज़ में मिला; "
+                    "जोड़ की स्वतंत्र पुष्टि नहीं है।"
+                ),
                 revised=revised.evidence,
                 similarity=0,
             )
@@ -174,8 +187,13 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                     id=f"f{len(findings)+1}",
                     status="contradiction",
                     category="deadline",
-                    summary_en="Conflicting deadline dates occur under the same label within one PDF.",
-                    summary_hi="एक ही PDF में समान शीर्षक के अंतर्गत अलग-अलग अंतिम तिथियाँ मिली हैं।",
+                    summary_en=(
+                        "Conflicting deadline dates occur under the same label within one PDF."
+                    ),
+                    summary_hi=(
+                        "एक ही PDF में समान शीर्षक के अंतर्गत "
+                        "अलग-अलग अंतिम तिथियाँ मिली हैं।"
+                    ),
                     supporting_evidence=[first[1], other[1]],
                     similarity=1.0,
                 ))
@@ -185,8 +203,13 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         if finding.category in {"deadline", "eligibility", "fee", "time", "instruction"}:
             checklist.append(
                 ChecklistItem(
-                    description_en=f"Verify the {finding.category} statement with the official issuer.",
-                    description_hi=f"जारीकर्ता के आधिकारिक स्रोत से {finding.category} संबंधी कथन की पुष्टि करें।",
+                    description_en=(
+                        f"Verify the {finding.category} statement with the official issuer."
+                    ),
+                    description_hi=(
+                        "जारीकर्ता के आधिकारिक स्रोत से "
+                        f"{finding.category} संबंधी कथन की पुष्टि करें।"
+                    ),
                     finding_id=finding.id,
                 )
             )
