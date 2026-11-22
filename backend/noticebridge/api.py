@@ -1,5 +1,7 @@
 """Stateless FastAPI service. Uploaded documents are held in memory for one request."""
 
+from typing import Annotated
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -34,7 +36,7 @@ async def _read_pdf(upload: UploadFile) -> bytes:
 
 @app.post("/api/compare", response_model=ComparisonReport)
 async def compare(
-    original: UploadFile = File(...), revised: UploadFile = File(...)
+    original: Annotated[UploadFile, File()], revised: Annotated[UploadFile, File()]
 ) -> ComparisonReport:
     try:
         a = await _read_pdf(original)
