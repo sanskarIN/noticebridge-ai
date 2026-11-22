@@ -60,7 +60,11 @@ def test_api_rejects_too_large_upload(pdf_bytes):
 
 def test_api_strips_untrusted_paths_from_filenames(pdf_bytes):
     res = client.post("/api/compare", files={
-        "original": ("C:\\sensitive\\old.pdf", pdf_bytes([["Deadline: 13 Dec 2026"]]), "application/pdf"),
+        "original": (
+            "C:\\sensitive\\old.pdf",
+            pdf_bytes([["Deadline: 13 Dec 2026"]]),
+            "application/pdf",
+        ),
         "revised": ("b.pdf", pdf_bytes([["Deadline: 14 Dec 2026"]]), "application/pdf"),
     })
     assert res.status_code == 200
