@@ -58,6 +58,10 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 
 Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tests` and `ruff check backend` from repository root. GitHub Actions also runs the React/TypeScript production build.
 
+## Synthetic evaluation (not representative accuracy)
+
+`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks 12 fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
+
 ## Still not implemented
 
 Trustworthy amendment/issuer provenance resolution; LLM-powered semantic matching with independent verification; rotated/cropped-page coordinate-accurate highlights; calibrated OCR confidence; production-grade PDF/OCR worker isolation and timeouts; persistent projects/checklists; calendar export; comprehensive browser E2E tests; independent real-world benchmark accuracy measurements.

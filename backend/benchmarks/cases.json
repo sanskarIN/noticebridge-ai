@@ -1,0 +1,79 @@
+[
+  {
+    "id": "unchanged_notice",
+    "original": ["Eligibility: Class 12", "Application fee: Rs 100"],
+    "revised": ["Eligibility: Class 12", "Application fee: Rs 100"],
+    "expected_status_counts": {}
+  },
+  {
+    "id": "reordered_requirements",
+    "original": ["Eligibility: Class 12", "Application fee: Rs 100"],
+    "revised": ["Application fee: Rs 100", "Eligibility: Class 12"],
+    "expected_status_counts": {}
+  },
+  {
+    "id": "confirmed_calendar_date_change",
+    "original": ["Application deadline: 13 December 2026"],
+    "revised": ["Application deadline: 14 December 2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["changed"]
+  },
+  {
+    "id": "confirmed_fee_change",
+    "original": ["Application fee: Rs. 500"],
+    "revised": ["Application fee: Rs. 750"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["changed"]
+  },
+  {
+    "id": "same_date_different_style",
+    "original": ["Deadline: 13 December 2026"],
+    "revised": ["Deadline: 13/12/2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["same_value"]
+  },
+  {
+    "id": "ambiguous_numeric_date",
+    "original": ["Deadline: 01/02/2026"],
+    "revised": ["Deadline: 02/01/2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["uncertain"]
+  },
+  {
+    "id": "not_assumed_canceled",
+    "original": ["Candidates must submit photo"],
+    "revised": ["Exam venue will be on admit card"],
+    "expected_status_counts": {"missing_information": 2}
+  },
+  {
+    "id": "add_new_guidance",
+    "original": ["Eligibility: Class 12"],
+    "revised": ["Eligibility: Class 12", "Candidates must bring identification"],
+    "expected_status_counts": {"missing_information": 1}
+  },
+  {
+    "id": "duplicate_headings_ambiguous",
+    "original": ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
+    "revised": ["Deadline: 15 December 2026", "Deadline: 16 December 2026"],
+    "expected_status_counts": {"possible_change": 2, "contradiction": 2},
+    "expected_field_outcomes": ["changed", "changed"]
+  },
+  {
+    "id": "unchanged_duplicate_headers_reordered",
+    "original": ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
+    "revised": ["Deadline: 14 December 2026", "Deadline: 13 December 2026"],
+    "expected_status_counts": {"contradiction": 2}
+  },
+  {
+    "id": "calendar_conflict_in_original",
+    "original": ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
+    "revised": ["Deadline: 13 December 2026"],
+    "expected_status_counts": {"missing_information": 1, "contradiction": 1}
+  },
+  {
+    "id": "unrelated_detailed_rephrasing",
+    "original": ["Please attach a passport photograph when applying"],
+    "revised": ["Candidates should upload their recent photo on the portal"],
+    "expected_status_counts": {"missing_information": 2}
+  }
+]

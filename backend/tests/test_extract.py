@@ -148,3 +148,21 @@ def test_real_scanned_pdf_gets_ocr_when_installed():
     assert any("deadline" in item.text.lower() for item in result.lines)
     assert all(item.evidence.extraction_method == "ocr" for item in result.lines)
     assert any("transcription can be inaccurate" in warning for warning in result.warnings)
+
+
+def test_rotated_source_geometry_is_marked_for_viewer():
+    import fitz
+
+    document = fitz.open()
+    page = document.new_page(width=300, height=600)
+    page.insert_text((35, 70), "Official notice", fontsize=14)
+    page.set_rotation(90)
+    payload = document.tobytes()
+    document.close()
+    extracted = extract_pdf(payload, document_id="revised", filename="rotated.pdf")
+    assert extracted.lines
+    evidence = extracted.lines[0].evidence
+    assert evidence.page_rotation == 90
+    assert evidence.page_width == 600
+    assert evidence.page_height == 300
+    assert evidence.extraction_method == "native"
