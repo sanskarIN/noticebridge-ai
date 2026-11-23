@@ -24,6 +24,7 @@ const copy = {
   revised: 'Updated notice',
   page: 'Page',
   open: 'Open PDF page',
+  compareSources: 'Compare source pages',
   ocr: 'Machine OCR — verify transcription',
   semantic: 'Local AI suggestion — verify PDF source',
   similarity: 'text similarity (not confidence)',
@@ -103,11 +104,12 @@ type Filters = {
 
 const DEFAULT_FILTERS: Filters = { search: '', status: 'all', category: 'all', review: 'all' };
 
-export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
+export default function ReviewFindings({ report, checked, onCheck, onOpen, onCompareSources }: {
   report: Report;
   checked: ReadonlySet<string>;
   onCheck: (id: string, selected: boolean) => void;
   onOpen: (evidence: Evidence) => void;
+  onCompareSources: (original: Evidence, revised: Evidence) => void;
 }) {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
@@ -230,6 +232,7 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
     <div className="findings-list">{shown.map(({ finding, evidence }) => {
       const task = checklist.get(finding.id);
       const changed = finding.field_changes.filter(delta => delta.outcome === 'changed');
+      const { original, revised } = finding;
       return <article className="finding" key={finding.id} id={`finding-${finding.id}`} tabIndex={-1}>
         <div className="finding-header">
           <div>
@@ -261,6 +264,8 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
               : item === finding.revised ? changed.map(delta => delta.revised.raw) : []}
           />)}
         </div>
+        {original && revised && <button type="button" className="source-button compare-source-button"
+          onClick={() => onCompareSources(original, revised)}>{t.compareSources}</button>}
         {task && <label className="checklist-item">
           <input type="checkbox" checked={checked.has(finding.id)}
             onChange={event => changeReview(finding.id, event.target.checked)} />

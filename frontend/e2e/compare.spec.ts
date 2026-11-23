@@ -147,6 +147,68 @@ test('source preview traps keyboard focus, closes on Escape and restores focus',
   await expect(page.locator('main')).not.toHaveAttribute('inert');
 });
 
+test('compares both exact source pages and releases their browser URLs', async ({ page }) => {
+  await compareReviewFixture(
+    page, [['Application deadline: 13 December 2026', 'Candidates must bring identification']],
+    [['Riverton circular'], ['Application deadline: 11 December 2026']],
+  );
+  const finding = page.locator('.finding').filter({ hasText: '11 December 2026' });
+  const launch = finding.getByRole('button', { name: 'Compare source pages' });
+  await expect(page.locator('.finding').filter({ hasText: 'Candidates must bring identification' })
+    .getByRole('button', { name: 'Compare source pages' })).toHaveCount(0);
+  await launch.click();
+  const dialog = page.getByRole('dialog', { name: 'Compare source pages' });
+  const original = dialog.getByRole('region', { name: /Original notice.*Page 1/ });
+  const updated = dialog.getByRole('region', { name: /Updated notice.*Page 2/ });
+  const close = dialog.getByRole('button', { name: /Close preview/ });
+  await expect(close).toBeFocused();
+  for (const [pane, day] of [[original, 13], [updated, 11]] as const) {
+    await expect(pane.locator('.evidence-highlight')).toBeVisible();
+    await expect(pane.locator('.preview-quote')).toHaveText(`Application deadline: ${day} December 2026`);
+  }
+  const first = await original.boundingBox();
+  const second = await updated.boundingBox();
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect(second!.x).toBeGreaterThanOrEqual(first!.x + first!.width);
+  const newTabs = dialog.getByRole('link', { name: /Open PDF in new tab/ });
+  await expect(newTabs).toHaveCount(2);
+  await expect(newTabs.first()).toHaveAttribute('href', /^blob:.*#page=1$/);
+  await expect(newTabs.last()).toHaveAttribute('href', /^blob:.*#page=2$/);
+  const urls = await newTabs.evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href));
+  const blobAvailability = () => page.evaluate(async values =>
+    Promise.all(values.map(url => fetch(url).then(response => response.ok, () => false))), urls);
+  expect(await blobAvailability()).toEqual([true, true]);
+
+  await page.keyboard.press('Shift+Tab');
+  await expect(newTabs.last()).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(launch).toBeFocused();
+  await expect.poll(blobAvailability).toEqual([false, false]);
+});
+
+test('stacks both highlighted PDF pages on a narrow screen', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await page.getByRole('button', { name: 'Compare source pages' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Compare source pages' });
+  const panes = dialog.locator('.preview-source');
+  await expect(panes).toHaveCount(2);
+  await expect(dialog.locator('.evidence-highlight')).toHaveCount(2);
+  const original = await panes.first().boundingBox();
+  const updated = await panes.last().boundingBox();
+  expect(original!.x).toBeCloseTo(updated!.x, 1);
+  expect(updated!.y).toBeGreaterThanOrEqual(original!.y + original!.height);
+  expect(await dialog.evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(320);
+  await panes.last().getByRole('link').scrollIntoViewIfNeeded();
+  await expect(panes.last().getByRole('link')).toBeInViewport();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+});
+
 test('mobile comparison stays within viewport and discloses temporary storage', async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
