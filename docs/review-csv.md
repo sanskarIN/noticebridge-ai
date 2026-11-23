@@ -42,10 +42,17 @@ copy/paste workflow. Avoid enabling macros or external content on imported data.
 
 The CSV may include sensitive personal data contained in the PDFs. Store it
 with the same protections as the source documents and delete unneeded copies.
-The app does not keep a durable review history: browser checkboxes reset on
-reload, and saving the CSV/JSON is a user action.
+
+## Resume a checklist
+
+Use **Export evidence report (JSON)** to save a review session. After a reload,
+compare the same two PDFs in the same order with the same options. Choose
+**Restore checklist from JSON** and select the saved report. The browser reads
+the file locally, checks both document fingerprints, and verifies each selected
+finding against the current comparison. Saved selections are added to the
+current checklist. The current comparison supplies all source evidence.
 
 The review controls live in `frontend/src/ReviewFindings.tsx` and CSV
 serialization in `frontend/src/exportCsv.ts`. Browser coverage includes
-filtration, pagination, local source preview, formula neutralization, Hindi
-export and mobile layout.
+filtering, pagination, source preview, checklist restoration, formula
+neutralization, Hindi export and mobile layout.

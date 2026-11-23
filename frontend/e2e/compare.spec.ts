@@ -512,3 +512,104 @@ test('discloses a fuzzy-search limit separately from page text coverage and expo
   expect(csv.split('\r\n')[0]).toContain('"text_coverage","fuzzy_matching_limited"');
   expect(csv.split('\r\n')[1]).toMatch(/"all_pages_have_text","yes"$/);
 });
+
+test('restores a local checklist after reload and checks both fingerprints and evidence', async ({ page }) => {
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const checkbox = page.locator('.checklist-item input');
+  await checkbox.check();
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const original = await readFile(await (await downloadReady).path());
+
+  // Re-run the comparison after reload. File bytes stay identical even
+  // when a user has renamed the source PDFs since exporting the report.
+  await page.reload();
+  for (const [id, buffer] of [['original', originalPdf], ['revised', revisedPdf]] as const) {
+    await page.locator(`#${id}`).setInputFiles({
+      name: `${id}-renamed.pdf`, mimeType: 'application/pdf', buffer,
+    });
+  }
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(checkbox).not.toBeChecked();
+  const input = page.locator('.review-restore input');
+  let apiRequests = 0;
+  page.on('request', request => { if (request.url().includes('/api/')) apiRequests += 1; });
+
+  const imported = JSON.parse(original.toString('utf8'));
+  imported.findings[0].original.text = 'Different text on the same PDF page';
+  await input.setInputFiles({
+    name: 'changed-evidence.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(imported)),
+  });
+  await expect(page.getByText(/produced different findings/)).toBeVisible();
+  await expect(checkbox).not.toBeChecked();
+
+  await input.setInputFiles({
+    name: 'noticebridge-evidence-report.json', mimeType: 'application/json', buffer: original,
+  });
+  await expect(page.getByText('Loaded 1 saved checklist selection.')).toBeVisible();
+  await expect(checkbox).toBeChecked();
+
+  const mismatched = JSON.parse(original.toString('utf8'));
+  mismatched.documents.reverse();
+  await input.setInputFiles({
+    name: 'reversed-sources.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(mismatched)),
+  });
+  await expect(page.getByText(/different PDF pair or upload order/)).toBeVisible();
+  await expect(checkbox).toBeChecked();
+  expect(apiRequests).toBe(0);
+});
+
+test('a saved checklist adds to current selections and stays bound to the active comparison', async ({ page }) => {
+  const old = [['Application deadline: 13 December 2026', 'Application fee: Rs. 200']];
+  const updated = [['Application deadline: 14 December 2026', 'Application fee: Rs. 300']];
+  await compareReviewFixture(page, old, updated);
+  const deadline = page.getByRole('checkbox', { name: /Verify the deadline/ });
+  const fee = page.getByRole('checkbox', { name: /Verify the fee/ });
+  await deadline.check();
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const buffer = await readFile(await (await downloadReady).path());
+  await deadline.uncheck();
+  await fee.check();
+
+  const input = page.locator('.review-restore input');
+  await input.setInputFiles({ name: 'review.json', mimeType: 'application/json', buffer });
+  await expect(page.getByText('Loaded 1 saved checklist selection.')).toBeVisible();
+  await expect(deadline).toBeChecked();
+  await expect(fee).toBeChecked();
+
+  // Pause the local read, replace the active report, then finish the read.
+  // The old import must be unable to select items on the newly mounted report.
+  await page.evaluate(() => {
+    const original = File.prototype.text;
+    File.prototype.text = function () {
+      if (this.name !== 'delayed-review.json') return original.call(this);
+      const file = this;
+      return new Promise<string>(resolve => {
+        document.addEventListener('finish-test-import', () => {
+          void original.call(file).then(text => {
+            resolve(text);
+            document.dispatchEvent(new Event('test-import-read-finished'));
+          });
+        }, { once: true });
+      });
+    };
+  });
+  await input.setInputFiles({ name: 'delayed-review.json', mimeType: 'application/json', buffer });
+  await expect(page.getByRole('button', { name: 'Checking saved report…' })).toBeDisabled();
+  await page.getByLabel(/Enable local OCR for scanned pages/).check();
+  await expect(page.locator('.results')).toHaveCount(0);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(deadline).not.toBeChecked();
+  await page.evaluate(() => new Promise<void>(resolve => {
+    document.addEventListener('test-import-read-finished', () => {
+      requestAnimationFrame(() => resolve());
+    }, { once: true });
+    document.dispatchEvent(new Event('finish-test-import'));
+  }));
+  await expect(deadline).not.toBeChecked();
+  await expect(fee).not.toBeChecked();
+});

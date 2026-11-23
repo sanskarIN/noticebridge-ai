@@ -97,6 +97,15 @@
 .review-button:hover:not(:disabled) { background: #24545b; }
 .review-button:disabled { opacity: 0.55; }
 .review-pagination { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.review-restore {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  margin: 1rem 0;
+}
+.review-restore p { margin: 0; color: #bacfdf; font-size: 0.875rem; }
+.review-restore .restore-feedback { flex-basis: 100%; color: #e8edf7; }
 .review-findings :focus-visible, .coverage-documents :focus-visible {
   outline: 2px solid #9df2d5;
   outline-offset: 2px;

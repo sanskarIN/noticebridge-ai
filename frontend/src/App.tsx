@@ -1,4 +1,5 @@
 import ReviewFindings from './ReviewFindings';
+import ReviewRestore from './ReviewRestore';
 import type { DocumentRole, Evidence, Language, Report } from './comparison';
 import { serializeReviewCsv } from './exportCsv';
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -316,6 +317,8 @@ export default function App() {
         </div>
         {report.fuzzy_matching_limited && <p className="coverage-report partial" role="status">{t.fuzzyLimited}</p>}
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
+        {report.checklist.length > 0 && <ReviewRestore report={report} language={language}
+          onRestore={ids => setChecked(previous => new Set([...previous, ...ids]))} />}
         {report.findings.length > 0 && <ReviewFindings
           report={report} checked={checked} language={language} onCheck={setReviewed} onOpen={openSource}
         />}
