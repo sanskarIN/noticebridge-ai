@@ -19,6 +19,16 @@ from noticebridge.facts import amount_tokens, date_tokens, field_changes, parse_
     ("12/12/2026", "2026-12-12"),
     ("29 February 2028", "2028-02-29"),
     ("February 29, 2028", "2028-02-29"),
+    ("1st December 2026", "2026-12-01"),
+    ("December 2nd, 2026", "2026-12-02"),
+    ("3ʳᵈ December 2026", "2026-12-03"),
+    ("11th September 2026", "2026-09-11"),
+    ("12th Sept. 2026", "2026-09-12"),
+    ("13 th December 2026", "2026-12-13"),
+    ("21ST-Dec-2026", "2026-12-21"),
+    ("22nd ‐ Dec ‐ 2026", "2026-12-22"),
+    ("23rd‑Dec‑2026", "2026-12-23"),
+    ("Dec. 31st, 2026", "2026-12-31"),
 ])
 def test_unambiguous_dates(token, canonical):
     parsed = parse_date(token)
@@ -37,6 +47,7 @@ def test_ambiguous_numeric_date_is_not_guessed(token):
     "31 February 2026", "2026-02-30", "32/12/2026", "12/32/2026",
     "01/02/0000", "13/12-2026", "February 29, 2026", "November 31, 2026", "Aprıl 14, 2026",
     "not-a-date",
+    "11st Dec 2026", "December 22th, 2026", "31st-Nov-2026", "29th-Feb-2026",
 ])
 def test_invalid_calendar_dates(token):
     parsed = parse_date(token)
@@ -64,6 +75,34 @@ def test_named_month_extraction_preserves_written_format_and_token_boundaries():
     )
     assert [(date.raw, date.canonical) for date in values] == [
         ("December 13, 2026", "2026-12-13"), ("Dec. 19, 2026", "2026-12-19"),
+    ]
+
+
+@pytest.mark.parametrize("text", [
+    "13-15 December 2026", "13th–15th December 2026", "13th to 15th-Dec-2026",
+    "December 13th–15th, 2026", "13 - 15-Dec-2026", "13–15‑Dec‑2026",
+    "29th November – 2nd December 2026", "November 29th through December 2nd, 2026",
+    "13th/15th Dec 2026", "13th and 15th Dec 2026", "Dec 13th or 15th, 2026",
+])
+def test_compact_date_ranges_keep_both_endpoints_without_a_single_date(text):
+    (parsed,) = date_tokens(f"Registration deadline: {text}.")
+    assert parsed.raw == text
+    assert parsed.confidence == "ambiguous"
+    assert parsed.canonical is None
+
+
+def test_named_date_fragments_inside_references_are_not_independent_values():
+    values = date_tokens("Ref: FORM-13-Dec-2026 and 14-Dec-2026-REV. Close 15th-Dec-2026.")
+    assert [(value.raw, value.canonical) for value in values] == [
+        ("15th-Dec-2026", "2026-12-15"),
+    ]
+
+
+def test_full_ordinal_values_and_superscripts_survive_token_extraction():
+    values = date_tokens("Call: 1ˢᵗ Oct 2026; deadline: 2 ⁿᵈ Sept. 2026; review: 13ᵗʰ-Dec-2026.")
+    assert [(value.raw, value.canonical) for value in values] == [
+        ("1ˢᵗ Oct 2026", "2026-10-01"), ("2 ⁿᵈ Sept. 2026", "2026-09-02"),
+        ("13ᵗʰ-Dec-2026", "2026-12-13"),
     ]
 
 

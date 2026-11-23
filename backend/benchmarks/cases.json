@@ -40,6 +40,27 @@
     "expected_field_outcomes": ["uncertain"]
   },
   {
+    "id": "hyphen_date_to_month_first_ordinal",
+    "original": ["Application deadline: 19th-Dec-2026"],
+    "revised": ["Application deadline: December 13th, 2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["changed"]
+  },
+  {
+    "id": "spelled_date_to_hyphenated_equivalent",
+    "original": ["Application deadline: 2 September 2026"],
+    "revised": ["Application deadline: 2nd-Sept-2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["same_value"]
+  },
+  {
+    "id": "date_range_stays_uncertain",
+    "original": ["Interview booking deadline: 13th to 15th December 2026"],
+    "revised": ["Interview booking deadline: 13th to 14th December 2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["uncertain"]
+  },
+  {
     "id": "not_assumed_canceled",
     "original": ["Candidates must submit photo"],
     "revised": ["Exam venue will be on admit card"],

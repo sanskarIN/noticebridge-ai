@@ -16,13 +16,14 @@ NoticeBridge AI is an open-source document comparison prototype for official not
 - A separate correction can link to its original deadline or fee when the updated quote explicitly states a prior value and a replacement, and the earlier label and value match uniquely. Each link stays in the human review queue.
 - **Structured date/fee deltas** alongside quoted evidence: canonical calendar dates and INR amounts only when syntax is unambiguous and valid. Deadline and fee matching preserves scope such as phase or paper numbers.
 - Ambiguous dates like `01/02/2026` retain an `uncertain` outcome instead of assuming a date order. Supports English and Hindi written month names and Devanagari numerals.
+- Printed formats such as `13th December 2026`, `Dec. 13th, 2026`, and `13-Dec-2026` retain their exact wording in the evidence. Compact ranges such as `13–15 December 2026` stay uncertain as a single deadline value.
 - With explicit opt-in, an **experimental local Ollama model** can propose related unmatched passages. Each proposed pair references extracted source IDs in the same category and appears as a `possible_change`. The API verifies the source references before returning a proposal.
 - Human-verification checklist next to the quoted evidence, plus source-text search and finding category, status, and review filters. Long reports show 20 findings per page. Open pages with missing extracted text from the coverage panel.
 - React/TypeScript comparison workspace with an English review interface, side-by-side evidence, and a local PDF.js viewer loaded on demand. **JSON and spreadsheet-safe CSV exports** include every finding and checklist selection regardless of the active filters. CSV carries source references, fingerprints, authority status and comparison coverage.
 - Worker outputs undergo independent **structural provenance checks** in the API: the SHA-256 must match uploaded bytes, document roles and filenames cannot be swapped, evidence page references must be in range, and an AI suggestion cannot become a confirmed/official claim. This is not independent verification of the actual notice's authenticity.
 - Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, Linux address-space ceilings (2 GiB), POSIX CPU/file/open-descriptor limits, no-cache responses, Pytest regression tests, and CI configuration. Worker stdout is captured in a private temporary file and read with a 64 MiB result limit. Opt-in local Ollama responses are streamed with a 64 KiB total byte cap.
 - **Browser end-to-end tests** (Playwright/Chromium) cover live uploads, the API-free showcase, source highlighting, review priorities, and report export.
-- A reproducible **18-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
+- A reproducible **fictional-notice regression benchmark** checks specific findings and evidence backing.
 - A local-only [labeled evaluation tool](docs/labeled-evaluation.md) for evidence-pair precision/recall on operator-supplied PDFs. **Version-2 pinned-source manifests** record exact PDF SHA-256 fingerprints and declared label provenance; a non-overwriting helper preserves human labels. An explicit `--enable-ocr` option can evaluate scanned documents using local Tesseract while leaving experimental AI disabled. The report exposes OCR usage and extraction gaps. A representative, independently labeled real-world corpus does **not** yet exist.
 
 ## Local development
@@ -119,7 +120,7 @@ Generate two attractive **fictional** sample PDFs to demonstrate the changed-dea
 PYTHONPATH=backend python backend/benchmarks/generate_demo.py --output demo-output
 ```
 
-The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The 18-case synthetic benchmark and Chromium browser tests are separate checks.
+The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The synthetic benchmark and Chromium browser tests are separate checks.
 
 ## Hackathon
 

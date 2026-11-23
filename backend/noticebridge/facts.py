@@ -35,18 +35,38 @@ ENGLISH_MONTH_WORDS = "|".join(re.escape(month) for month in MONTH_NAMES if mont
 WORD_CHAR = r"[\w\u0900-\u0903\u093a-\u094f\u0951-\u0957\u0962-\u0963]"
 ISO_DATE = re.compile(r"\d{4}-\d{1,2}-\d{1,2}")
 NUMERIC_DATE = re.compile(r"(\d{1,2})([/.-])(\d{1,2})\2(\d{4})")
+DAY = r"\d{1,2}"
+YEAR = r"\d{4}"
+ORDINAL_SUFFIX = r"st|nd|rd|th|ˢᵗ|ⁿᵈ|ʳᵈ|ᵗʰ"
+DATE_HYPHEN = r"[-‐‑]"
+MONTH_SEPARATOR = rf"(?:\s+|[ \t]*{DATE_HYPHEN}[ \t]*)"
+YEAR_SEPARATOR = rf"(?:,?\s+|[ \t]*{DATE_HYPHEN}[ \t]*)"
 DAY_FIRST = (
-    rf"(?P<dmy_day>\d{{1,2}})\s+(?P<dmy_month>{MONTH_WORDS})\.?,?\s+(?P<dmy_year>\d{{4}})"
+    rf"(?P<dmy_day>{DAY})(?:[ \t]*(?P<dmy_suffix>{ORDINAL_SUFFIX}))?"
+    rf"{MONTH_SEPARATOR}(?P<dmy_month>{MONTH_WORDS})\.?{YEAR_SEPARATOR}(?P<dmy_year>{YEAR})"
 )
 MONTH_FIRST = (
-    rf"(?P<mdy_month>{ENGLISH_MONTH_WORDS})\.?\s+(?P<mdy_day>\d{{1,2}}),?\s+"
-    rf"(?P<mdy_year>\d{{4}})"
+    rf"(?P<mdy_month>{ENGLISH_MONTH_WORDS})\.?\s+"
+    rf"(?P<mdy_day>{DAY})(?:[ \t]*(?P<mdy_suffix>{ORDINAL_SUFFIX}))?,?\s+(?P<mdy_year>{YEAR})"
 )
 NAMED_DATE = re.compile(rf"(?:{DAY_FIRST}|{MONTH_FIRST})", re.IGNORECASE)
+# Preserve alternatives and endpoints that share a printed year.
+ORDINAL_DAY = rf"{DAY}(?:[ \t]*(?:{ORDINAL_SUFFIX}))?"
+DATE_RANGE_SEPARATOR = r"(?:[ \t]*[-‐‑–—/&][ \t]*|\s+(?:to|through|and(?:/or)?|or)\s+)"
+NAMED_MONTH = rf"(?:{MONTH_WORDS})\.?"
+ENGLISH_MONTH = rf"(?:{ENGLISH_MONTH_WORDS})\.?"
+COMPACT_DATE_RANGE = re.compile(
+    rf"(?:{ORDINAL_DAY}(?:{MONTH_SEPARATOR}{NAMED_MONTH})?{DATE_RANGE_SEPARATOR}"
+    rf"{ORDINAL_DAY}{MONTH_SEPARATOR}{NAMED_MONTH}{YEAR_SEPARATOR}{YEAR}|"
+    rf"{ENGLISH_MONTH}\s+{ORDINAL_DAY}{DATE_RANGE_SEPARATOR}"
+    rf"(?:{ENGLISH_MONTH}\s+)?{ORDINAL_DAY},?\s+{YEAR})",
+    re.IGNORECASE,
+)
 DATE_TOKEN = re.compile(
-    rf"(?<!{WORD_CHAR})(?<!\d[/.-])(?:{ISO_DATE.pattern}|"
+    rf"(?<!{WORD_CHAR})(?<!\d[/.-])(?<!{WORD_CHAR}{DATE_HYPHEN})(?:"
+    rf"{COMPACT_DATE_RANGE.pattern}|{ISO_DATE.pattern}|"
     rf"\d{{1,2}}[/.-]\d{{1,2}}[/.-]\d{{4}}|"
-    rf"{NAMED_DATE.pattern})(?!{WORD_CHAR}|[/.-]\d)",
+    rf"{NAMED_DATE.pattern})(?!{WORD_CHAR}|[/.-]\d|{DATE_HYPHEN}{WORD_CHAR})",
     re.IGNORECASE,
 )
 AMOUNT_DIGITS = r"\d+(?:,\d+)*(?:\.\d{1,2})?"
@@ -79,12 +99,20 @@ def parse_date(token: str) -> ParsedValue:
     """
     raw = token
     cleaned = ascii_digits(unicodedata.normalize("NFKC", token)).strip()
+    if COMPACT_DATE_RANGE.fullmatch(cleaned):
+        return ParsedValue(kind="date", raw=raw, confidence="ambiguous")
     named = NAMED_DATE.fullmatch(cleaned)
     if named:
         order = "dmy" if named["dmy_month"] is not None else "mdy"
         month = MONTHS.get(named[f"{order}_month"].casefold())
+        day = int(named[f"{order}_day"])
+        ordinal = named[f"{order}_suffix"]
+        if ordinal:
+            expected = "th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+            if ordinal.casefold() != expected:
+                return ParsedValue(kind="date", raw=raw, confidence="invalid")
         canonical = (
-            _valid_date(int(named[f"{order}_year"]), month, int(named[f"{order}_day"]))
+            _valid_date(int(named[f"{order}_year"]), month, day)
             if month is not None else None
         )
         return ParsedValue(kind="date", raw=raw, canonical=canonical,

@@ -28,6 +28,9 @@ This note documents the conservative behavior of the third engineering milestone
 | `१३ दिसंबर २०२६` | Valid date, `2026-12-13` |
 | `2026-12-13` | Valid ISO date, `2026-12-13` |
 | `December 13, 2026` or `13 December 2026` | Explicit month and valid calendar date, `2026-12-13` |
+| `13th December 2026`, `Dec. 13th, 2026`, `13-Dec-2026` | Valid date, `2026-12-13`. The source format is kept in the quotation. |
+| `11st December 2026` | Invalid ordinal suffix, no canonical value |
+| `13–15 December 2026`, `29th November to 2nd December 2026` | Both endpoints stay in the quotation and the date value stays uncertain |
 | `13/12/2026` | Unique day-month interpretation, `2026-12-13` |
 | `01/02/2026` | **Ambiguous** (1 Feb or 2 Jan), no canonical value |
 | `31 February 2026` | **Invalid** date, no canonical value |
@@ -80,7 +83,7 @@ Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tes
 
 ## Synthetic evaluation (not representative accuracy)
 
-`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks 14 fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
+`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
 
 ## Still not implemented
 

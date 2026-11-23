@@ -301,6 +301,33 @@ test('labels the exact changed date within both full source quotes', async ({ pa
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 
+test('highlights ordinal and hyphenated dates while keeping date ranges uncertain', async ({ page }) => {
+  await compareReviewFixture(page, [[
+    'Application deadline: 19th-Dec-2026',
+    'Interview booking deadline: 13th to 15th December 2026',
+  ]], [[
+    'Application deadline: December 13th, 2026',
+    'Interview booking deadline: 13th to 14th December 2026',
+  ]]);
+  const priority = page.getByRole('region', { name: 'Review first' });
+  await expect(priority.locator('strong')).toHaveText([
+    'Deadline moved 6 days earlier', 'Deadline needs verification',
+  ]);
+  await priority.getByRole('button', { name: /Inspect finding: Deadline moved/ }).click();
+  const deadline = page.locator('#finding-f1');
+  await expect(deadline.locator('mark')).toHaveText(['19th-Dec-2026', 'December 13th, 2026']);
+  await deadline.getByRole('button', { name: /Open PDF page/ }).last().click();
+  await expect(page.locator('.preview-quote')).toHaveText('Application deadline: December 13th, 2026');
+  await expect(page.locator('.evidence-highlight')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  const range = page.locator('#finding-f2');
+  await expect(range.locator('.value-outcome')).toHaveText('Date: Uncertain');
+  await expect(range.locator('mark')).toHaveCount(0);
+  await expect(range.locator('blockquote').last())
+    .toHaveText('Interview booking deadline: 13th to 14th December 2026');
+});
+
 test('exports an Excel-compatible evidence and review CSV without asserting official authority', async ({ page }) => {
   await addSources(page);
   await page.getByRole('button', { name: /Compare documents/ }).click();
