@@ -98,7 +98,8 @@ def run_isolated_comparison(
     timeout = OCR_TIMEOUT_SECONDS if enable_ocr else NATIVE_TIMEOUT_SECONDS
     try:
         process = subprocess.Popen(
-            [sys.executable, "-m", "noticebridge.worker"],
+            [sys.executable, "-m", "noticebridge.worker_entry",
+             "--ocr" if enable_ocr else "--native"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,

@@ -140,3 +140,34 @@ def test_worker_environment_excludes_unrelated_secrets(monkeypatch):
     assert "OPENAI_API_KEY" not in environment
     assert "GITHUB_TOKEN" not in environment
 
+
+def test_subprocess_bootstrap_receives_ocr_budget(monkeypatch, pdf_bytes):
+    import noticebridge.isolation as module
+
+    commands: list[list[str]] = []
+
+    class Process:
+        returncode = 0
+
+        def communicate(self, **kwargs):
+            return b'{"error":"invalid_document","message":"not a valid PDF"}', None
+
+    def start(command, **kwargs):
+        commands.append(command)
+        return Process()
+
+    monkeypatch.setattr(module.subprocess, "Popen", start)
+    pdf = pdf_bytes([["Hello"]])
+    with pytest.raises(InvalidDocument):
+        run_isolated_comparison(
+            pdf, pdf, old_name="a.pdf", new_name="b.pdf", enable_ocr=True
+        )
+    assert commands[0][-2:] == ["noticebridge.worker_entry", "--ocr"]
+
+
+def test_bootstrap_rejects_unknown_modes(monkeypatch):
+    from noticebridge import worker_entry
+
+    monkeypatch.setattr("sys.argv", ["python", "--unsupported"])
+    assert worker_entry.main() == 2
+
