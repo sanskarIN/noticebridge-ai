@@ -51,6 +51,12 @@ def test_valid_native_comparison_preserves_source_integrity(source_report):
     ("fake_semantic_confirmation", "confirmed text change"),
     ("duplicate_finding_id", "unique"),
     ("noncanonical_field_delta", "canonical evidence"),
+    ("forged_same_value", "Structured field claims"),
+    ("forged_canonical_value", "Structured field claims"),
+    ("forged_raw_date", "Structured field claims"),
+    ("missing_review_task", "checklist is missing"),
+    ("fake_identical_confirmation", "identical source wording"),
+    ("wrong_deterministic_category", "category contradicts"),
 ])
 def test_forged_report_fields_are_rejected(source_report, mutation, expected_error):
     original, revised, baseline = source_report
@@ -96,6 +102,18 @@ def test_forged_report_fields_are_rejected(source_report, mutation, expected_err
         report.findings.append(finding.model_copy(deep=True))
     elif mutation == "noncanonical_field_delta":
         finding.field_changes[0].revised.canonical = None
+    elif mutation == "forged_same_value":
+        finding.field_changes[0].outcome = "same_value"
+    elif mutation == "forged_canonical_value":
+        finding.field_changes[0].revised.canonical = "2026-12-99"
+    elif mutation == "forged_raw_date":
+        finding.field_changes[0].original.raw = "1 January 2000"
+    elif mutation == "missing_review_task":
+        report.checklist.clear()
+    elif mutation == "fake_identical_confirmation":
+        finding.revised.text = finding.original.text
+    elif mutation == "wrong_deterministic_category":
+        finding.category = "fee"
 
     with pytest.raises(InvalidReportProvenance, match=expected_error):
         verify_report_provenance(
@@ -286,4 +304,53 @@ def test_rotated_and_cropped_pdf_evidence_satisfies_provenance(rotation, unit):
         report, original=original, revised=revised,
         old_name="old.pdf", new_name="new.pdf",
     )
+
+
+def test_ocr_source_cannot_claim_a_certain_structured_field_change(source_report):
+    old_bytes, new_bytes, report = source_report
+    finding = report.findings[0]
+    finding.status = "possible_change"
+    finding.original.extraction_method = "ocr"
+    report.documents[0].ocr_page_count = 1
+    with pytest.raises(InvalidReportProvenance, match="Structured field claims"):
+        verify_report_provenance(
+            report, original=old_bytes, revised=new_bytes,
+            old_name="old.pdf", new_name="new.pdf",
+            ocr_requested=True,
+        )
+
+    finding.field_changes[0].outcome = "uncertain"
+    verify_report_provenance(
+        report, original=old_bytes, revised=new_bytes,
+        old_name="old.pdf", new_name="new.pdf",
+        ocr_requested=True,
+    )
+
+
+@pytest.mark.parametrize("mutation", ["same_date", "different_label"])
+def test_contradictions_require_two_distinct_dates_under_same_label(
+    pdf_bytes, mutation
+):
+    original = pdf_bytes([[
+        "Deadline: 13 December 2026",
+        "Deadline: 14 December 2026",
+    ]])
+    revised = pdf_bytes([[
+        "Deadline: 13 December 2026",
+        "Deadline: 14 December 2026",
+    ]])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    contradiction = next(f for f in report.findings if f.status == "contradiction")
+    if mutation == "same_date":
+        contradiction.supporting_evidence[1].text = "Deadline: 13 December 2026"
+    else:
+        contradiction.supporting_evidence[1].text = "Last date: 14 December 2026"
+    with pytest.raises(InvalidReportProvenance, match="distinct parsed dates"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+        )
 
