@@ -46,6 +46,13 @@ jobs:
           node-version: '22'
       - run: npm install
         working-directory: frontend
+      # One-off reproducibility bootstrap; remove after committing exact lock.
+      - name: Export resolved npm lockfile for review
+        working-directory: frontend
+        run: |
+          printf 'NOTICEBRIDGE_LOCK_BEGIN\\n'
+          base64 -w 76 package-lock.json
+          printf '\\nNOTICEBRIDGE_LOCK_END\\n'
       - run: npm run build
         working-directory: frontend
 
