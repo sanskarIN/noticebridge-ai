@@ -48,6 +48,10 @@ def test_labeled_changed_pair_metrics(tmp_path, pdf_bytes):
         "unsupported_confirmed_changes": 0,
     }
     assert result["incomplete_case_count"] == 0
+    assert result["fuzzy_matching_limited_case_count"] == 0
+    assert result["confirmed_only"] == {
+        "true_positive": 1, "false_positive": 0, "precision": 1, "recall": 1,
+    }
     assert result["dataset"] == "operator-supplied labels; not independently verified"
 
 
@@ -57,6 +61,9 @@ def test_false_positive_is_visible_and_does_not_invent_recall(tmp_path, pdf_byte
     assert result["pair_counts"]["unsupported_confirmed_changes"] == 1
     assert result["precision"] == 0
     assert result["recall"] is None
+    assert result["confirmed_only"] == {
+        "true_positive": 0, "false_positive": 1, "precision": 0, "recall": None,
+    }
 
 
 def test_no_predictions_and_no_gold_has_undefined_metrics(tmp_path, pdf_bytes):
@@ -204,15 +211,66 @@ def test_v2_bad_source_metadata_is_rejected(
 
 
 def test_explicit_pinned_source_gate_rejects_v1(tmp_path, pdf_bytes, monkeypatch):
-    from evaluate_labeled import main
+    import evaluate_labeled as module
 
     manifest = _dataset(tmp_path, pdf_bytes)
+
+    def must_not_read(*args, **kwargs):
+        pytest.fail("Legacy manifests must fail the pinned-source gate before reading PDFs")
+
+    monkeypatch.setattr(module, "_pdf", must_not_read)
     monkeypatch.setattr(
         sys, "argv", ["evaluate_labeled", str(manifest), "--require-pinned-sources"]
     )
     with pytest.raises(SystemExit) as error:
-        main()
+        module.main()
     assert error.value.code == 2
+
+
+@pytest.mark.parametrize(("threshold", "expected"), [("0.1667", 1), ("0.1666", 0)])
+def test_recall_gate_uses_counts_before_rounding(
+    tmp_path, pdf_bytes, monkeypatch, capsys, threshold, expected,
+):
+    from evaluate_labeled import main
+
+    manifest = _dataset(tmp_path, pdf_bytes)
+    payload = json.loads(manifest.read_text())
+    payload["cases"][0]["expected_pairs"] *= 6
+    manifest.write_text(json.dumps(payload))
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), "--min-recall", threshold])
+    assert main() == expected
+    assert json.loads(capsys.readouterr().out)["recall"] == 0.1667
+
+
+def test_unsupported_confirmed_gate_can_fail_even_with_undefined_recall(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _dataset(tmp_path, pdf_bytes, labels=[])
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--max-unsupported-confirmed", "0"],
+    )
+    assert main() == 1
+    assert json.loads(capsys.readouterr().out)["confirmed_only"]["false_positive"] == 1
+
+
+@pytest.mark.parametrize("role", ["original", "revised"])
+def test_labeled_page_must_exist_in_its_source_pdf(tmp_path, pdf_bytes, role):
+    manifest = _dataset(tmp_path, pdf_bytes)
+    payload = json.loads(manifest.read_text())
+    payload["cases"][0]["expected_pairs"][0][f"{role}_page"] = 2
+    manifest.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match=f"outside the {role} PDF"):
+        evaluate_labeled(manifest)
+
+
+def test_manifest_rejects_ambiguous_duplicate_fields(tmp_path, pdf_bytes):
+    manifest = _dataset(tmp_path, pdf_bytes)
+    raw = manifest.read_text().replace('"version": 1', '"version": 2, "version": 1')
+    manifest.write_text(raw)
+    with pytest.raises(ValueError, match="duplicate field names"):
+        evaluate_labeled(manifest)
 
 
 def test_legacy_v1_still_available_but_unpinned(tmp_path, pdf_bytes):
@@ -341,21 +399,18 @@ def test_cli_forwards_ocr_flag_but_keeps_labeled_sources_local(
 
     manifest = _dataset(tmp_path, pdf_bytes)
     captured = {}
+    runner = module.run_isolated_comparison
 
-    def fake_evaluate(path, *, enable_ocr=False):
-        captured.update({"path": path, "enable_ocr": enable_ocr})
-        return {
-            "manifest_version": 1,
-            "precision": None,
-            "recall": None,
-            "ocr_enabled": enable_ocr,
-        }
+    def capture(*args, **kwargs):
+        captured.update(kwargs)
+        return runner(*args, **kwargs)
 
-    monkeypatch.setattr(module, "evaluate_labeled", fake_evaluate)
+    monkeypatch.setattr(module, "run_isolated_comparison", capture)
     monkeypatch.setattr(
         sys, "argv", ["evaluate_labeled", str(manifest), "--enable-ocr"]
     )
     assert module.main() == 0
-    assert captured == {"path": manifest, "enable_ocr": True}
+    assert captured["enable_ocr"] is True
+    assert captured["enable_semantic"] is False
     assert json.loads(capsys.readouterr().out)["ocr_enabled"] is True
 

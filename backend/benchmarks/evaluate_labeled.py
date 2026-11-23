@@ -12,8 +12,8 @@ from collections import Counter
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from noticebridge.compare import normalize
-from noticebridge.extract import MAX_UPLOAD_BYTES
-from noticebridge.isolation import run_isolated_comparison
+from noticebridge.extract import MAX_PAGES, MAX_UPLOAD_BYTES
+from noticebridge.isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 
 MAX_MANIFEST_BYTES = 1_000_000
 MAX_CASES = 500
@@ -25,10 +25,17 @@ SOURCE_KINDS = frozenset({"fictional", "public_notice", "consented"})
 LABEL_METHODS = frozenset({"synthetic", "author_reviewed", "independent_human"})
 
 
+def _unique_object(entries: list[tuple[str, object]]) -> dict:
+    result = dict(entries)
+    if len(result) != len(entries):
+        raise ValueError("Evaluation manifest contains duplicate field names")
+    return result
+
+
 def _manifest(path: Path) -> tuple[int, list[dict], str]:
     if path.stat().st_size > MAX_MANIFEST_BYTES:
         raise ValueError("Evaluation manifest is too large")
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object)
     if (
         not isinstance(payload, dict)
         or type(payload.get("version")) is not int
@@ -40,7 +47,7 @@ def _manifest(path: Path) -> tuple[int, list[dict], str]:
     version = payload["version"]
     cases = payload["cases"]
     canonical = json.dumps(
-        payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+        payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False,
     ).encode("utf-8")
     manifest_sha256 = hashlib.sha256(canonical).hexdigest()
     ids: set[str] = set()
@@ -69,8 +76,8 @@ def _manifest(path: Path) -> tuple[int, list[dict], str]:
             if not isinstance(pair, dict) or not all(key in pair for key in PAIR_FIELDS):
                 raise ValueError(f"{label}: incomplete labeled passage pair")
             for key in ("original_page", "revised_page"):
-                if type(pair[key]) is not int or pair[key] < 1:
-                    raise ValueError(f"{label}: labeled page numbers must be positive")
+                if type(pair[key]) is not int or not 1 <= pair[key] <= MAX_PAGES:
+                    raise ValueError(f"{label}: labeled pages must be in the range 1–{MAX_PAGES}")
             for key in ("original_text", "revised_text"):
                 value = pair[key]
                 if not isinstance(value, str) or not value.strip() or len(value) > 5000:
@@ -126,6 +133,12 @@ def _score(
         enable_ocr=enable_ocr,
         enable_semantic=False,
     )
+    for document in result.documents:
+        if any(
+            pair[f"{document.id}_page"] > document.page_count
+            for pair in case["expected_pairs"]
+        ):
+            raise ValueError(f"{case['id']}: labeled page is outside the {document.id} PDF")
     gold = Counter(_key(pair) for pair in case["expected_pairs"])
     predicted = Counter()
     confirmed = Counter()
@@ -147,6 +160,7 @@ def _score(
         "source_kind": case.get("source_kind", "unrecorded"),
         "label_method": case.get("label_method", "unrecorded"),
         "text_coverage": result.text_coverage,
+        "fuzzy_matching_limited": result.fuzzy_matching_limited,
         "ocr_pages": sum(document.ocr_page_count for document in result.documents),
         "pages_without_text": sum(
             len(document.pages_without_text) for document in result.documents
@@ -156,6 +170,7 @@ def _score(
         "true_positive": sum((gold & predicted).values()),
         "false_positive": sum((predicted - gold).values()),
         "false_negative": sum((gold - predicted).values()),
+        "confirmed_true_positive": sum((confirmed & gold).values()),
         "unsupported_confirmed_changes": sum((confirmed - gold).values()),
         "processing_warnings": len(result.warnings),
     }
@@ -165,7 +180,9 @@ def _ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
 
 
-def evaluate_labeled(manifest: Path, *, enable_ocr: bool = False) -> dict:
+def evaluate_labeled(
+    manifest: Path, *, enable_ocr: bool = False, require_pinned_sources: bool = False,
+) -> dict:
     """Run offline evidence-pair evaluation from operator-supplied ground truth.
 
     OCR is optional and never enables experimental semantic suggestions. Do
@@ -174,6 +191,8 @@ def evaluate_labeled(manifest: Path, *, enable_ocr: bool = False) -> dict:
     """
     resolved = manifest.resolve()
     version, cases, manifest_sha256 = _manifest(resolved)
+    if require_pinned_sources and version != 2:
+        raise ValueError("Pinned sources require a version-2 manifest")
     root = resolved.parent
     results = []
     for case in cases:
@@ -189,6 +208,8 @@ def evaluate_labeled(manifest: Path, *, enable_ocr: bool = False) -> dict:
     tp = sum(case["true_positive"] for case in results)
     fp = sum(case["false_positive"] for case in results)
     fn = sum(case["false_negative"] for case in results)
+    confirmed_tp = sum(case["confirmed_true_positive"] for case in results)
+    unsupported_confirmed = sum(case["unsupported_confirmed_changes"] for case in results)
     return {
         "dataset": "operator-supplied labels; not independently verified",
         "manifest_version": version,
@@ -209,12 +230,19 @@ def evaluate_labeled(manifest: Path, *, enable_ocr: bool = False) -> dict:
             "true_positive": tp,
             "false_positive": fp,
             "false_negative": fn,
-            "unsupported_confirmed_changes": sum(
-                case["unsupported_confirmed_changes"] for case in results
-            ),
+            "unsupported_confirmed_changes": unsupported_confirmed,
         },
         "precision": _ratio(tp, tp + fp),
         "recall": _ratio(tp, tp + fn),
+        "confirmed_only": {
+            "true_positive": confirmed_tp,
+            "false_positive": unsupported_confirmed,
+            "precision": _ratio(confirmed_tp, confirmed_tp + unsupported_confirmed),
+            "recall": _ratio(confirmed_tp, tp + fn),
+        },
+        "fuzzy_matching_limited_case_count": sum(
+            case["fuzzy_matching_limited"] for case in results
+        ),
         "incomplete_case_count": sum(
             case["text_coverage"] != "all_pages_have_text" for case in results
         ),
@@ -242,25 +270,38 @@ def main() -> int:
     )
     parser.add_argument("--min-precision", type=float, default=None)
     parser.add_argument("--min-recall", type=float, default=None)
+    parser.add_argument(
+        "--max-unsupported-confirmed", type=int,
+        help="Fail when unsupported confirmed pairings exceed this count",
+    )
     args = parser.parse_args()
     for threshold in (args.min_precision, args.min_recall):
         if threshold is not None and not 0 <= threshold <= 1:
             parser.error("Thresholds must be between 0 and 1")
+    if args.max_unsupported_confirmed is not None and args.max_unsupported_confirmed < 0:
+        parser.error("Maximum unsupported confirmed changes must be nonnegative")
     try:
-        result = evaluate_labeled(args.manifest, enable_ocr=args.enable_ocr)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        result = evaluate_labeled(
+            args.manifest, enable_ocr=args.enable_ocr,
+            require_pinned_sources=args.require_pinned_sources,
+        )
+    except (OSError, ValueError, ProcessingFailed, ProcessingTimedOut) as exc:
         parser.error(str(exc))
-    if args.require_pinned_sources and result["manifest_version"] != 2:
-        parser.error("Pinned sources require a version-2 manifest")
     print(json.dumps(result, indent=2, ensure_ascii=False))
-    for key, threshold in (
-        ("precision", args.min_precision),
-        ("recall", args.min_recall),
+    counts = result["pair_counts"]
+    true_positive = counts["true_positive"]
+    # Compare thresholds to the raw counts, before presentation rounding.
+    for denominator, threshold in (
+        (true_positive + counts["false_positive"], args.min_precision),
+        (true_positive + counts["false_negative"], args.min_recall),
     ):
-        if threshold is not None and (
-            result[key] is None or result[key] < threshold
-        ):
+        if threshold is not None and (not denominator or true_positive / denominator < threshold):
             return 1
+    if (
+        args.max_unsupported_confirmed is not None
+        and counts["unsupported_confirmed_changes"] > args.max_unsupported_confirmed
+    ):
+        return 1
     return 0
 
 

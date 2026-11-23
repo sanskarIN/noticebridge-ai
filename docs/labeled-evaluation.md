@@ -103,7 +103,9 @@ calculated from your actual PDFs (the converter does that automatically):
 The empty `expected_pairs` array above is a **schema illustration**, not a
 gold-standard annotation. Fill it with independently reviewed source excerpts.
 The evaluator reports a canonical manifest SHA-256 (stable under JSON whitespace
-and key order changes) and source-kind/label-method case counts. It still does
+and key order changes) and source-kind/label-method case counts. It rejects
+duplicate JSON field names and labels that point outside their source PDF.
+The pinned-source option rejects legacy manifests before opening either PDF. It still does
 not prove that any source issuer or annotation is authentic. Blank scanned
 pages can legitimately have human visual labels; the evaluator must not
 require the same text extractor under test to confirm its own labels.
@@ -117,11 +119,12 @@ python -m pip install -e './backend[dev]'
 PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py demo-output/labels.json
 ```
 
-Optional CI gate on explicitly chosen precision and recall thresholds:
+Optional CI gates use raw precision and recall counts and a limit on
+unsupported confirmed pairings:
 
 ```sh
 PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py demo-output/labels.json \
-  --min-precision 0.90 --min-recall 0.90
+  --min-precision 0.90 --min-recall 0.90 --max-unsupported-confirmed 0
 ```
 
 The command is entirely local, calls the isolated PDF comparison worker, and
@@ -156,11 +159,15 @@ labeled occurrences are counted with multiplicity.
 - **False negative (FN):** a labeled pair was not predicted.
 - **Precision:** TP / (TP + FP).
 - **Recall:** TP / (TP + FN).
-- **Unsupported confirmed changes:** unmatched predictions labeled
-  `confirmed_change`, which deserve high-priority manual review.
+- **Unsupported confirmed changes:** predicted pairs labeled
+  `confirmed_change` that are absent from the operator's labels.
+- **Confirmed-only precision and recall:** the same formulas after restricting
+  predictions to `confirmed_change`. Recall still uses every labeled pair as
+  its denominator.
 
 If a denominator is zero, the metric is **null**, not 100%. The output also
-counts cases with incomplete PDF text coverage. Missing-information statements,
+counts cases with incomplete PDF text coverage and cases with skipped fuzzy
+candidate work. Missing-information statements,
 intra-document contradictions, date/fee parser quality, OCR transcription
 accuracy, semantic equivalence, and official authority are **not** scored by
 these pair-level metrics.
