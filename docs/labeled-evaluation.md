@@ -228,6 +228,28 @@ as independent_human. These flags prevent accidental mixing; they cannot
 prove representative data, independent annotation, consent or issuer authority.
 Keep signed-off dataset provenance and adjudication records outside the tool.
 
+### Inspect false matches without collecting a new dataset
+
+The optional --include-error-examples flag prints **up to five** normalized
+source passage pairs per case for false positives, false negatives and
+unsupported confirmed pairings. Each example shows both PDF page numbers,
+a 180-character preview on each side, truncation flags, a stable SHA-256 of
+the complete normalized page/quote key, and its occurrence count. The
+underlying micro-averaged metrics always use **all** errors, not only sampled
+examples. No source evidence is invented to fill empty cohorts.
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
+  evaluation/independent-pinned.json --require-pinned-sources \
+  --include-error-examples
+~~~
+
+This flag is **off by default** because quotations may contain private or
+permission-restricted information. Use it on a trusted local machine; do not
+upload its JSON output to public CI logs or an issue tracker without redacting
+the previews. Truncated normalized excerpts are for triage, not substitutes
+for the full original PDF and human adjudication.
+
 ## 4. Build a useful independent evaluation corpus
 
 For the December completion gate, use a permission-safe, diverse set of

@@ -18,6 +18,8 @@ from noticebridge.isolation import ProcessingFailed, ProcessingTimedOut, run_iso
 MAX_MANIFEST_BYTES = 1_000_000
 MAX_CASES = 500
 MAX_GOLD_PAIRS = 500
+MAX_ERROR_EXAMPLES = 5
+MAX_ERROR_QUOTE_CHARS = 180
 CASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 PAIR_FIELDS = ("original_page", "original_text", "revised_page", "revised_text")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -128,8 +130,32 @@ def _key(pair: dict) -> tuple[int, str, int, str]:
     )
 
 
+def _error_examples(pairs: Counter) -> list[dict]:
+    """Opt-in, bounded audit previews of exact normalized page/quote pairs."""
+    examples = []
+    for pair, count in sorted(pairs.items(), key=lambda entry: (-entry[1], entry[0]))[
+        :MAX_ERROR_EXAMPLES
+    ]:
+        original_page, original_text, revised_page, revised_text = pair
+        digest = hashlib.sha256(json.dumps(
+            pair, ensure_ascii=False, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        examples.append({
+            "original_page": original_page,
+            "revised_page": revised_page,
+            "normalized_original_preview": original_text[:MAX_ERROR_QUOTE_CHARS],
+            "normalized_revised_preview": revised_text[:MAX_ERROR_QUOTE_CHARS],
+            "original_preview_truncated": len(original_text) > MAX_ERROR_QUOTE_CHARS,
+            "revised_preview_truncated": len(revised_text) > MAX_ERROR_QUOTE_CHARS,
+            "normalized_pair_sha256": digest,
+            "occurrences": count,
+        })
+    return examples
+
+
 def _score(
-    case: dict, original: bytes, revised: bytes, *, enable_ocr: bool = False
+    case: dict, original: bytes, revised: bytes, *, enable_ocr: bool = False,
+    include_error_examples: bool = False,
 ) -> dict:
     result = run_isolated_comparison(
         original, revised,
@@ -162,7 +188,7 @@ def _score(
         predicted[key] += 1
         if finding.status == "confirmed_change":
             confirmed[key] += 1
-    return {
+    summary = {
         "id": case["id"],
         "input_sha256": {document.id: document.sha256 for document in result.documents},
         "source_kind": case.get("source_kind", "unrecorded"),
@@ -186,6 +212,13 @@ def _score(
         "unsupported_confirmed_changes": sum((confirmed - gold).values()),
         "processing_warnings": len(result.warnings),
     }
+    if include_error_examples:
+        summary["error_examples"] = {
+            "false_positive": _error_examples(predicted - gold),
+            "false_negative": _error_examples(gold - predicted),
+            "unsupported_confirmed": _error_examples(confirmed - gold),
+        }
+    return summary
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
@@ -265,6 +298,7 @@ def _cohort_results(cases: list[dict]) -> dict:
 
 def evaluate_labeled(
     manifest: Path, *, enable_ocr: bool = False, require_pinned_sources: bool = False,
+    include_error_examples: bool = False,
 ) -> dict:
     """Run offline evidence-pair evaluation from operator-supplied ground truth.
 
@@ -287,7 +321,10 @@ def evaluate_labeled(
             root, case.get("revised"),
             case["revised_sha256"] if version == 2 else None,
         )
-        results.append(_score(case, old, new, enable_ocr=enable_ocr))
+        results.append(_score(
+            case, old, new, enable_ocr=enable_ocr,
+            include_error_examples=include_error_examples,
+        ))
     tp = sum(case["true_positive"] for case in results)
     fp = sum(case["false_positive"] for case in results)
     fn = sum(case["false_negative"] for case in results)
@@ -368,6 +405,10 @@ def main() -> int:
         "--min-independent-distinct-pairs", type=int,
         help="Minimum number of different PDF source pairs in the independent cohort",
     )
+    parser.add_argument(
+        "--include-error-examples", action="store_true",
+        help="Include bounded normalized PDF quote previews (may contain private text)",
+    )
     parser.add_argument("--min-precision", type=float, default=None)
     parser.add_argument("--min-recall", type=float, default=None)
     parser.add_argument(
@@ -391,6 +432,7 @@ def main() -> int:
         result = evaluate_labeled(
             args.manifest, enable_ocr=args.enable_ocr,
             require_pinned_sources=args.require_pinned_sources,
+            include_error_examples=args.include_error_examples,
         )
     except (OSError, ValueError, ProcessingFailed, ProcessingTimedOut) as exc:
         parser.error(str(exc))

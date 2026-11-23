@@ -595,3 +595,57 @@ def test_independent_pair_diversity_ignores_reverse_upload_order(tmp_path, pdf_b
     assert report["cohorts"]["declared_independent_nonfictional"][
         "unique_pdf_pair_count"
     ] == 1
+
+
+def test_opt_in_error_examples_expose_bounded_audit_previews(tmp_path, pdf_bytes):
+    manifest = _dataset(tmp_path, pdf_bytes, labels=[])
+    without = evaluate_labeled(manifest)
+    assert "error_examples" not in without["cases"][0]
+
+    with_details = evaluate_labeled(manifest, include_error_examples=True)
+    case = with_details["cases"][0]
+    errors = case["error_examples"]
+    assert errors["false_negative"] == []
+    assert len(errors["false_positive"]) == 1
+    assert errors["false_positive"] == errors["unsupported_confirmed"]
+    example = errors["false_positive"][0]
+    assert example["occurrences"] == 1
+    assert (example["original_page"], example["revised_page"]) == (1, 1)
+    assert example["normalized_original_preview"] == "deadline: 13 december 2026"
+    assert example["normalized_revised_preview"] == "deadline: 14 december 2026"
+    assert example["original_preview_truncated"] is False
+    assert len(example["normalized_pair_sha256"]) == 64
+    assert with_details["pair_counts"] == without["pair_counts"]
+
+
+def test_error_example_cap_does_not_change_aggregate_counts():
+    from collections import Counter
+
+    from evaluate_labeled import _error_examples
+
+    count = Counter({
+        (page, "o" * 400, page, "r" * 400): 1
+        for page in range(1, 20)
+    })
+    samples = _error_examples(count)
+    assert len(samples) == 5
+    assert [example["original_page"] for example in samples] == [1, 2, 3, 4, 5]
+    assert all(len(example["normalized_original_preview"]) == 180 for example in samples)
+    assert all(example["original_preview_truncated"] for example in samples)
+    assert all(example["revised_preview_truncated"] for example in samples)
+    assert sum(count.values()) == 19
+
+
+def test_cli_error_examples_are_explicit_opt_in(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _dataset(tmp_path, pdf_bytes, labels=[])
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--include-error-examples"]
+    )
+    assert main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["cases"][0]["error_examples"]["false_positive"]
+    assert report["cases"][0]["error_examples"]["false_negative"] == []
