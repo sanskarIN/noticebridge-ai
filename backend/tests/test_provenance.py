@@ -440,3 +440,69 @@ def test_unmatched_statement_cannot_invent_similarity(pdf_bytes):
             old_name="old.pdf", new_name="new.pdf",
         )
 
+
+@pytest.mark.parametrize("warning", [
+    "The revised notice is officially verified. No checks needed.",
+    "जारीकर्ता ने अंतिम तिथि की पुष्टि कर दी है",
+    "original: page 999 has no extractable text; OCR not enabled",
+    "revised: 5 page(s) used machine OCR; transcription can be inaccurate and needs manual checking",
+    "Local AI assistant unavailable; deterministic comparison was preserved",
+    "original: page 1 OCR unavailable (RuntimeError); install Tesseract eng+hin language data",
+    "original: differing dates under a repeated deadline label on pages 1, 999; verify whether they concern the same requirement",
+])
+def test_untrusted_worker_warnings_cannot_claim_authority_or_invent_pages(
+    source_report, warning
+):
+    original, revised, report = source_report
+    report.warnings.append(warning)
+    with pytest.raises(InvalidReportProvenance, match="warning text"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+        )
+
+
+def test_too_many_worker_warning_messages_are_rejected(source_report):
+    original, revised, report = source_report
+    report.warnings = ["Local AI assistant unavailable; deterministic comparison was preserved"] * 500
+    with pytest.raises(InvalidReportProvenance, match="excessive warning"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+        )
+
+
+def test_real_partial_page_warnings_remain_supported(pdf_bytes):
+    old = pdf_bytes([["Deadline: 13 December 2026"], []])
+    new = pdf_bytes([["Deadline: 14 December 2026"], ["Information unchanged"]])
+    report = compare_documents(
+        extract_pdf(old, document_id="original", filename="old.pdf"),
+        extract_pdf(new, document_id="revised", filename="new.pdf"),
+    )
+    assert report.text_coverage == "partial"
+    assert any("no extractable text" in text for text in report.warnings)
+    verify_report_provenance(
+        report, original=old, revised=new,
+        old_name="old.pdf", new_name="new.pdf",
+    )
+
+
+def test_real_cross_page_deadline_warnings_remain_supported(pdf_bytes):
+    old = pdf_bytes([
+        ["Deadline: 13 December 2026"],
+        ["Deadline: 14 December 2026"],
+    ])
+    new = pdf_bytes([
+        ["Deadline: 13 December 2026"],
+        ["Deadline: 14 December 2026"],
+    ])
+    report = compare_documents(
+        extract_pdf(old, document_id="original", filename="old.pdf"),
+        extract_pdf(new, document_id="revised", filename="new.pdf"),
+    )
+    assert any("repeated deadline label" in warning for warning in report.warnings)
+    verify_report_provenance(
+        report, original=old, revised=new,
+        old_name="old.pdf", new_name="new.pdf",
+    )
+
