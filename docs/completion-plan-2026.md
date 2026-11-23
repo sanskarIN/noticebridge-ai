@@ -34,6 +34,7 @@
 - [x] Opt-in, local-only experimental semantic proposal path.
 - [ ] Finish comprehensive adversarial test review for model output and PDF parsing.
 - [x] Add a Windows CI job for backend integration, lint and subprocess behavior.
+- [x] Add Windows Job Object containment before PDF input, fail-closed assignment, process-tree termination, and CI tests.
 - [ ] Confirm Windows 11 native launch and termination behavior with a local desktop tester; CI alone is not equivalent.
 
 **Gate:** Every accepted AI pairing must point to two existing, noninvented

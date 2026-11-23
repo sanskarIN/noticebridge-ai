@@ -71,7 +71,7 @@ All evidence references point to source text extracted from the uploaded PDFs, i
 - **Limited PDF.js coordinate highlighting**: the UI renders a highlighted excerpt for unrotated pages using source coordinates. On rotated pages it intentionally shows the page without an overlay. Complex cropped/transformed PDFs may also need manual visual checking.
 - **No persistent checklist**: selections reset when the page reloads. Reviewing a checklist item does not by itself verify official authority. You can export a JSON snapshot of findings and review state.
 - **Ambiguous dates**: dates are parsed conservatively. A numeric date with both first and second parts ≤12 and different is not interpreted as DD/MM or MM/DD. Month-name and ISO formats are safer. Not all language/date/amount formats are recognized.
-- **Security**: document processing uses a short-lived subprocess with a restricted inherited environment and hard wall-clock deadline, and application data is not durably persisted; multipart uploads may be spooled to OS temp storage before parsing. On POSIX, timed-out worker process groups are terminated; on Windows, only the direct worker is terminated. Worker POSIX limits are best-effort, not guaranteed isolation. This is **not an OS sandbox** and is **not yet hardened for hostile public internet uploads**. Deployments still need OS isolation and memory/CPU quotas, authentication, rate limiting, malware controls and operational safeguards. Encrypted PDFs and >80-page PDFs are rejected.
+- **Security**: processing uses a disposable subprocess, restricted inherited environment, and hard wall-clock deadline. On POSIX, timeout kills the process group; on Windows, each real worker must be assigned to a kill-on-close **Job Object before any PDF bytes are supplied**, with a 2 GiB job/process memory ceiling and an eight-process limit. On timeout the job terminates its worker descendants; normal completion closes the job handle. Assignment failures abort processing rather than falling back to an uncontained worker. Temporary OS spooling is still used. These limits are **not an OS sandbox** and the app is **not hardened for hostile public internet uploads**. Deployments need OS isolation, disk/CPU quotas, authentication, proxy rate limits, monitoring and security review. Encrypted PDFs and >80-page PDFs are rejected.
 
 ## Roadmap
 
@@ -81,7 +81,7 @@ All evidence references point to source text extracted from the uploaded PDFs, i
 4. PDF.js rotation/crop-aware coordinate transforms, visual regression tests, and optional reviewed CSV/calendar exports.
 5. Stronger adversarial testing, privacy/security hardening, and an accessible deployed demo.
 
-See [engineering verification notes](docs/verification-matrix.md) and the [security threat model](docs/security-threat-model.md) for data boundaries, remaining P0 risks, test coverage and accepted limitations.
+See [engineering verification notes](docs/verification-matrix.md), the [security threat model](docs/security-threat-model.md), and the [Windows worker isolation guide](docs/windows-worker-isolation.md) for data boundaries, remaining P0 risks, test coverage and accepted limitations.
 
 ## Reproducible fictional demo
 
