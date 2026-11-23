@@ -37,6 +37,10 @@ def test_valid_native_comparison_preserves_source_integrity(source_report):
     ("wrong_evidence_role", "wrong role"),
     ("wrong_evidence_page", "outside"),
     ("wrong_evidence_filename", "Evidence filename"),
+    ("nonfinite_geometry", "geometry"),
+    ("off_page_box", "outside the source page"),
+    ("overlong_quote", "overlong"),
+    ("unopted_ocr", "without opt-in"),
     ("inconsistent_coverage", "coverage"),
     ("wrong_missing_page_counts", "coverage"),
     ("authority_claim", "official authority"),
@@ -64,6 +68,14 @@ def test_forged_report_fields_are_rejected(source_report, mutation, expected_err
         finding.revised.page = 999
     elif mutation == "wrong_evidence_filename":
         finding.original.filename = "elsewhere.pdf"
+    elif mutation == "nonfinite_geometry":
+        finding.original.page_width = float("inf")
+    elif mutation == "off_page_box":
+        finding.original.bbox = (9000, 9000, 9010, 9010)
+    elif mutation == "overlong_quote":
+        finding.original.text = "X" * 5001
+    elif mutation == "unopted_ocr":
+        finding.original.extraction_method = "ocr"
     elif mutation == "inconsistent_coverage":
         report.text_coverage = "inconclusive"
     elif mutation == "wrong_missing_page_counts":
@@ -204,4 +216,74 @@ def test_ocr_metadata_cannot_appear_without_explicit_opt_in(source_report):
             old_name="old.pdf", new_name="new.pdf",
             ocr_requested=False,
         )
+
+
+def test_evidence_cannot_refer_to_uncovered_page(pdf_bytes):
+    old_bytes = pdf_bytes([["Deadline: 13 December 2026"], []])
+    new_bytes = pdf_bytes([["Deadline: 14 December 2026"], []])
+    old_doc = extract_pdf(
+        old_bytes, document_id="original", filename="old.pdf"
+    )
+    new_doc = extract_pdf(
+        new_bytes, document_id="revised", filename="new.pdf"
+    )
+    report = compare_documents(old_doc, new_doc)
+    assert report.text_coverage == "partial"
+    report.findings[0].original.page = 2
+    with pytest.raises(InvalidReportProvenance, match="without source text"):
+        verify_report_provenance(
+            report, original=old_bytes, revised=new_bytes,
+            old_name="old.pdf", new_name="new.pdf",
+        )
+
+
+def test_ocr_claim_must_match_reported_document_ocr_count(source_report):
+    old_bytes, new_bytes, report = source_report
+    report.findings[0].status = "possible_change"
+    report.findings[0].original.extraction_method = "ocr"
+    with pytest.raises(InvalidReportProvenance, match="document summary"):
+        verify_report_provenance(
+            report, original=old_bytes, revised=new_bytes,
+            old_name="old.pdf", new_name="new.pdf",
+            ocr_requested=True,
+        )
+
+
+@pytest.mark.parametrize(("rotation", "unit"), [
+    (0, 1),
+    (90, 1),
+    (180, 1),
+    (270, 2),
+])
+def test_rotated_and_cropped_pdf_evidence_satisfies_provenance(rotation, unit):
+    import pymupdf as fitz
+
+    def source(day):
+        document = fitz.open()
+        page = document.new_page(width=600, height=800)
+        page.insert_text(
+            (150, 240), f"Deadline: {day} December 2026", fontsize=16
+        )
+        page.set_cropbox(fitz.Rect(100, 100, 500, 700))
+        page.set_rotation(rotation)
+        if unit != 1:
+            document.xref_set_key(page.xref, "UserUnit", str(unit))
+        payload = document.tobytes()
+        document.close()
+        return payload
+
+    original = source(13)
+    revised = source(14)
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    assert report.findings
+    evidence = report.findings[0].original
+    assert evidence.page_rotation == rotation
+    assert evidence.page_width > 0 and evidence.page_height > 0
+    verify_report_provenance(
+        report, original=original, revised=revised,
+        old_name="old.pdf", new_name="new.pdf",
+    )
 
