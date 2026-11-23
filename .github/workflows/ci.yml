@@ -50,9 +50,9 @@ jobs:
       - name: Export resolved npm lockfile for review
         working-directory: frontend
         run: |
-          printf 'NOTICEBRIDGE_LOCK_BEGIN\\n'
+          echo NOTICEBRIDGE_LOCK_BEGIN
           base64 -w 76 package-lock.json
-          printf '\\nNOTICEBRIDGE_LOCK_END\\n'
+          echo NOTICEBRIDGE_LOCK_END
       - run: npm run build
         working-directory: frontend
 
