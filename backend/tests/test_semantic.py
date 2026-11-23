@@ -117,11 +117,17 @@ def test_model_request_is_fixed_to_localhost_and_no_proxy(monkeypatch):
     calls = []
 
     class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
         def raise_for_status(self):
             return None
 
-        def json(self):
-            return {"response": '{"pairs":[]}'}
+        def iter_bytes(self):
+            yield b'{"response":"{\\"pairs\\":[]}"}'
 
     class Client:
         def __init__(self, **kwargs):
@@ -133,8 +139,8 @@ def test_model_request_is_fixed_to_localhost_and_no_proxy(monkeypatch):
         def __exit__(self, exc_type, exc, tb):
             return False
 
-        def post(self, url, json):
-            calls.append(("post", (url, json)))
+        def stream(self, method, url, json):
+            calls.append(("stream", (method, url, json)))
             return Response()
 
     monkeypatch.setattr(semantic.httpx, "Client", Client)
@@ -144,8 +150,45 @@ def test_model_request_is_fixed_to_localhost_and_no_proxy(monkeypatch):
     )
     assert result == {"pairs": []}
     assert calls[0][1]["trust_env"] is False
-    assert calls[1][1][0] == "http://127.0.0.1:11434/api/generate"
-    assert calls[1][1][1]["stream"] is False
+    assert calls[1][1][0] == "POST"
+    assert calls[1][1][1] == "http://127.0.0.1:11434/api/generate"
+    assert calls[1][1][2]["stream"] is False
+
+
+def test_oversized_local_model_http_response_rejected_before_json(monkeypatch):
+    class HugeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_bytes(self):
+            yield b'{"response":"'
+            yield b"A" * (semantic.MAX_MODEL_RESPONSE_BYTES + 1)
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return HugeResponse()
+
+    monkeypatch.setattr(semantic.httpx, "Client", Client)
+    with pytest.raises(ValueError, match="exceeds the allowed size"):
+        semantic._model_pairs(
+            [{"id": "f1", "category": "deadline", "text": "Old"}],
+            [{"id": "f2", "category": "deadline", "text": "New"}],
+        )
 
 
 def test_bad_model_name_is_not_sent_to_ollama(monkeypatch):

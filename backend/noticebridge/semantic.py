@@ -17,6 +17,7 @@ DEFAULT_MODEL = "qwen2.5:3b"
 MAX_CANDIDATES = 30
 MAX_PASSAGE_CHARS = 320
 MAX_MODEL_CHARS = 16384
+MAX_MODEL_RESPONSE_BYTES = 64 * 1024
 MAX_PROPOSALS = 12
 MODEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,63}$")
 
@@ -38,13 +39,21 @@ def _model_pairs(original: list[dict], revised: list[dict]) -> object:
         + passages
     )
     # Never use a configurable external endpoint, proxies, or cloud APIs.
+    # Stream and cap the *entire HTTP response* before JSON parsing. Limiting
+    # only payload["response"] after response.json() would allow a local
+    # endpoint to exhaust the worker's memory with oversized metadata.
     with httpx.Client(timeout=25.0, trust_env=False) as client:
-        response = client.post(OLLAMA_URL, json={
+        with client.stream("POST", OLLAMA_URL, json={
             "model": model, "prompt": prompt, "stream": False, "format": "json",
             "options": {"temperature": 0, "num_predict": 400},
-        })
-        response.raise_for_status()
-        payload = response.json()
+        }) as response:
+            response.raise_for_status()
+            collected = bytearray()
+            for part in response.iter_bytes():
+                if len(collected) + len(part) > MAX_MODEL_RESPONSE_BYTES:
+                    raise ValueError("Local model response exceeds the allowed size")
+                collected.extend(part)
+    payload = json.loads(collected)
     raw = payload.get("response") if isinstance(payload, dict) else None
     if not isinstance(raw, str) or len(raw) > MAX_MODEL_CHARS:
         raise ValueError("Unexpected local model response")
