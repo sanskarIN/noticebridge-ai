@@ -118,3 +118,24 @@ test('bounds physical PDF canvas pixels on a high-resolution screen', async ({ b
   }
 });
 
+test('source preview traps keyboard focus, closes on Escape and restores focus', async ({ page }) => {
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(page.locator('.finding')).toHaveCount(1);
+  const launch = page.getByRole('button', { name: /Open PDF page/ }).first();
+  await launch.focus();
+  await launch.click();
+  const dialog = page.getByRole('dialog');
+  const close = dialog.getByRole('button', { name: /Close preview/ });
+  await expect(close).toBeFocused();
+  await expect(page.locator('main')).toHaveAttribute('inert', '');
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('link', { name: /Open PDF in new tab/ })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(launch).toBeFocused();
+  await expect(page.locator('main')).not.toHaveAttribute('inert');
+});
+

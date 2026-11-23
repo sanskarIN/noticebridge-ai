@@ -37,7 +37,7 @@ const translations = {
     page: 'Page', verify: 'Verify against the issuing organization before acting on a deadline or eligibility change.',
     authority: 'Authority not verified', warnings: 'Processing warnings',
     openPage: 'Open PDF page', closePreview: 'Close preview', newTab: 'Open PDF in new tab',
-    previewNote: 'This opens the locally selected PDF at the referenced page. Bounding boxes are preserved in the report; a graphical highlight overlay is not available yet.',
+    previewNote: 'The PDF preview highlights source coordinates on unrotated pages. Review the original document before relying on this evidence.',
     export: 'Export evidence report (JSON)', progress: 'Reviewed',
     values: 'Extracted values (syntactic check only)', uncertain: 'Uncertain',
     invalidFile: 'Select a PDF no larger than 10 MiB.',
@@ -70,7 +70,7 @@ const translations = {
     page: 'पृष्ठ', verify: 'तिथि या पात्रता में बदलाव के आधार पर कदम उठाने से पहले जारीकर्ता से पुष्टि करें।',
     authority: 'आधिकारिक प्राथमिकता अप्रमाणित', warnings: 'प्रोसेसिंग चेतावनियाँ',
     openPage: 'PDF पृष्ठ खोलें', closePreview: 'पूर्वावलोकन बंद करें', newTab: 'नए टैब में PDF खोलें',
-    previewNote: 'चुनी हुई PDF का संबंधित पृष्ठ दिखाया गया है। स्रोत का बॉक्स रिपोर्ट में सुरक्षित है; चित्र पर हाइलाइट अभी उपलब्ध नहीं है।',
+    previewNote: 'मूल PDF के बिना घुमाए गए पृष्ठों पर स्रोत अंश हाइलाइट होता है। प्रमाण को स्वयं जाँचें।',
     export: 'प्रमाण रिपोर्ट डाउनलोड करें (JSON)', progress: 'समीक्षा पूरी',
     values: 'निकाले गए मान (केवल प्रारूप की जाँच)', uncertain: 'अनिश्चित',
     invalidFile: 'केवल 10 MiB तक की PDF चुनें।',
@@ -118,12 +118,59 @@ export default function App() {
   const [checked, setChecked] = useState<string[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  const closePreviewRef = useRef<HTMLButtonElement | null>(null);
+  const previewDialogRef = useRef<HTMLElement | null>(null);
   const t = translations[language];
 
   useEffect(() => {
     return () => { if (preview) URL.revokeObjectURL(preview.url); };
   }, [preview]);
   useEffect(() => () => controllerRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!preview) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ?
+      document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closePreviewRef.current?.focus();
+
+    function onPreviewKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setPreview(null);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const dialog = previewDialogRef.current;
+      if (!dialog) return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), a[href], input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+      )).filter(element => element.getClientRects().length > 0);
+      if (!controls.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first ||
+          !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last ||
+          !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', onPreviewKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onPreviewKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [preview]);
 
   function setSource(role: DocumentRole, file: File | null) {
     controllerRef.current?.abort();
@@ -188,7 +235,7 @@ export default function App() {
   }
 
   return <div className="app-shell">
-    <header className="topbar">
+    <header className="topbar" inert={Boolean(preview)}>
       <div className="brand"><span className="brand-mark">N<span>↗</span></span><span>NoticeBridge <b>AI</b></span></div>
       <div className="top-actions">
         <span className="privacy-tag">● Local development MVP</span>
@@ -198,7 +245,7 @@ export default function App() {
         </div>
       </div>
     </header>
-    <main>
+    <main inert={Boolean(preview)}>
       <section className="hero">
         <div className="pill"><span className="pill-dot" />{t.eyebrow}</div>
         <h1>{t.title}<br /><em>{t.subtitle}</em></h1>
@@ -259,13 +306,13 @@ export default function App() {
       </section>}
     </main>
     {preview && <div className="preview-backdrop" role="presentation">
-      <section className="preview-dialog" role="dialog" aria-modal="true" aria-label={`${preview.evidence.filename} · ${t.page} ${preview.evidence.page}`}>
-        <div className="preview-top"><strong>{preview.evidence.filename} · {t.page} {preview.evidence.page}</strong><button type="button" onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
+      <section ref={previewDialogRef} className="preview-dialog" role="dialog" aria-modal="true" aria-label={`${preview.evidence.filename} · ${t.page} ${preview.evidence.page}`}>
+        <div className="preview-top"><strong>{preview.evidence.filename} · {t.page} {preview.evidence.page}</strong><button type="button" ref={closePreviewRef} onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
         <PdfEvidencePreview file={preview.file} evidence={preview.evidence} language={language} />
         <p className="preview-quote">{preview.evidence.text}</p>
         <a href={`${preview.url}#page=${preview.evidence.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>
       </section>
     </div>}
-    <footer><span>NoticeBridge AI · Open-source / Apache-2.0</span><span>Understand change. Verify evidence.</span></footer>
+    <footer inert={Boolean(preview)}><span>NoticeBridge AI · Open-source / Apache-2.0</span><span>Understand change. Verify evidence.</span></footer>
   </div>;
 }
