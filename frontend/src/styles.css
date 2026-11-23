@@ -42,3 +42,66 @@
   .results .section-heading{flex-direction:column;align-items:stretch}
   .export-actions{justify-content:flex-start}
 }
+
+.coverage-documents {
+  margin: 0.6rem 0 0;
+  padding-inline-start: 1.25rem;
+  color: #c9dbe9;
+  overflow-wrap: anywhere;
+}
+.coverage-documents li + li { margin-top: 0.5rem; }
+.coverage-documents summary { cursor: pointer; color: #a1f0dc; margin-top: 0.4rem; }
+.coverage-page-links { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-block: 0.5rem; }
+.review-findings { margin-top: 1.75rem; }
+.review-findings h3 { margin-bottom: 0.5rem; }
+.review-progress, .review-count { color: #bacfdf; font-size: 0.875rem; }
+.review-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #35566b;
+  border-radius: 0.75rem;
+  background: #102638;
+}
+.review-filters label {
+  min-width: 0;
+  flex: 1 1 10rem;
+  display: grid;
+  gap: 0.45rem;
+  color: #d7e8f1;
+  font-size: 0.875rem;
+}
+.review-filters label:first-child { flex-basis: 15rem; }
+.review-filters input, .review-filters select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  font: inherit;
+  border: 1px solid #53758b;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  color: #e8edf7;
+  background: #0b1d2e;
+  color-scheme: dark;
+}
+.review-button {
+  border: 1px solid #53758b;
+  border-radius: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.7rem;
+  background: #173a43;
+  color: #a1f0dc;
+}
+.review-button:hover:not(:disabled) { background: #24545b; }
+.review-button:disabled { opacity: 0.55; }
+.review-pagination { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.review-findings :focus-visible, .coverage-documents :focus-visible {
+  outline: 2px solid #9df2d5;
+  outline-offset: 2px;
+}
+.evidence-grid.single-evidence { grid-template-columns: 1fr; }
+.finding .checklist-item { padding: 0.85rem 1.3rem; cursor: pointer; }
+.finding-header > div { min-width: 0; flex-wrap: wrap; }
+.page-ref, .warnings p { overflow-wrap: anywhere; }

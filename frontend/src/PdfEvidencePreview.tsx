@@ -1,17 +1,29 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import type { Evidence, Language } from './comparison';
 
 // Bundle PDF.js and its matching worker with the application. No external CDN
 // receives the user's local document or its extracted evidence.
 GlobalWorkerOptions.workerSrc = workerUrl;
 
-export type PdfEvidence = {
-  page: number;
-  bbox: [number, number, number, number];
-  page_width: number;
-  page_height: number;
-  page_rotation: 0 | 90 | 180 | 270;
+type PdfEvidence = Pick<Evidence, 'bbox' | 'page_width' | 'page_height' | 'page_rotation'>;
+
+const previewCopy = {
+  en: {
+    rendering: 'Rendering PDF page…',
+    page: 'Source PDF page',
+    uncovered: 'No text was extracted from this page. Inspect the page directly.',
+    geometry: 'Page geometry could not be verified; inspect the source without an approximate highlight.',
+    highlight: 'Source highlight is positioned using the PDF page transform. Verify the original text and page.',
+  },
+  hi: {
+    rendering: 'PDF पृष्ठ तैयार हो रहा है…',
+    page: 'स्रोत PDF पृष्ठ',
+    uncovered: 'इस पृष्ठ से कोई पाठ नहीं निकला। मूल पृष्ठ की जाँच करें।',
+    geometry: 'पृष्ठ की ज्यामिति की पुष्टि नहीं हुई। मूल पृष्ठ जाँचें।',
+    highlight: 'हाइलाइट PDF पृष्ठ के निर्देशांकों से बनाया गया है। मूल पाठ और पृष्ठ जाँचें।',
+  },
 };
 
 
@@ -79,15 +91,17 @@ function highlightForPage(
   };
 }
 
-export default function PdfEvidencePreview({ file, evidence, language }: {
+export default function PdfEvidencePreview({ file, pageNumber, evidence, language }: {
   file: File;
-  evidence: PdfEvidence;
-  language: 'en' | 'hi';
+  pageNumber: number;
+  evidence?: PdfEvidence;
+  language: Language;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [highlight, setHighlight] = useState<CSSProperties | null>(null);
+  const t = previewCopy[language];
 
   useEffect(() => {
     let disposed = false;
@@ -113,10 +127,10 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
         });
         pdf = await loadingTask.promise;
         if (disposed) return;
-        if (evidence.page < 1 || evidence.page > pdf.numPages) {
-          throw new Error('Evidence page is outside the source PDF.');
+        if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > pdf.numPages) {
+          throw new Error('Requested page is outside the source PDF.');
         }
-        const page = await pdf.getPage(evidence.page);
+        const page = await pdf.getPage(pageNumber);
         if (disposed) return;
         const unscaled = page.getViewport({ scale: 1 });
         const pixelRatio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
@@ -137,7 +151,7 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
           throw new Error('Source PDF page is too large to preview.');
         }
         const viewport = page.getViewport({ scale });
-        const marker = highlightForPage(page, viewport, evidence);
+        const marker = evidence ? highlightForPage(page, viewport, evidence) : null;
         const context = canvas?.getContext('2d');
         if (!canvas || !context) throw new Error('Canvas rendering is unavailable.');
         canvas.width = Math.max(1, Math.floor(viewport.width * pixelRatio));
@@ -170,26 +184,20 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
       if (loadingTask) void loadingTask.destroy();
       else if (pdf) void pdf.destroy();
     };
-  }, [file, evidence]);
+  }, [file, pageNumber, evidence]);
 
   return <div className="pdf-preview-body">
-    {state === 'loading' && <p role="status">{language === 'hi' ? 'PDF पृष्ठ तैयार हो रहा है…' : 'Rendering PDF page…'}</p>}
+    {state === 'loading' && <p role="status">{t.rendering}</p>}
     {state === 'error' && <p role="alert" className="error-banner">{error}</p>}
-    <div className="pdf-stage" aria-label={language === 'hi' ? 'स्रोत PDF पृष्ठ' : 'Source PDF page'}>
+    <div className="pdf-stage">
       <div className="pdf-canvas-holder">
-        <canvas ref={canvasRef} />
+        <canvas ref={canvasRef} role="img" aria-label={`${t.page} ${pageNumber}`} />
         {state === 'ready' && highlight &&
           <div className="evidence-highlight" style={highlight} aria-hidden="true" />}
       </div>
     </div>
-    <p className="preview-help">{
-      highlight
-        ? language === 'hi'
-          ? 'मूल स्रोत निर्देशांकों का हाइलाइट जाँच में सहायता करता है। पाठ और पृष्ठ स्वयं सत्यापित करें।'
-          : 'Source highlight is positioned using the PDF page transform. Verify the original text and page.'
-        : language === 'hi'
-          ? 'पृष्ठ की ज्यामिति की पुष्टि नहीं हुई; संभावित गलत हाइलाइट के बजाय मूल पृष्ठ जाँचें।'
-          : 'Page geometry could not be verified; inspect the source without an approximate highlight.'
-    }</p>
+    {state === 'ready' && <p className="preview-help">
+      {evidence ? (highlight ? t.highlight : t.geometry) : t.uncovered}
+    </p>}
   </div>;
 }

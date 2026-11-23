@@ -7,8 +7,10 @@ comparison; neither is transmitted to an additional export service.
 ## Review CSV usage
 
 1. Compare two PDFs. Check the source excerpts against each PDF.
-2. Select checklist boxes for the items you have **reviewed**. Checked is not
-   an assertion that the issuing organization has verified a statement.
+2. Use source-text search and the category, finding status and checklist
+   status filters to locate a finding. Mark the review checkbox beside its
+   citations after you have reviewed the evidence. Use the coverage panel to
+   inspect pages without extracted text.
 3. Choose **Export review CSV** (Hindi: **समीक्षा CSV डाउनलोड करें**). The file
    is called `noticebridge-review.csv` and opens in standard spreadsheet apps.
 4. Preserve the original/revised PDFs if you need to reproduce the evidence:
@@ -20,7 +22,9 @@ authority flag, English/Hindi summaries, original/revised file names,
 SHA-256 digests, page numbers, extraction methods and source excerpts.
 Intra-document contradictions retain their additional citations in the
 `supporting_evidence_json` column. Review instructions are exported in both
-languages.
+languages. The final columns record text extraction coverage and whether the
+fuzzy matching budget skipped candidates. Exports include every finding and its
+review state across all filters and pages.
 
 **Never interpret `review_checkbox_selected=yes` as approval by an issuer.**
 The prototype does not establish authenticity, effective amendment order,
@@ -41,6 +45,7 @@ with the same protections as the source documents and delete unneeded copies.
 The app does not keep a durable review history: browser checkboxes reset on
 reload, and saving the CSV/JSON is a user action.
 
-Relevant code: `frontend/src/exportCsv.ts`, `frontend/src/App.tsx`.
-Browser tests cover reviewed CSV content, formula neutralization, Hindi export
-and mobile viewport behavior. There is no server-side spreadsheet processing.
+The review controls live in `frontend/src/ReviewFindings.tsx` and CSV
+serialization in `frontend/src/exportCsv.ts`. Browser coverage includes
+filtration, pagination, local source preview, formula neutralization, Hindi
+export and mobile layout.

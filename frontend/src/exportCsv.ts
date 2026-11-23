@@ -5,36 +5,7 @@
  * Quote RFC-4180 fields AND prefix risky cells with a text apostrophe:
  * CSV escaping alone is not sufficient against spreadsheet formula injection.
  */
-type SourceEvidence = {
-  document_id: 'original' | 'revised';
-  page: number;
-  text: string;
-  filename: string;
-  extraction_method: 'native' | 'ocr';
-};
-
-type ReviewFinding = {
-  id: string;
-  category: string;
-  status: string;
-  summary_en: string;
-  summary_hi: string;
-  original: SourceEvidence | null;
-  revised: SourceEvidence | null;
-  supporting_evidence: SourceEvidence[];
-  authority_verified: boolean;
-};
-
-export type ReviewCsvReport = {
-  documents: { id: string; sha256: string }[];
-  findings: ReviewFinding[];
-  checklist: {
-    finding_id: string;
-    description_en: string;
-    description_hi: string;
-    requires_human_verification: boolean;
-  }[];
-};
+import type { Report } from './comparison';
 
 const HEADERS = [
   'finding_id', 'category', 'finding_status', 'review_checkbox_selected',
@@ -45,6 +16,7 @@ const HEADERS = [
   'revised_sha256', 'revised_filename', 'revised_page',
   'revised_extraction_method', 'revised_source_quote',
   'supporting_evidence_json', 'review_instruction_en', 'review_instruction_hi',
+  'text_coverage', 'fuzzy_matching_limited',
 ] as const;
 
 function safeCsvField(value: string | number | boolean | null | undefined): string {
@@ -55,10 +27,9 @@ function safeCsvField(value: string | number | boolean | null | undefined): stri
   return '"' + text.replace(/"/g, '""') + '"';
 }
 
-export function serializeReviewCsv(report: ReviewCsvReport, checked: string[]): string {
+export function serializeReviewCsv(report: Report, checked: ReadonlySet<string>): string {
   const hashes = new Map(report.documents.map(document => [document.id, document.sha256]));
   const checklist = new Map(report.checklist.map(item => [item.finding_id, item]));
-  const reviewedIds = new Set(checked);
   const rows = report.findings.map(finding => {
     const task = checklist.get(finding.id);
     const original = finding.original;
@@ -75,7 +46,7 @@ export function serializeReviewCsv(report: ReviewCsvReport, checked: string[]): 
       finding.id,
       finding.category,
       finding.status,
-      reviewedIds.has(finding.id) ? 'yes' : 'no',
+      checked.has(finding.id) ? 'yes' : 'no',
       task?.requires_human_verification ? 'yes' : 'no',
       // This is never an assertion that the "revised" upload is authoritative.
       finding.authority_verified ? 'yes' : 'no',
@@ -94,6 +65,8 @@ export function serializeReviewCsv(report: ReviewCsvReport, checked: string[]): 
       JSON.stringify(supplementary),
       task?.description_en ?? '',
       task?.description_hi ?? '',
+      report.text_coverage,
+      report.fuzzy_matching_limited ? 'yes' : 'no',
     ];
   });
   // UTF-8 BOM helps desktop spreadsheet applications display Hindi text.
