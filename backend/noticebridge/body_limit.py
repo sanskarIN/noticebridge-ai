@@ -1,28 +1,34 @@
-"""Bound POST /api/compare before invoking the multipart parser.
+"""Bound compare uploads before invoking Starlette's multipart parser.
 
-Declared lengths are checked immediately. Chunked requests are buffered in a
-bounded, request-scoped spooled file, so multipart libraries cannot swallow a
-size exception and turn it into a misleading HTTP 400 response. A public
-deployment still needs upstream limits, connection timeouts and rate limiting.
+The cap is enforced on actual ASGI bytes, not just Content-Length. A private
+bounded spool prevents multipart from hiding the correct 413 response. A
+per-process concurrency ceiling and aggregate receive deadline limit simultaneous
+temporary storage and stalled uploads. Public deployments still need upstream
+network quotas, operating-system isolation, and reverse-proxy protections.
 """
 
+import asyncio
 from tempfile import SpooledTemporaryFile
+from threading import Lock
 
 from starlette.responses import JSONResponse
 
 from .extract import MAX_UPLOAD_BYTES
 
-# Two 10 MiB PDF files plus at most 1 MiB multipart framing and form fields.
 MAX_COMPARE_BODY_BYTES = 2 * MAX_UPLOAD_BYTES + 1024 * 1024
 IN_MEMORY_SPOOL_BYTES = 1024 * 1024
 REPLAY_CHUNK_BYTES = 64 * 1024
+MAX_RECEIVE_SECONDS = 90
+MAX_ACTIVE_COMPARE_REQUESTS = 8
 
 
 class CompareBodyLimit:
-    """Pure ASGI body-size guard; only changes POST /api/compare."""
+    """Pure ASGI guard for POST /api/compare, per application process."""
 
     def __init__(self, app):
         self.app = app
+        self._active = 0
+        self._active_lock = Lock()
 
     @staticmethod
     async def _reject(scope, receive, send, *, status: int, detail: str) -> None:
@@ -62,18 +68,53 @@ class CompareBodyLimit:
             )
             return
 
-        # A size exception from inside the multipart parser can be converted
-        # to 400 by Starlette. Validate all received bytes *before* invoking
-        # the parser, using a capped temp file instead of unbounded RAM.
+        # The lock spans only a fast counter update, never network or PDF I/O.
+        # Requests above the per-process budget are rejected immediately,
+        # rather than retaining another unbounded set of waiting upload bodies.
+        with self._active_lock:
+            accepted = self._active < MAX_ACTIVE_COMPARE_REQUESTS
+            if accepted:
+                self._active += 1
+        if not accepted:
+            await self._reject(
+                scope, receive, send,
+                status=503, detail="Too many simultaneous comparison uploads",
+            )
+            return
+        try:
+            await self._buffer_and_dispatch(scope, receive, send)
+        finally:
+            with self._active_lock:
+                self._active -= 1
+
+    async def _buffer_and_dispatch(self, scope, receive, send) -> None:
         with SpooledTemporaryFile(mode="w+b", max_size=IN_MEMORY_SPOOL_BYTES) as spool:
             total = 0
+            event_loop = asyncio.get_running_loop()
+            deadline = event_loop.time() + MAX_RECEIVE_SECONDS
+
             while True:
-                message = await receive()
+                seconds_left = deadline - event_loop.time()
+                if seconds_left <= 0:
+                    await self._reject(
+                        scope, receive, send,
+                        status=408, detail="Comparison upload took too long",
+                    )
+                    return
+                try:
+                    message = await asyncio.wait_for(receive(), timeout=seconds_left)
+                except TimeoutError:
+                    await self._reject(
+                        scope, receive, send,
+                        status=408, detail="Comparison upload took too long",
+                    )
+                    return
                 if message["type"] == "http.disconnect":
                     return
                 if message["type"] != "http.request":
                     await self._reject(
-                        scope, receive, send, status=400, detail="Invalid request stream"
+                        scope, receive, send,
+                        status=400, detail="Invalid request stream",
                     )
                     return
                 body = message.get("body", b"")
@@ -103,7 +144,7 @@ class CompareBodyLimit:
                         "body": chunk,
                         "more_body": not sent_last,
                     }
-                # Once replayed, preserve the server's disconnect behavior.
+                # After replay, honor the original connection lifecycle.
                 return await receive()
 
             await self.app(scope, bounded_receive, send)
