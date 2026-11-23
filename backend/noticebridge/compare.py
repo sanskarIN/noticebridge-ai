@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 
 from .extract import ExtractedDocument
 from .facts import AMOUNT_TOKEN, DATE_TOKEN, date_tokens, field_changes
-from .models import ChecklistItem, ComparisonReport, Finding
+from .models import ChecklistItem, ComparisonReport, Evidence, Finding
 
 HINDI_CATEGORY = {
     "deadline": "अंतिम तिथि",
@@ -228,11 +228,12 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
             )
         )
 
-    # Only unambiguous, calendar-valid conflicting dates within the same
-    # document and labeled context are contradictions. Ambiguous 01/02/2026 is
-    # never treated as a verified different date from 02/01/2026.
+    # A generic deadline heading can recur for different requirements on
+    # different pages (e.g., application and late-fee phases). Only same-page
+    # duplicate labels with conflicting unambiguous calendar dates are marked
+    # contradictions. Cross-page differences remain explicit review warnings.
     for document in (old, new):
-        grouped: dict[str, list[tuple[str, object]]] = defaultdict(list)
+        grouped: dict[str, list[tuple[str, Evidence]]] = defaultdict(list)
         for line in document.lines:
             if (
                 category_for(line.text) != "deadline"
@@ -245,19 +246,37 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         for records in grouped.values():
             if len({value for value, _ in records}) < 2:
                 continue
-            first_value, first_evidence = records[0]
-            different = next((ev for value, ev in records if value != first_value), None)
-            if different is None:
-                continue
-            findings.append(Finding(
-                id=f"f{len(findings)+1}",
-                status="contradiction",
-                category="deadline",
-                summary_en="Conflicting calendar dates appear under one label in the same PDF.",
-                summary_hi="एक ही PDF में समान शीर्षक के अंतर्गत अलग-अलग तिथियाँ मिली हैं।",
-                supporting_evidence=[first_evidence, different],
-                similarity=1.0,
-            ))
+            by_page: dict[int, list[tuple[str, Evidence]]] = defaultdict(list)
+            for value, evidence in records:
+                by_page[evidence.page].append((value, evidence))
+            for page_records in by_page.values():
+                if len({value for value, _ in page_records}) < 2:
+                    continue
+                first_value, first_evidence = page_records[0]
+                different = next(
+                    (ev for value, ev in page_records if value != first_value), None
+                )
+                if different is None:
+                    continue
+                findings.append(Finding(
+                    id=f"f{len(findings)+1}",
+                    status="contradiction",
+                    category="deadline",
+                    summary_en=(
+                        "Conflicting calendar dates appear under one label "
+                        "on the same PDF page."
+                    ),
+                    summary_hi="PDF के एक पृष्ठ पर समान शीर्षक के अंतर्गत अलग तिथियाँ मिली हैं।",
+                    supporting_evidence=[first_evidence, different],
+                    similarity=1.0,
+                ))
+            if len(by_page) > 1:
+                page_list = ", ".join(str(page) for page in sorted(by_page))
+                warnings.append(
+                    f"{document.summary.id}: differing dates under a repeated deadline "
+                    f"label on pages {page_list}; verify whether they concern the "
+                    "same requirement"
+                )
 
     for finding in findings:
         if finding.category in {"deadline", "eligibility", "fee", "time", "instruction"}:
