@@ -283,3 +283,20 @@ test('dark theme displays readable text extraction and local AI status panels', 
   expect(await contrastRatio('.ai-feedback')).toBeGreaterThanOrEqual(4.5);
 });
 
+
+test('Hindi review localizes category, status, value, and source action labels', async ({ page }) => {
+  await addSources(page);
+  const hindi = page.getByRole('button', { name: 'हिंदी' });
+  await hindi.click();
+  await expect(hindi).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'EN' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('heading', { name: 'दस्तावेज़ तुलना' })).toBeVisible();
+  await expect(page.getByText('↻ बदलें')).toHaveCount(2);
+  await page.getByRole('button', { name: /दस्तावेज़ों की तुलना करें/ }).click();
+  await expect(page.locator('.finding')).toHaveCount(1);
+  await expect(page.locator('.finding .status')).toHaveText('पाठ में बदलाव');
+  await expect(page.locator('.finding .category')).toHaveText('अंतिम तिथि');
+  await expect(page.locator('.value-outcome')).toContainText('तिथि: बदला');
+  await expect(page.locator('.checklist-item')).toContainText('अंतिम तिथि संबंधी कथन');
+});
+

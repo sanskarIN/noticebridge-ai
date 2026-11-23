@@ -9,6 +9,14 @@ from .extract import ExtractedDocument
 from .facts import AMOUNT_TOKEN, DATE_TOKEN, date_tokens, field_changes
 from .models import ChecklistItem, ComparisonReport, Finding
 
+HINDI_CATEGORY = {
+    "deadline": "अंतिम तिथि",
+    "eligibility": "पात्रता",
+    "fee": "शुल्क",
+    "time": "समय",
+    "instruction": "निर्देश",
+}
+
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
 SPACE = re.compile(r"\s+")
 
@@ -260,7 +268,7 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                     ),
                     description_hi=(
                         "जारीकर्ता के आधिकारिक स्रोत से "
-                        f"{finding.category} संबंधी कथन की पुष्टि करें।"
+                        f"{HINDI_CATEGORY[finding.category]} संबंधी कथन की पुष्टि करें।"
                     ),
                     finding_id=finding.id,
                 )

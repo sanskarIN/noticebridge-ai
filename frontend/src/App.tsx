@@ -29,6 +29,7 @@ const translations = {
     title: 'Understand what changed.', subtitle: 'Know what to do. Verify the evidence.',
     detail: 'Compare two official PDFs and inspect the original passages behind every finding. No invented citations. No automatic authority claims.',
     original: 'Original notice', revised: 'Updated notice', drop: 'Select a PDF (up to 10 MiB)',
+    comparisonHeading: 'Document comparison', replaceFile: '↻ Replace', browseFile: '+ Browse file',
     button: 'Compare documents', comparing: 'Comparing source passages…',
     note: 'Your PDFs are sent to this backend. Uploads may use temporary OS storage while processing; the app does not intentionally retain them permanently.',
     findings: 'Findings', confirmed: 'Matched text changes', possible: 'Possible changes',
@@ -63,6 +64,7 @@ const translations = {
     title: 'जानें, क्या बदला।', subtitle: 'अगला कदम समझें। प्रमाण जाँचें।',
     detail: 'दो आधिकारिक PDF की तुलना करें और हर निष्कर्ष के मूल प्रमाण देखें। कोई काल्पनिक संदर्भ या स्वतः आधिकारिक दावा नहीं।',
     original: 'मूल सूचना', revised: 'संशोधित सूचना', drop: 'PDF चुनें (अधिकतम 10 MiB)',
+    comparisonHeading: 'दस्तावेज़ तुलना', replaceFile: '↻ बदलें', browseFile: '+ फ़ाइल चुनें',
     button: 'दस्तावेज़ों की तुलना करें', comparing: 'स्रोत अंशों की तुलना जारी…',
     note: 'PDF इस बैकएंड पर भेजी जाती हैं। प्रोसेसिंग के दौरान अस्थायी सिस्टम स्टोरेज उपयोग हो सकता है; ऐप इन्हें स्थायी रूप से रखने का उद्देश्य नहीं रखता।',
     findings: 'निष्कर्ष', confirmed: 'मिलते अंशों में बदलाव', possible: 'संभावित बदलाव',
@@ -92,6 +94,35 @@ const translations = {
     semanticRejected: 'स्थानीय AI का कोई सुझाव स्रोत जाँच में सफल नहीं हुआ।',
     similarityLabel: 'पाठ समानता (सटीकता की पुष्टि नहीं)',
   },
+};
+
+const statusLabels: Record<Language, Record<Finding['status'], string>> = {
+  en: {
+    confirmed_change: 'Matched text change', possible_change: 'Possible change',
+    contradiction: 'Conflicting dates', missing_information: 'Unmatched statement',
+  },
+  hi: {
+    confirmed_change: 'पाठ में बदलाव', possible_change: 'संभावित बदलाव',
+    contradiction: 'विरोधी तिथियाँ', missing_information: 'बेमेल कथन',
+  },
+};
+const categoryLabels: Record<Language, Record<string, string>> = {
+  en: {
+    deadline: 'Deadline', eligibility: 'Eligibility', fee: 'Fee',
+    time: 'Time', instruction: 'Instruction', general: 'General',
+  },
+  hi: {
+    deadline: 'अंतिम तिथि', eligibility: 'पात्रता', fee: 'शुल्क',
+    time: 'समय', instruction: 'निर्देश', general: 'सामान्य',
+  },
+};
+const valueKindLabels: Record<Language, Record<ValueChange['kind'], string>> = {
+  en: { date: 'Date', amount: 'Amount' },
+  hi: { date: 'तिथि', amount: 'राशि' },
+};
+const valueOutcomeLabels: Record<Language, Record<ValueChange['outcome'], string>> = {
+  en: { changed: 'Changed', same_value: 'Same value', uncertain: 'Uncertain' },
+  hi: { changed: 'बदला', same_value: 'समान मान', uncertain: 'अनिश्चित' },
 };
 
 function EvidenceCard({ evidence, label, page, openPage, ocrSource, onOpen }: {
@@ -245,9 +276,9 @@ export default function App() {
       <div className="brand"><span className="brand-mark">N<span>↗</span></span><span>NoticeBridge <b>AI</b></span></div>
       <div className="top-actions">
         <span className="privacy-tag">● Local development MVP</span>
-        <div className="language-switch" role="group" aria-label="Explanation language">
-          <button className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')} type="button">EN</button>
-          <button className={language === 'hi' ? 'active' : ''} onClick={() => setLanguage('hi')} type="button">हिंदी</button>
+        <div className="language-switch" role="group" aria-label={language === 'hi' ? 'व्याख्या की भाषा' : 'Explanation language'}>
+          <button aria-pressed={language === 'en'} className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')} type="button">EN</button>
+          <button aria-pressed={language === 'hi'} className={language === 'hi' ? 'active' : ''} onClick={() => setLanguage('hi')} type="button">हिंदी</button>
         </div>
       </div>
     </header>
@@ -259,14 +290,14 @@ export default function App() {
         <div className="hero-visual" aria-hidden="true"><span className="spark s1">✦</span><span className="spark s2">✧</span><span className="spark s3">✦</span></div>
       </section>
       <section className="workspace" aria-label="PDF comparison workspace">
-        <div className="section-heading"><div><span className="section-number">01 / ANALYZE</span><h2>Document comparison</h2></div><div className="section-hint">PDF → EVIDENCE → FINDINGS</div></div>
+        <div className="section-heading"><div><span className="section-number">{language === 'hi' ? '०१ / विश्लेषण' : '01 / ANALYZE'}</span><h2>{t.comparisonHeading}</h2></div><div className="section-hint">PDF → EVIDENCE → FINDINGS</div></div>
         <form onSubmit={submit}>
           <div className="upload-grid">
             {([['original', original, t.original], ['revised', revised, t.revised]] as const).map(([id, file, label], i) =>
               <label className="upload-card" key={id} htmlFor={id}>
                 <span className="upload-icon">{i === 0 ? '01' : '02'}</span><strong>{label}</strong>
                 <span className="upload-detail">{file ? file.name : t.drop}</span>
-                <span className="upload-action">{file ? '↻ Replace' : '+ Browse file'}</span>
+                <span className="upload-action">{file ? t.replaceFile : t.browseFile}</span>
                 <input id={id} type="file" accept=".pdf,application/pdf" onChange={(e) => setSource(id, e.target.files?.[0] ?? null)} />
               </label>)}
           </div>
@@ -277,7 +308,7 @@ export default function App() {
         </form>
       </section>
       {report && <section className="results" aria-live="polite">
-        <div className="section-heading"><div><span className="section-number">02 / REVIEW</span><h2>{t.findings}</h2></div><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button></div>
+        <div className="section-heading"><div><span className="section-number">{language === 'hi' ? '०२ / समीक्षा' : '02 / REVIEW'}</span><h2>{t.findings}</h2></div><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button></div>
         <div className="metrics">
           <div><b>{report.findings.length}</b><span>{t.findings}</span></div>
           <div><b>{report.findings.filter(f => f.status === 'confirmed_change').length}</b><span>{t.confirmed}</span></div>
@@ -300,10 +331,10 @@ export default function App() {
         </div>
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
         <div className="findings-list">{report.findings.map(f => <article className="finding" key={f.id}>
-          <div className="finding-header"><div><span className={`status ${f.status}`}>{f.status.replaceAll('_', ' ')}</span><span className="category">{f.category.toUpperCase()}</span></div><span className="match-score">{f.match_method === 'semantic_proposal' ?
+          <div className="finding-header"><div><span className={`status ${f.status}`}>{statusLabels[language][f.status]}</span><span className="category">{categoryLabels[language][f.category] ?? f.category}</span></div><span className="match-score">{f.match_method === 'semantic_proposal' ?
             t.semanticSuggested : `${Math.round(f.similarity * 100)}% ${t.similarityLabel}`}</span></div>
           <p className="finding-summary">{language === 'hi' ? f.summary_hi : f.summary_en}</p>
-          {f.field_changes.length > 0 && <div className="value-changes"><b>{t.values}</b>{f.field_changes.map((delta, i) => <p key={i}><span className="value-outcome">{delta.kind}: {delta.outcome.replaceAll('_', ' ')}</span> {delta.original.raw} → {delta.revised.raw} {delta.outcome === 'uncertain' ? `(${t.uncertain})` : `(${delta.original.canonical} → ${delta.revised.canonical})`}</p>)}</div>}
+          {f.field_changes.length > 0 && <div className="value-changes"><b>{t.values}</b>{f.field_changes.map((delta, i) => <p key={i}><span className="value-outcome">{valueKindLabels[language][delta.kind]}: {valueOutcomeLabels[language][delta.outcome]}</span> {delta.original.raw} → {delta.revised.raw} {delta.outcome === 'uncertain' ? `(${t.uncertain})` : `(${delta.original.canonical} → ${delta.revised.canonical})`}</p>)}</div>}
           <div className="evidence-grid"><EvidenceCard evidence={f.original} label={t.original} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /><EvidenceCard evidence={f.revised} label={t.revised} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /></div>
           {f.supporting_evidence.length > 0 && <div className="evidence-grid">{f.supporting_evidence.map((e, i) => <EvidenceCard key={`${e.document_id}-${e.page}-${i}`} evidence={e} label={`${t.source} ${i + 1}`} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} />)}</div>}
         </article>)}</div>
