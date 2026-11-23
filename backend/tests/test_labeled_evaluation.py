@@ -440,3 +440,477 @@ def test_cli_forwards_ocr_flag_but_keeps_labeled_sources_local(
     assert captured["enable_semantic"] is False
     assert json.loads(capsys.readouterr().out)["ocr_enabled"] is True
 
+
+
+def test_cohorts_separate_synthetic_success_from_declared_independent_failure(
+    tmp_path, pdf_bytes,
+):
+    # Both fixtures are deliberately fictional: the metadata classifier must
+    # report what a manifest claims without pretending to verify its source.
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes), source_kind="fictional", label_method="synthetic",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    second = dict(payload["cases"][0])
+    second.update({
+        "id": "separately_labeled",
+        "source_kind": "public_notice",
+        "label_method": "independent_human",
+        "expected_pairs": [],
+    })
+    payload["cases"].append(second)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = evaluate_labeled(manifest)
+    assert result["case_count"] == 2
+    assert result["pair_counts"] == {
+        "true_positive": 1, "false_positive": 1, "false_negative": 0,
+        "unsupported_confirmed_changes": 1,
+    }
+    assert result["precision"] == 0.5
+    assert result["recall"] == 1
+    groups = result["cohorts"]
+    assert groups["by_source_kind"]["fictional"]["precision"] == 1
+    assert groups["by_source_kind"]["public_notice"]["precision"] == 0
+    assert groups["by_label_method"]["independent_human"]["recall"] is None
+    assert groups["by_source_and_label_method"][
+        "public_notice:independent_human"
+    ]["confirmed_only"]["false_positive"] == 1
+    independent = groups["declared_independent_nonfictional"]
+    assert independent["case_count"] == 1
+    assert independent["precision"] == 0
+    assert independent["recall"] is None
+    assert independent["pair_counts"]["unsupported_confirmed_changes"] == 1
+
+
+def test_empty_declared_independent_cohort_keeps_metrics_undefined(tmp_path, pdf_bytes):
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    group = evaluate_labeled(manifest)["cohorts"]["declared_independent_nonfictional"]
+    assert group["case_count"] == 0
+    assert group["precision"] is None
+    assert group["recall"] is None
+    assert group["confirmed_only"]["precision"] is None
+    assert group["confirmed_only"]["recall"] is None
+
+
+def test_independent_corpus_gate_rejects_mixed_labels_then_accepts_declared_subset(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--require-independent-corpus"],
+    )
+    assert main() == 1
+    capsys.readouterr()
+
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["cases"][0]["source_kind"] = "consented"
+    payload["cases"][0]["label_method"] = "independent_human"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    assert main() == 0
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["case_count"] == 1
+
+
+def test_independent_case_count_gate_and_bad_argument(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="public_notice", label_method="independent_human",
+    )
+    argv = ["evaluate_labeled", str(manifest), "--min-independent-cases", "2"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert main() == 1
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", argv[:-1] + ["1"])
+    assert main() == 0
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", argv[:-1] + ["0"])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+
+
+def test_distinct_independent_pair_gate_rejects_repeated_pdf_pairs(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="public_notice", label_method="independent_human",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    repeat = dict(payload["cases"][0])
+    repeat["id"] = "same_pdfs_different_case_id"
+    payload["cases"].append(repeat)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = evaluate_labeled(manifest)
+    cohort = report["cohorts"]["declared_independent_nonfictional"]
+    assert cohort["case_count"] == 2
+    assert cohort["unique_pdf_pair_count"] == 1
+    assert report["cases"][0]["input_sha256"] == report["cases"][1]["input_sha256"]
+
+    args = [
+        "evaluate_labeled", str(manifest), "--require-independent-corpus",
+        "--min-independent-cases", "2", "--min-independent-distinct-pairs", "2",
+    ]
+    monkeypatch.setattr(sys, "argv", args)
+    assert main() == 1
+    capsys.readouterr()
+
+    monkeypatch.setattr(sys, "argv", args[:-1] + ["1"])
+    assert main() == 0
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", args[:-1] + ["0"])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+
+
+def test_independent_pair_diversity_ignores_reverse_upload_order(tmp_path, pdf_bytes):
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="consented", label_method="independent_human",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    reverse = dict(payload["cases"][0])
+    reverse["id"] = "reverse_order"
+    reverse["original"], reverse["revised"] = reverse["revised"], reverse["original"]
+    reverse["original_sha256"], reverse["revised_sha256"] = (
+        reverse["revised_sha256"], reverse["original_sha256"]
+    )
+    reverse["expected_pairs"] = []
+    payload["cases"].append(reverse)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    report = evaluate_labeled(manifest)
+    assert report["cohorts"]["declared_independent_nonfictional"]["case_count"] == 2
+    assert report["cohorts"]["declared_independent_nonfictional"][
+        "unique_pdf_pair_count"
+    ] == 1
+
+
+def test_opt_in_error_examples_expose_bounded_audit_previews(tmp_path, pdf_bytes):
+    manifest = _dataset(tmp_path, pdf_bytes, labels=[])
+    without = evaluate_labeled(manifest)
+    assert "error_examples" not in without["cases"][0]
+
+    with_details = evaluate_labeled(manifest, include_error_examples=True)
+    case = with_details["cases"][0]
+    errors = case["error_examples"]
+    assert errors["false_negative"] == []
+    assert len(errors["false_positive"]) == 1
+    assert errors["false_positive"] == errors["unsupported_confirmed"]
+    example = errors["false_positive"][0]
+    assert example["occurrences"] == 1
+    assert (example["original_page"], example["revised_page"]) == (1, 1)
+    assert example["normalized_original_preview"] == "deadline: 13 december 2026"
+    assert example["normalized_revised_preview"] == "deadline: 14 december 2026"
+    assert example["original_preview_truncated"] is False
+    assert len(example["normalized_pair_sha256"]) == 64
+    assert with_details["pair_counts"] == without["pair_counts"]
+
+
+def test_error_example_cap_does_not_change_aggregate_counts():
+    from collections import Counter
+
+    from evaluate_labeled import _error_examples
+
+    count = Counter({
+        (page, "o" * 400, page, "r" * 400): 1
+        for page in range(1, 20)
+    })
+    samples = _error_examples(count)
+    assert len(samples) == 5
+    assert [example["original_page"] for example in samples] == [1, 2, 3, 4, 5]
+    assert all(len(example["normalized_original_preview"]) == 180 for example in samples)
+    assert all(example["original_preview_truncated"] for example in samples)
+    assert all(example["revised_preview_truncated"] for example in samples)
+    assert sum(count.values()) == 19
+
+
+def test_cli_error_examples_are_explicit_opt_in(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _dataset(tmp_path, pdf_bytes, labels=[])
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--include-error-examples"]
+    )
+    assert main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["cases"][0]["error_examples"]["false_positive"]
+    assert report["cases"][0]["error_examples"]["false_negative"] == []
+
+def _mixed_accuracy_gate_manifest(tmp_path, pdf_bytes):
+    """Two correct fictional cases must not mask one bad declared-independent case."""
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="fictional", label_method="synthetic",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    correct = dict(payload["cases"][0])
+    correct["id"] = "second_fictional"
+    independent = dict(correct)
+    independent.update({
+        "id": "declared_independent_failure",
+        "source_kind": "consented",
+        "label_method": "independent_human",
+        "expected_pairs": [{
+            "original_page": 1,
+            "original_text": "Deadline: 13 December 2026",
+            "revised_page": 1,
+            "revised_text": "Deadline: 25 December 2026",
+        }],
+    })
+    payload["cases"].extend([correct, independent])
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    return manifest
+
+
+@pytest.mark.parametrize(("flag", "value", "expected"), [
+    ("--min-precision", "0.60", 0),
+    ("--min-recall", "0.60", 0),
+    ("--max-unsupported-confirmed", "1", 0),
+    ("--min-independent-precision", "0.60", 1),
+    ("--min-independent-recall", "0.60", 1),
+    ("--max-independent-unsupported-confirmed", "0", 1),
+    ("--min-independent-precision", "0", 0),
+    ("--min-independent-recall", "0", 0),
+    ("--max-independent-unsupported-confirmed", "1", 0),
+])
+def test_independent_accuracy_gates_not_diluted_by_synthetic_cases(
+    tmp_path, pdf_bytes, monkeypatch, capsys, flag, value, expected,
+):
+    from evaluate_labeled import main
+
+    manifest = _mixed_accuracy_gate_manifest(tmp_path, pdf_bytes)
+    report = evaluate_labeled(manifest)
+    assert report["precision"] == report["recall"] == 0.6667
+    independent = report["cohorts"]["declared_independent_nonfictional"]
+    assert independent["precision"] == independent["recall"] == 0
+    assert independent["pair_counts"]["unsupported_confirmed_changes"] == 1
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, value])
+    assert main() == expected
+    assert json.loads(capsys.readouterr().out)["pair_counts"]["true_positive"] == 2
+
+
+@pytest.mark.parametrize(("flag", "value"), [
+    ("--min-independent-precision", "0"),
+    ("--min-independent-recall", "0"),
+    ("--max-independent-unsupported-confirmed", "0"),
+])
+def test_independent_accuracy_gates_reject_empty_cohort(
+    tmp_path, pdf_bytes, monkeypatch, capsys, flag, value,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, value])
+    assert main() == 1
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["case_count"] == 0
+
+
+def test_independent_recall_gate_rejects_undefined_denominator(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes, labels=[]),
+        source_kind="public_notice", label_method="independent_human",
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--min-independent-recall", "0"],
+    )
+    assert main() == 1
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["recall"] is None
+
+
+@pytest.mark.parametrize(("flag", "value"), [
+    ("--min-independent-precision", "-0.01"),
+    ("--min-independent-recall", "1.01"),
+    ("--max-independent-unsupported-confirmed", "-1"),
+])
+def test_independent_accuracy_thresholds_reject_invalid_inputs(
+    tmp_path, pdf_bytes, monkeypatch, flag, value,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, value])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+
+def test_strict_independent_pair_gate_prevents_duplicate_weighting(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="consented", label_method="independent_human",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    repeated = dict(payload["cases"][0])
+    repeated["id"] = "duplicate_inputs"
+    payload["cases"].append(repeated)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    report = evaluate_labeled(manifest)
+    cohort = report["cohorts"]["declared_independent_nonfictional"]
+    assert cohort["case_count"] == 2
+    assert cohort["unique_pdf_pair_count"] == 1
+    assert cohort["precision"] == 1  # Micro-averaging still weights repeats.
+
+    argv = [
+        "evaluate_labeled", str(manifest), "--require-distinct-independent-pairs",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert main() == 1
+    capsys.readouterr()
+    # A minimum unique-pair count alone does not prohibit duplicate weighting.
+    monkeypatch.setattr(sys, "argv", argv[:-1] + [
+        "--min-independent-distinct-pairs", "1",
+    ])
+    assert main() == 0
+    capsys.readouterr()
+    # Duplicate files must also be rejected when original/revised are reversed.
+    payload["cases"][1]["original"], payload["cases"][1]["revised"] = (
+        payload["cases"][1]["revised"], payload["cases"][1]["original"]
+    )
+    payload["cases"][1]["original_sha256"], payload["cases"][1]["revised_sha256"] = (
+        payload["cases"][1]["revised_sha256"], payload["cases"][1]["original_sha256"]
+    )
+    payload["cases"][1]["expected_pairs"] = []
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", argv)
+    assert main() == 1
+    capsys.readouterr()
+
+    payload["cases"] = payload["cases"][:1]
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    assert main() == 0
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["unique_pdf_pair_count"] == 1
+
+def test_strict_diversity_gate_rejects_missing_independent_cohort(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(
+        sys, "argv",
+        ["evaluate_labeled", str(manifest), "--require-distinct-independent-pairs"],
+    )
+    assert main() == 1
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["case_count"] == 0
+
+
+def test_independent_full_coverage_gate_detects_unreadable_pages(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="consented", label_method="independent_human",
+    )
+    # The labeled deadline matches perfectly, but page 2 of each
+    # document has no extractable text. Accuracy alone cannot certify coverage.
+    original = pdf_bytes([["Deadline: 13 December 2026"], []])
+    revised = pdf_bytes([["Deadline: 14 December 2026"], []])
+    (tmp_path / "original.pdf").write_bytes(original)
+    (tmp_path / "revised.pdf").write_bytes(revised)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["cases"][0]["original_sha256"] = hashlib.sha256(original).hexdigest()
+    payload["cases"][0]["revised_sha256"] = hashlib.sha256(revised).hexdigest()
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = evaluate_labeled(manifest)
+    independent = report["cohorts"]["declared_independent_nonfictional"]
+    assert independent["case_count"] == 1
+    assert independent["incomplete_case_count"] == 1
+    assert independent["pages_without_text_count"] == 2
+    assert independent["precision"] == independent["recall"] == 1
+
+    argv = [
+        "evaluate_labeled", str(manifest), "--max-independent-incomplete-cases",
+    ]
+    monkeypatch.setattr(sys, "argv", argv + ["0"])
+    assert main() == 1
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", argv + ["1"])
+    assert main() == 0
+    capsys.readouterr()
+
+
+def test_independent_limited_matching_gate_isolated_from_aggregate(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    import evaluate_labeled as module
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="consented", label_method="independent_human",
+    )
+    actual_score = module._score
+
+    def simulated_limited_matching(*args, **kwargs):
+        score = actual_score(*args, **kwargs)
+        score["fuzzy_matching_limited"] = True
+        return score
+
+    monkeypatch.setattr(module, "_score", simulated_limited_matching)
+    monkeypatch.setattr(
+        sys, "argv",
+        ["evaluate_labeled", str(manifest), "--max-independent-limited-matching-cases", "0"],
+    )
+    assert module.main() == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["cohorts"]["declared_independent_nonfictional"][
+        "fuzzy_matching_limited_case_count"
+    ] == 1
+    assert result["precision"] == 1
+    monkeypatch.setattr(
+        sys, "argv",
+        ["evaluate_labeled", str(manifest), "--max-independent-limited-matching-cases", "1"],
+    )
+    assert module.main() == 0
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("flag", [
+    "--max-independent-incomplete-cases",
+    "--max-independent-limited-matching-cases",
+])
+def test_independent_coverage_gates_fail_on_empty_cohort_and_invalid_arguments(
+    tmp_path, pdf_bytes, monkeypatch, capsys, flag,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, "0"])
+    assert main() == 1
+    capsys.readouterr()
+
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, "-1"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2

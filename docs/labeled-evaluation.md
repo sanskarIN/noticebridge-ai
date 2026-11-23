@@ -183,6 +183,119 @@ these pair-level metrics.
 A tiny synthetic demo yielding 100% precision and recall proves only that the
 sample passed. It does not imply real-world accuracy.
 
+## Preventing synthetic results from masking independent results
+
+The evaluator reports **micro-averaged** precision, recall, and confirmed-only
+counts for each manifest-declared source kind, labeling method, and combined
+source/label cohort. The JSON cohorts object also includes
+declared_independent_nonfictional, containing **only** cases declaring
+public_notice or consented sources **and** independent_human labels.
+
+This matters when a corpus includes many easy fictional regression pairs and
+a smaller set of difficult real-notice cases. The combined headline score
+can look good even if performance on the declared independent cases is poor.
+Inspect stratified counts and uncovered pages in each cohort, not just the
+aggregate score. Undefined ratios remain null; a cohort with zero cases does
+**not** receive a 100% score.
+
+For an explicit release-evaluation check, use an exclusively non-fictional,
+independently human-labeled version-2 manifest:
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
+  evaluation/independent-pinned.json --require-pinned-sources \
+  --require-independent-corpus --min-independent-cases 20 \
+  --min-independent-distinct-pairs 20 --require-distinct-independent-pairs \
+  --min-precision 0.90 --min-recall 0.90 --max-unsupported-confirmed 0
+~~~
+
+The output reports the SHA-256 fingerprints of the exact compared PDFs
+for each case, and a unique source-pair count per cohort. Repeated case IDs
+are already invalid, but repeating the same two PDF files under different
+IDs could still inflate a sample count. The distinct-pairs gate prevents
+that; reversed upload order counts as the same source pair for diversity.
+
+The sample count and thresholds above are **operator-configured targets**,
+not statistically validated guarantees. The gate exits nonzero if any case
+lacks the declared eligible provenance, the minimum count is unmet, or
+the requested score thresholds fail.
+
+For a **mixed** manifest, use explicit independent-cohort accuracy gates.
+An overall score can pass even while its smaller independent cohort fails:
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
+  evaluation/mixed-pinned.json --require-pinned-sources \
+  --min-independent-cases 20 --min-independent-distinct-pairs 20 \
+  --require-distinct-independent-pairs \
+  --min-independent-precision 0.90 --min-independent-recall 0.90 \
+  --max-independent-unsupported-confirmed 0 \
+  --max-independent-incomplete-cases 0 \
+  --max-independent-limited-matching-cases 0
+~~~
+
+Evidence-pair accuracy is not enough when some pages have no usable text
+or the matcher exhausts its candidate budget. Optional
+`--max-independent-incomplete-cases N` limits cases with incomplete text
+coverage after any opted-in OCR. Optional
+`--max-independent-limited-matching-cases N` limits cases whose fuzzy
+matching was explicitly reported as limited. Set either to `0` for a
+strict release gate; use larger thresholds only with an explicit, recorded
+exception review. Both fail on an empty declared independent cohort. A
+complete text-coverage result does **not** prove OCR accuracy, source
+authenticity or completeness of a notice's meaning.
+
+These flags evaluate **only** the declared independent non-fictional
+cohort, using raw exact evidence-pair counts before rounding. Their
+thresholds cannot be met by adding high-scoring fictional examples.
+An empty independent cohort fails any requested independent accuracy gate,
+including an unsupported-confirmed maximum of zero. Undefined precision
+or recall also fails a corresponding minimum gate, even if that minimum
+is zero. These independent flags can be combined with aggregate gates
+to require good performance in both populations.
+
+The older `--min-precision`, `--min-recall`, and
+`--max-unsupported-confirmed` flags still evaluate **all cases**. The
+minimum-independent-count and distinct-pair gates alone do not alter
+those aggregate metrics or de-duplicate repetitions when computing
+accuracy. A minimum of 20 distinct pairs can still be accompanied by
+hundreds of repeated easy pairs, inflating micro-averaged scores.
+Use `--require-distinct-independent-pairs` to reject any repetition of
+the same two PDF SHA-256s in the independent cohort (including reversal).
+This gate does not detect semantically duplicate PDFs with different bytes
+or authenticate metadata; audit corpus construction separately.
+Use the isolated accuracy gates when evaluating mixed data;
+for a fully independent dataset, `--require-independent-corpus`
+makes the overall and independent populations equivalent.
+
+**Critical limitation:** NoticeBridge does not authenticate source-kind or
+label-method metadata. Someone could label fictional or AI-generated examples
+as independent_human. These flags prevent accidental mixing; they cannot
+prove representative data, independent annotation, consent or issuer authority.
+Keep signed-off dataset provenance and adjudication records outside the tool.
+
+### Inspect false matches without collecting a new dataset
+
+The optional --include-error-examples flag prints **up to five** normalized
+source passage pairs per case for false positives, false negatives and
+unsupported confirmed pairings. Each example shows both PDF page numbers,
+a 180-character preview on each side, truncation flags, a stable SHA-256 of
+the complete normalized page/quote key, and its occurrence count. The
+underlying micro-averaged metrics always use **all** errors, not only sampled
+examples. No source evidence is invented to fill empty cohorts.
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
+  evaluation/independent-pinned.json --require-pinned-sources \
+  --include-error-examples
+~~~
+
+This flag is **off by default** because quotations may contain private or
+permission-restricted information. Use it on a trusted local machine; do not
+upload its JSON output to public CI logs or an issue tracker without redacting
+the previews. Truncated normalized excerpts are for triage, not substitutes
+for the full original PDF and human adjudication.
+
 ## 4. Build a useful independent evaluation corpus
 
 For the December completion gate, use a permission-safe, diverse set of

@@ -8,7 +8,7 @@ import argparse
 import hashlib
 import json
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from noticebridge.compare import normalize
@@ -18,6 +18,8 @@ from noticebridge.isolation import ProcessingFailed, ProcessingTimedOut, run_iso
 MAX_MANIFEST_BYTES = 1_000_000
 MAX_CASES = 500
 MAX_GOLD_PAIRS = 500
+MAX_ERROR_EXAMPLES = 5
+MAX_ERROR_QUOTE_CHARS = 180
 CASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 PAIR_FIELDS = ("original_page", "original_text", "revised_page", "revised_text")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -128,8 +130,32 @@ def _key(pair: dict) -> tuple[int, str, int, str]:
     )
 
 
+def _error_examples(pairs: Counter) -> list[dict]:
+    """Opt-in, bounded audit previews of exact normalized page/quote pairs."""
+    examples = []
+    for pair, count in sorted(pairs.items(), key=lambda entry: (-entry[1], entry[0]))[
+        :MAX_ERROR_EXAMPLES
+    ]:
+        original_page, original_text, revised_page, revised_text = pair
+        digest = hashlib.sha256(json.dumps(
+            pair, ensure_ascii=False, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        examples.append({
+            "original_page": original_page,
+            "revised_page": revised_page,
+            "normalized_original_preview": original_text[:MAX_ERROR_QUOTE_CHARS],
+            "normalized_revised_preview": revised_text[:MAX_ERROR_QUOTE_CHARS],
+            "original_preview_truncated": len(original_text) > MAX_ERROR_QUOTE_CHARS,
+            "revised_preview_truncated": len(revised_text) > MAX_ERROR_QUOTE_CHARS,
+            "normalized_pair_sha256": digest,
+            "occurrences": count,
+        })
+    return examples
+
+
 def _score(
-    case: dict, original: bytes, revised: bytes, *, enable_ocr: bool = False
+    case: dict, original: bytes, revised: bytes, *, enable_ocr: bool = False,
+    include_error_examples: bool = False,
 ) -> dict:
     result = run_isolated_comparison(
         original, revised,
@@ -162,8 +188,9 @@ def _score(
         predicted[key] += 1
         if finding.status == "confirmed_change":
             confirmed[key] += 1
-    return {
+    summary = {
         "id": case["id"],
+        "input_sha256": {document.id: document.sha256 for document in result.documents},
         "source_kind": case.get("source_kind", "unrecorded"),
         "label_method": case.get("label_method", "unrecorded"),
         "text_coverage": result.text_coverage,
@@ -185,14 +212,93 @@ def _score(
         "unsupported_confirmed_changes": sum((confirmed - gold).values()),
         "processing_warnings": len(result.warnings),
     }
+    if include_error_examples:
+        summary["error_examples"] = {
+            "false_positive": _error_examples(predicted - gold),
+            "false_negative": _error_examples(gold - predicted),
+            "unsupported_confirmed": _error_examples(confirmed - gold),
+        }
+    return summary
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
 
 
+def _cohort_summary(cases: list[dict]) -> dict:
+    """Micro-average exact evidence pairs; never average rounded case ratios."""
+    tp = sum(case["true_positive"] for case in cases)
+    fp = sum(case["false_positive"] for case in cases)
+    fn = sum(case["false_negative"] for case in cases)
+    confirmed_tp = sum(case["confirmed_true_positive"] for case in cases)
+    unsupported = sum(case["unsupported_confirmed_changes"] for case in cases)
+    return {
+        "case_count": len(cases),
+        # Reusing the same two PDFs under different case IDs must not inflate
+        # the diversity of an independently labeled evaluation corpus.
+        # Reverse-order uploads are the same unordered pair for this count.
+        "unique_pdf_pair_count": len({
+            tuple(sorted((
+                case["input_sha256"]["original"], case["input_sha256"]["revised"]
+            ))) for case in cases
+        }),
+        "pair_counts": {
+            "true_positive": tp,
+            "false_positive": fp,
+            "false_negative": fn,
+            "unsupported_confirmed_changes": unsupported,
+        },
+        "precision": _ratio(tp, tp + fp),
+        "recall": _ratio(tp, tp + fn),
+        "confirmed_only": {
+            "true_positive": confirmed_tp,
+            "false_positive": unsupported,
+            "precision": _ratio(confirmed_tp, confirmed_tp + unsupported),
+            "recall": _ratio(confirmed_tp, tp + fn),
+        },
+        "incomplete_case_count": sum(
+            case["text_coverage"] != "all_pages_have_text" for case in cases
+        ),
+        "fuzzy_matching_limited_case_count": sum(
+            case["fuzzy_matching_limited"] for case in cases
+        ),
+        "ocr_page_count": sum(case["ocr_pages"] for case in cases),
+        "pages_without_text_count": sum(case["pages_without_text"] for case in cases),
+        "processing_warning_count": sum(case["processing_warnings"] for case in cases),
+    }
+
+
+def _cohort_results(cases: list[dict]) -> dict:
+    """Keep synthetic and operator-declared independent labels visibly separate."""
+
+    def grouped(key_for_case) -> dict:
+        buckets: dict[str, list[dict]] = defaultdict(list)
+        for case in cases:
+            buckets[key_for_case(case)].append(case)
+        return {key: _cohort_summary(buckets[key]) for key in sorted(buckets)}
+
+    independently_labeled_nonfictional = [
+        case for case in cases
+        if case["source_kind"] in ("public_notice", "consented")
+        and case["label_method"] == "independent_human"
+    ]
+    return {
+        "by_source_kind": grouped(lambda case: case["source_kind"]),
+        "by_label_method": grouped(lambda case: case["label_method"]),
+        "by_source_and_label_method": grouped(
+            lambda case: f'{case["source_kind"]}:{case["label_method"]}'
+        ),
+        # These names are operator declarations from the manifest, NOT verified
+        # provenance or a claim that the labeled sample is representative.
+        "declared_independent_nonfictional": _cohort_summary(
+            independently_labeled_nonfictional
+        ),
+    }
+
+
 def evaluate_labeled(
     manifest: Path, *, enable_ocr: bool = False, require_pinned_sources: bool = False,
+    include_error_examples: bool = False,
 ) -> dict:
     """Run offline evidence-pair evaluation from operator-supplied ground truth.
 
@@ -215,7 +321,10 @@ def evaluate_labeled(
             root, case.get("revised"),
             case["revised_sha256"] if version == 2 else None,
         )
-        results.append(_score(case, old, new, enable_ocr=enable_ocr))
+        results.append(_score(
+            case, old, new, enable_ocr=enable_ocr,
+            include_error_examples=include_error_examples,
+        ))
     tp = sum(case["true_positive"] for case in results)
     fp = sum(case["false_positive"] for case in results)
     fn = sum(case["false_negative"] for case in results)
@@ -257,13 +366,15 @@ def evaluate_labeled(
         "incomplete_case_count": sum(
             case["text_coverage"] != "all_pages_have_text" for case in results
         ),
+        "cohorts": _cohort_results(results),
         "cases": results,
         "warning": (
             "Metrics measure exact page-and-quotation pair alignment only. "
             "Undefined denominators yield null, not 100%. Label quality, issuer "
             "authenticity, and representative real-world accuracy are not established. "
             "OCR-on results depend on installed Tesseract and language packs; "
-            "inspect processing warnings and incomplete text coverage."
+            "inspect processing warnings and incomplete text coverage. "
+            "Cohort labels are operator declarations, not authenticated evidence."
         ),
     }
 
@@ -279,26 +390,101 @@ def main() -> int:
         "--enable-ocr", action="store_true",
         help="Opt into local English/Hindi Tesseract OCR for scanned pages",
     )
+    parser.add_argument(
+        "--require-independent-corpus", action="store_true",
+        help=(
+            "Fail unless every case declares a non-fictional source and independent "
+            "human labels (declarations are not independently authenticated)"
+        ),
+    )
+    parser.add_argument(
+        "--min-independent-cases", type=int,
+        help="Minimum number of declared independent non-fictional cases",
+    )
+    parser.add_argument(
+        "--min-independent-distinct-pairs", type=int,
+        help="Minimum number of different PDF source pairs in the independent cohort",
+    )
+    parser.add_argument(
+        "--require-distinct-independent-pairs", action="store_true",
+        help="Reject repeated PDF source pairs in the independent cohort, even in reverse order",
+    )
+    parser.add_argument(
+        "--include-error-examples", action="store_true",
+        help="Include bounded normalized PDF quote previews (may contain private text)",
+    )
     parser.add_argument("--min-precision", type=float, default=None)
     parser.add_argument("--min-recall", type=float, default=None)
+    parser.add_argument(
+        "--min-independent-precision", type=float,
+        help="Minimum exact-pair precision in the declared independent non-fictional cohort",
+    )
+    parser.add_argument(
+        "--min-independent-recall", type=float,
+        help="Minimum exact-pair recall in the declared independent non-fictional cohort",
+    )
+    parser.add_argument(
+        "--max-independent-unsupported-confirmed", type=int,
+        help="Maximum unsupported confirmed pairings in the declared independent cohort",
+    )
+    parser.add_argument(
+        "--max-independent-incomplete-cases", type=int,
+        help="Maximum independent cases missing usable text on one or more PDF pages",
+    )
+    parser.add_argument(
+        "--max-independent-limited-matching-cases", type=int,
+        help="Maximum independent cases where fuzzy candidate matching hit its limit",
+    )
     parser.add_argument(
         "--max-unsupported-confirmed", type=int,
         help="Fail when unsupported confirmed pairings exceed this count",
     )
     args = parser.parse_args()
-    for threshold in (args.min_precision, args.min_recall):
+    for threshold in (
+        args.min_precision, args.min_recall,
+        args.min_independent_precision, args.min_independent_recall,
+    ):
         if threshold is not None and not 0 <= threshold <= 1:
             parser.error("Thresholds must be between 0 and 1")
-    if args.max_unsupported_confirmed is not None and args.max_unsupported_confirmed < 0:
-        parser.error("Maximum unsupported confirmed changes must be nonnegative")
+    for maximum in (
+        args.max_unsupported_confirmed,
+        args.max_independent_unsupported_confirmed,
+        args.max_independent_incomplete_cases,
+        args.max_independent_limited_matching_cases,
+    ):
+        if maximum is not None and maximum < 0:
+            parser.error("Maximum error or incomplete-case limits must be nonnegative")
+    if args.min_independent_cases is not None and args.min_independent_cases < 1:
+        parser.error("Minimum independent case count must be positive")
+    if (
+        args.min_independent_distinct_pairs is not None
+        and args.min_independent_distinct_pairs < 1
+    ):
+        parser.error("Minimum independent distinct-pair count must be positive")
     try:
         result = evaluate_labeled(
             args.manifest, enable_ocr=args.enable_ocr,
             require_pinned_sources=args.require_pinned_sources,
+            include_error_examples=args.include_error_examples,
         )
     except (OSError, ValueError, ProcessingFailed, ProcessingTimedOut) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    declared = result["cohorts"]["declared_independent_nonfictional"]["case_count"]
+    if args.require_independent_corpus and declared != result["case_count"]:
+        return 1
+    if args.min_independent_cases is not None and declared < args.min_independent_cases:
+        return 1
+    distinct = result["cohorts"]["declared_independent_nonfictional"]["unique_pdf_pair_count"]
+    if (
+        args.min_independent_distinct_pairs is not None
+        and distinct < args.min_independent_distinct_pairs
+    ):
+        return 1
+    # A fixed minimum distinct count does not prevent the rest of a corpus
+    # from repeating easy cases and disproportionately increasing micro scores.
+    if args.require_distinct_independent_pairs and (not declared or distinct != declared):
+        return 1
     counts = result["pair_counts"]
     true_positive = counts["true_positive"]
     # Compare thresholds to the raw counts, before presentation rounding.
@@ -313,6 +499,55 @@ def main() -> int:
         and counts["unsupported_confirmed_changes"] > args.max_unsupported_confirmed
     ):
         return 1
+
+    # Aggregate scores may be dominated by fictional or duplicated easy cases.
+    # Always enforce independent-cohort gates on their own *raw* pair counts,
+    # including when the caller intentionally evaluates a mixed manifest.
+    independent = result["cohorts"]["declared_independent_nonfictional"]
+    independent_gate_requested = any(value is not None for value in (
+        args.min_independent_precision,
+        args.min_independent_recall,
+        args.max_independent_unsupported_confirmed,
+        args.max_independent_incomplete_cases,
+        args.max_independent_limited_matching_cases,
+    ))
+    # A zero-error check over zero independent cases is not evidence of safety.
+    if independent_gate_requested and independent["case_count"] == 0:
+        return 1
+    independent_counts = independent["pair_counts"]
+    independent_tp = independent_counts["true_positive"]
+    for denominator, threshold in (
+        (
+            independent_tp + independent_counts["false_positive"],
+            args.min_independent_precision,
+        ),
+        (
+            independent_tp + independent_counts["false_negative"],
+            args.min_independent_recall,
+        ),
+    ):
+        # An undefined ratio is not a passing metric, even at threshold 0.
+        if threshold is not None and (
+            not denominator or independent_tp / denominator < threshold
+        ):
+            return 1
+    if (
+        args.max_independent_unsupported_confirmed is not None
+        and independent_counts["unsupported_confirmed_changes"]
+        > args.max_independent_unsupported_confirmed
+    ):
+        return 1
+    # Exact-pair scores can appear reassuring when extraction or candidate
+    # matching silently fails elsewhere in the same documents.
+    for observed, maximum in (
+        (independent["incomplete_case_count"], args.max_independent_incomplete_cases),
+        (
+            independent["fuzzy_matching_limited_case_count"],
+            args.max_independent_limited_matching_cases,
+        ),
+    ):
+        if maximum is not None and observed > maximum:
+            return 1
     return 0
 
 
