@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDFDocumentProxy } from 'pdfjs-dist';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 // Bundle PDF.js and its matching worker with the application. No external CDN
@@ -14,6 +14,71 @@ export type PdfEvidence = {
   page_rotation: 0 | 90 | 180 | 270;
 };
 
+
+/**
+ * PyMuPDF gives text boxes in unrotated, cropped, top-left page points.
+ * PDF.js uses bottom-left PDF user space plus a viewport transformation.
+ * Convert both corners through PDF.js, which handles /Rotate and /CropBox;
+ * account for /UserUnit and reject geometry mismatches instead of guessing.
+ */
+function highlightForPage(
+  page: PDFPageProxy,
+  viewport: ReturnType<PDFPageProxy['getViewport']>,
+  evidence: PdfEvidence,
+): CSSProperties | null {
+  const base = page.getViewport({ scale: 1 });
+  const tolerance = 2;
+  if (
+    page.rotate !== evidence.page_rotation ||
+    !Number.isFinite(evidence.page_width) ||
+    !Number.isFinite(evidence.page_height) ||
+    evidence.page_width <= 0 || evidence.page_height <= 0 ||
+    Math.abs(base.width - evidence.page_width) > tolerance ||
+    Math.abs(base.height - evidence.page_height) > tolerance ||
+    !Number.isFinite(page.userUnit) || page.userUnit <= 0 ||
+    !evidence.bbox.every(Number.isFinite)
+  ) return null;
+
+  const [x0, y0, x1, y1] = evidence.bbox;
+  const unrotatedWidth = page.rotate % 180 === 0 ? evidence.page_width : evidence.page_height;
+  const unrotatedHeight = page.rotate % 180 === 0 ? evidence.page_height : evidence.page_width;
+  if (
+    x0 >= x1 || y0 >= y1 ||
+    x0 < -tolerance || y0 < -tolerance ||
+    x1 > unrotatedWidth + tolerance || y1 > unrotatedHeight + tolerance
+  ) return null;
+
+  const xMin = Math.max(0, x0);
+  const yMin = Math.max(0, y0);
+  const xMax = Math.min(unrotatedWidth, x1);
+  const yMax = Math.min(unrotatedHeight, y1);
+  if (xMax <= xMin || yMax <= yMin) return null;
+
+  const [cropLeft, , , cropTop] = page.view;
+  const unit = page.userUnit;
+  const rectangle = viewport.convertToViewportRectangle([
+    cropLeft + xMin / unit, cropTop - yMin / unit,
+    cropLeft + xMax / unit, cropTop - yMax / unit,
+  ]);
+  const left = Math.min(rectangle[0], rectangle[2]);
+  const top = Math.min(rectangle[1], rectangle[3]);
+  const right = Math.max(rectangle[0], rectangle[2]);
+  const bottom = Math.max(rectangle[1], rectangle[3]);
+  if (
+    !rectangle.every(Number.isFinite) ||
+    right <= left || bottom <= top ||
+    left < -tolerance || top < -tolerance ||
+    right > viewport.width + tolerance || bottom > viewport.height + tolerance
+  ) return null;
+
+  return {
+    left: `${100 * Math.max(0, left) / viewport.width}%`,
+    top: `${100 * Math.max(0, top) / viewport.height}%`,
+    width: `${100 * (Math.min(viewport.width, right) - Math.max(0, left)) / viewport.width}%`,
+    height: `${100 * (Math.min(viewport.height, bottom) - Math.max(0, top)) / viewport.height}%`,
+  };
+}
+
 export default function PdfEvidencePreview({ file, evidence, language }: {
   file: File;
   evidence: PdfEvidence;
@@ -22,6 +87,7 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
+  const [highlight, setHighlight] = useState<CSSProperties | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -32,6 +98,7 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
     if (!canvas) return;
     setState('loading');
     setError('');
+    setHighlight(null);
 
     async function render() {
       try {
@@ -70,6 +137,7 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
           throw new Error('Source PDF page is too large to preview.');
         }
         const viewport = page.getViewport({ scale });
+        const marker = highlightForPage(page, viewport, evidence);
         const context = canvas?.getContext('2d');
         if (!canvas || !context) throw new Error('Canvas rendering is unavailable.');
         canvas.width = Math.max(1, Math.floor(viewport.width * pixelRatio));
@@ -83,7 +151,10 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
           transform: [pixelRatio, 0, 0, pixelRatio, 0, 0],
         });
         await renderTask.promise;
-        if (!disposed) setState('ready');
+        if (!disposed) {
+          setHighlight(marker);
+          setState('ready');
+        }
       } catch (cause) {
         if (!disposed) {
           setError(cause instanceof Error ? cause.message : 'Unable to render the source PDF.');
@@ -99,22 +170,7 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
       if (loadingTask) void loadingTask.destroy();
       else if (pdf) void pdf.destroy();
     };
-  }, [file, evidence.page]);
-
-  const canHighlight = evidence.page_rotation === 0 &&
-    evidence.page_width > 0 && evidence.page_height > 0 &&
-    evidence.bbox.every(Number.isFinite);
-  const [x0, y0, x1, y1] = evidence.bbox;
-  const left = Math.max(0, Math.min(evidence.page_width, x0));
-  const top = Math.max(0, Math.min(evidence.page_height, y0));
-  const right = Math.max(left, Math.min(evidence.page_width, x1));
-  const bottom = Math.max(top, Math.min(evidence.page_height, y1));
-  const markerStyle = {
-    left: `${100 * left / evidence.page_width}%`,
-    top: `${100 * top / evidence.page_height}%`,
-    width: `${100 * (right - left) / evidence.page_width}%`,
-    height: `${100 * (bottom - top) / evidence.page_height}%`,
-  };
+  }, [file, evidence]);
 
   return <div className="pdf-preview-body">
     {state === 'loading' && <p role="status">{language === 'hi' ? 'PDF पृष्ठ तैयार हो रहा है…' : 'Rendering PDF page…'}</p>}
@@ -122,18 +178,18 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
     <div className="pdf-stage" aria-label={language === 'hi' ? 'स्रोत PDF पृष्ठ' : 'Source PDF page'}>
       <div className="pdf-canvas-holder">
         <canvas ref={canvasRef} />
-        {state === 'ready' && canHighlight && right > left && bottom > top &&
-          <div className="evidence-highlight" style={markerStyle} aria-hidden="true" />}
+        {state === 'ready' && highlight &&
+          <div className="evidence-highlight" style={highlight} aria-hidden="true" />}
       </div>
     </div>
     <p className="preview-help">{
-      canHighlight
+      highlight
         ? language === 'hi'
-          ? 'स्रोत निर्देशांकों का हाइलाइट केवल समीक्षा में सहायता करता है; पाठ और पृष्ठ स्वयं जाँचें।'
-          : 'Highlight uses extracted source coordinates. Inspect the original text and page before relying on it.'
+          ? 'मूल स्रोत निर्देशांकों का हाइलाइट जाँच में सहायता करता है। पाठ और पृष्ठ स्वयं सत्यापित करें।'
+          : 'Source highlight is positioned using the PDF page transform. Verify the original text and page.'
         : language === 'hi'
-          ? 'घुमाए गए पृष्ठ के लिए सटीक बॉक्स हाइलाइट उपलब्ध नहीं है; स्रोत पृष्ठ स्वयं देखें।'
-          : 'Exact highlight is unavailable on rotated pages; inspect the rendered source page.'
+          ? 'पृष्ठ की ज्यामिति की पुष्टि नहीं हुई; संभावित गलत हाइलाइट के बजाय मूल पृष्ठ जाँचें।'
+          : 'Page geometry could not be verified; inspect the source without an approximate highlight.'
     }</p>
   </div>;
 }
