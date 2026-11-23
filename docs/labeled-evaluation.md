@@ -205,8 +205,15 @@ independently human-labeled version-2 manifest:
 PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
   evaluation/independent-pinned.json --require-pinned-sources \
   --require-independent-corpus --min-independent-cases 20 \
+  --min-independent-distinct-pairs 20 \
   --min-precision 0.90 --min-recall 0.90 --max-unsupported-confirmed 0
 ~~~
+
+The output reports the SHA-256 fingerprints of the exact compared PDFs
+for each case, and a unique source-pair count per cohort. Repeated case IDs
+are already invalid, but repeating the same two PDF files under different
+IDs could still inflate a sample count. The distinct-pairs gate prevents
+that; reversed upload order counts as the same source pair for diversity.
 
 The sample count and thresholds above are **operator-configured targets**,
 not statistically validated guarantees. The gate exits nonzero if any case

@@ -164,6 +164,7 @@ def _score(
             confirmed[key] += 1
     return {
         "id": case["id"],
+        "input_sha256": {document.id: document.sha256 for document in result.documents},
         "source_kind": case.get("source_kind", "unrecorded"),
         "label_method": case.get("label_method", "unrecorded"),
         "text_coverage": result.text_coverage,
@@ -200,6 +201,14 @@ def _cohort_summary(cases: list[dict]) -> dict:
     unsupported = sum(case["unsupported_confirmed_changes"] for case in cases)
     return {
         "case_count": len(cases),
+        # Reusing the same two PDFs under different case IDs must not inflate
+        # the diversity of an independently labeled evaluation corpus.
+        # Reverse-order uploads are the same unordered pair for this count.
+        "unique_pdf_pair_count": len({
+            tuple(sorted((
+                case["input_sha256"]["original"], case["input_sha256"]["revised"]
+            ))) for case in cases
+        }),
         "pair_counts": {
             "true_positive": tp,
             "false_positive": fp,
@@ -355,6 +364,10 @@ def main() -> int:
         "--min-independent-cases", type=int,
         help="Minimum number of declared independent non-fictional cases",
     )
+    parser.add_argument(
+        "--min-independent-distinct-pairs", type=int,
+        help="Minimum number of different PDF source pairs in the independent cohort",
+    )
     parser.add_argument("--min-precision", type=float, default=None)
     parser.add_argument("--min-recall", type=float, default=None)
     parser.add_argument(
@@ -369,6 +382,11 @@ def main() -> int:
         parser.error("Maximum unsupported confirmed changes must be nonnegative")
     if args.min_independent_cases is not None and args.min_independent_cases < 1:
         parser.error("Minimum independent case count must be positive")
+    if (
+        args.min_independent_distinct_pairs is not None
+        and args.min_independent_distinct_pairs < 1
+    ):
+        parser.error("Minimum independent distinct-pair count must be positive")
     try:
         result = evaluate_labeled(
             args.manifest, enable_ocr=args.enable_ocr,
@@ -381,6 +399,12 @@ def main() -> int:
     if args.require_independent_corpus and declared != result["case_count"]:
         return 1
     if args.min_independent_cases is not None and declared < args.min_independent_cases:
+        return 1
+    distinct = result["cohorts"]["declared_independent_nonfictional"]["unique_pdf_pair_count"]
+    if (
+        args.min_independent_distinct_pairs is not None
+        and distinct < args.min_independent_distinct_pairs
+    ):
         return 1
     counts = result["pair_counts"]
     true_positive = counts["true_positive"]

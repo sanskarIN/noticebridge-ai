@@ -535,3 +535,63 @@ def test_independent_case_count_gate_and_bad_argument(
     with pytest.raises(SystemExit) as error:
         main()
     assert error.value.code == 2
+
+
+def test_distinct_independent_pair_gate_rejects_repeated_pdf_pairs(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="public_notice", label_method="independent_human",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    repeat = dict(payload["cases"][0])
+    repeat["id"] = "same_pdfs_different_case_id"
+    payload["cases"].append(repeat)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = evaluate_labeled(manifest)
+    cohort = report["cohorts"]["declared_independent_nonfictional"]
+    assert cohort["case_count"] == 2
+    assert cohort["unique_pdf_pair_count"] == 1
+    assert report["cases"][0]["input_sha256"] == report["cases"][1]["input_sha256"]
+
+    args = [
+        "evaluate_labeled", str(manifest), "--require-independent-corpus",
+        "--min-independent-cases", "2", "--min-independent-distinct-pairs", "2",
+    ]
+    monkeypatch.setattr(sys, "argv", args)
+    assert main() == 1
+    capsys.readouterr()
+
+    monkeypatch.setattr(sys, "argv", args[:-1] + ["1"])
+    assert main() == 0
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", args[:-1] + ["0"])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+
+
+def test_independent_pair_diversity_ignores_reverse_upload_order(tmp_path, pdf_bytes):
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="consented", label_method="independent_human",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    reverse = dict(payload["cases"][0])
+    reverse["id"] = "reverse_order"
+    reverse["original"], reverse["revised"] = reverse["revised"], reverse["original"]
+    reverse["original_sha256"], reverse["revised_sha256"] = (
+        reverse["revised_sha256"], reverse["original_sha256"]
+    )
+    reverse["expected_pairs"] = []
+    payload["cases"].append(reverse)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    report = evaluate_labeled(manifest)
+    assert report["cohorts"]["declared_independent_nonfictional"]["case_count"] == 2
+    assert report["cohorts"]["declared_independent_nonfictional"][
+        "unique_pdf_pair_count"
+    ] == 1
