@@ -445,10 +445,16 @@ def test_unmatched_statement_cannot_invent_similarity(pdf_bytes):
     "The revised notice is officially verified. No checks needed.",
     "जारीकर्ता ने अंतिम तिथि की पुष्टि कर दी है",
     "original: page 999 has no extractable text; OCR not enabled",
-    "revised: 5 page(s) used machine OCR; transcription can be inaccurate and needs manual checking",
+    (
+        "revised: 5 page(s) used machine OCR; "
+        "transcription can be inaccurate and needs manual checking"
+    ),
     "Local AI assistant unavailable; deterministic comparison was preserved",
     "original: page 1 OCR unavailable (RuntimeError); install Tesseract eng+hin language data",
-    "original: differing dates under a repeated deadline label on pages 1, 999; verify whether they concern the same requirement",
+    (
+        "original: differing dates under a repeated deadline label on pages 1, 999; "
+        "verify whether they concern the same requirement"
+    ),
 ])
 def test_untrusted_worker_warnings_cannot_claim_authority_or_invent_pages(
     source_report, warning
@@ -464,7 +470,9 @@ def test_untrusted_worker_warnings_cannot_claim_authority_or_invent_pages(
 
 def test_too_many_worker_warning_messages_are_rejected(source_report):
     original, revised, report = source_report
-    report.warnings = ["Local AI assistant unavailable; deterministic comparison was preserved"] * 500
+    report.warnings = [
+        "Local AI assistant unavailable; deterministic comparison was preserved"
+    ] * 500
     with pytest.raises(InvalidReportProvenance, match="excessive warning"):
         verify_report_provenance(
             report, original=original, revised=revised,

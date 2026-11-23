@@ -23,7 +23,7 @@ AI_WARNINGS = {
     "AI-suggested pairings require direct review of both PDF passages",
 }
 OCR_NOT_SCANNED = {
-    f"was not OCR-scanned: per-document OCR limit of 12 pages reached",
+    "was not OCR-scanned: per-document OCR limit of 12 pages reached",
     "was not OCR-scanned: page would exceed OCR pixel limit",
 }
 PAGE_RE = re.compile(r"^(original|revised): page ([1-9][0-9]{0,2}) (.+)$")
