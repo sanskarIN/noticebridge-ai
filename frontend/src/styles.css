@@ -5,3 +5,21 @@
 .ocr-option{display:flex;align-items:flex-start;gap:13px;margin:20px 0 0;padding:16px 18px;border:1px solid #35576a;border-radius:10px;background:#102638;color:#d2e3eb}.ocr-option input{width:17px;height:17px;margin-top:3px;accent-color:#7be7c7}.ocr-option span{display:flex;flex-direction:column;gap:6px}.ocr-option strong{font-size:14px}.ocr-option small{font-size:12px;line-height:1.6;color:#a5bed0}.ocr-source{font-size:11px;color:#f0cd87;margin:4px 0 12px}
 /* PDF.js renders local-file bytes on canvas; overlay uses source page geometry. */
 .pdf-preview-body{display:flex;flex-direction:column;gap:9px;min-height:0;flex:1}.pdf-stage{overflow:auto;min-height:0;flex:1;background:#233344;border:1px solid #405b70;border-radius:6px;padding:12px;display:flex;align-items:flex-start;justify-content:center}.pdf-canvas-holder{position:relative;width:max-content;max-width:100%;margin:0 auto;line-height:0;box-shadow:0 6px 20px #0006}.pdf-canvas-holder canvas{display:block;max-width:100%;height:auto!important;background:#fff}.evidence-highlight{position:absolute;pointer-events:none;background:#ffe27b73;border:2px solid #ec9e27;box-shadow:0 0 0 2px #7b4b19ad;min-height:3px}.pdf-preview-body>.preview-help{padding:0 3px}.preview-dialog{height:min(95vh,1000px)}
+
+/* Text extraction coverage is not a measure of semantic or official accuracy. */
+.coverage-report {
+  margin: 1rem 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border, #d6dce6);
+  border-radius: 0.75rem;
+  background: var(--surface, #fff);
+}
+.coverage-report p {
+  margin: 0.35rem 0 0;
+  overflow-wrap: anywhere;
+}
+.coverage-report.partial,
+.coverage-report.inconclusive {
+  border-left: 4px solid #b88932;
+}
+

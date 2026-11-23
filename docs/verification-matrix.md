@@ -15,6 +15,7 @@ This note documents the conservative behavior of the third engineering milestone
 9. Every document summary includes a SHA-256 of the submitted bytes, for reproducible source identification. No digital signature or issuer authenticity is inferred from the hash.
 10. OCR is opt-in and used only for native-text-empty pages, with bounded page count and estimated rendering pixels. Its output is labeled `ocr`; it cannot alone produce a `confirmed_change` or a contradiction.
 11. Browser PDF.js rendering uses a locally selected File and same-origin worker; highlights are omitted for rotated pages rather than guessed.
+12. Per-page text coverage is visible. Pages without extractable text are never silently treated as proven unchanged, even when the comparison found changes on other pages. `all_pages_have_text` means only that each page yielded some text, not that extraction was exhaustive.
 
 ## How date and fee tokens are interpreted
 

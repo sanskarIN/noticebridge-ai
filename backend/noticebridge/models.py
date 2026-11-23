@@ -34,6 +34,8 @@ class DocumentSummary(BaseModel):
     has_extractable_text: bool
     sha256: str
     ocr_page_count: int = Field(default=0, ge=0)
+    pages_with_text: int = Field(default=0, ge=0)
+    pages_without_text: list[int] = Field(default_factory=list)
 
 
 class ParsedValue(BaseModel):
@@ -76,6 +78,7 @@ class ComparisonReport(BaseModel):
     findings: list[Finding]
     checklist: list[ChecklistItem]
     warnings: list[str]
+    text_coverage: Literal["all_pages_have_text", "partial", "inconclusive"] = "inconclusive"
     verification_policy: str = (
         "Uploaded order does not establish authority. Verify consequential claims "
         "against the issuing organization's official publications."

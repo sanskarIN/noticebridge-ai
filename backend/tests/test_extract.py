@@ -227,3 +227,21 @@ def test_ocr_missing_text_warning_retains_document_and_page(pdf_bytes, monkeypat
         "original: page 1 has no extractable text; comparison may be incomplete" in warning
         for warning in document.warnings
     )
+
+
+def test_text_coverage_tracks_blank_pages_without_claiming_equivalence(pdf_bytes):
+    document = extract_pdf(
+        pdf_bytes([["Deadline: 13 December 2026"], [], ["Fee: Rs. 100"]]),
+        document_id="original", filename="mixed.pdf",
+    )
+    assert document.summary.page_count == 3
+    assert document.summary.pages_with_text == 2
+    assert document.summary.pages_without_text == [2]
+    assert any("page 2 has no extractable text" in w for w in document.warnings)
+
+
+def test_blank_pdf_has_zero_text_covered_pages(pdf_bytes):
+    document = extract_pdf(pdf_bytes([[], []]), document_id="revised", filename="blank.pdf")
+    assert document.summary.pages_with_text == 0
+    assert document.summary.pages_without_text == [1, 2]
+

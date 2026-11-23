@@ -14,8 +14,9 @@ type Finding = {
 };
 type Checklist = { description_en: string; description_hi: string; finding_id: string; requires_human_verification: boolean };
 type Report = {
-  documents: { id: string; filename: string; page_count: number; line_count: number; has_extractable_text: boolean; sha256: string; ocr_page_count: number }[];
+  documents: { id: string; filename: string; page_count: number; line_count: number; has_extractable_text: boolean; sha256: string; ocr_page_count: number; pages_with_text: number; pages_without_text: number[] }[];
   findings: Finding[]; checklist: Checklist[]; warnings: string[]; verification_policy: string;
+  text_coverage: 'all_pages_have_text' | 'partial' | 'inconclusive';
 };
 type Preview = { url: string; file: File; evidence: Evidence };
 
@@ -41,6 +42,11 @@ const translations = {
     ocr: 'Enable local OCR for scanned pages (English + Hindi)',
     ocrNote: 'Optional. Tesseract and the eng/hin language packs must be installed on the server. OCR text can be wrong; it never establishes an authoritative change. Up to 12 scanned pages per PDF.',
     ocrSource: 'Machine OCR — verify transcription',
+    coverageTitle: 'Text extraction coverage',
+    coverageFull: 'Every PDF page yielded some text, but this does not prove every statement was captured.',
+    coveragePartial: 'Some PDF pages yielded no text. Changes on those pages may be missed.',
+    coverageInconclusive: 'One or both PDFs yielded no text. The comparison is inconclusive.',
+    coveragePages: 'pages yielded text',
   },
   hi: {
     eyebrow: 'स्रोत-आधारित दस्तावेज़ विश्लेषण',
@@ -62,6 +68,11 @@ const translations = {
     ocr: 'स्कैन किए गए पन्नों के लिए स्थानीय OCR चालू करें (हिंदी + अंग्रेज़ी)',
     ocrNote: 'वैकल्पिक। सर्वर पर Tesseract और eng/hin भाषा डेटा आवश्यक है। OCR में गलतियाँ हो सकती हैं। प्रत्येक PDF के अधिकतम 12 पन्ने।',
     ocrSource: 'मशीन OCR — पाठ की जाँच करें',
+    coverageTitle: 'पाठ निष्कर्षण की स्थिति',
+    coverageFull: 'हर PDF पृष्ठ से कुछ पाठ मिला, लेकिन इससे सभी कथन निकलने की पुष्टि नहीं होती।',
+    coveragePartial: 'कुछ PDF पृष्ठों से पाठ नहीं मिला। उन पृष्ठों के बदलाव छूट सकते हैं।',
+    coverageInconclusive: 'एक या दोनों PDF से कोई पाठ नहीं मिला। तुलना अनिर्णायक है।',
+    coveragePages: 'पृष्ठों से पाठ मिला',
   },
 };
 
@@ -201,6 +212,14 @@ export default function App() {
           <div><b>{report.findings.filter(f => f.status === 'possible_change').length}</b><span>{t.possible}</span></div>
         </div>
         <div className="caution"><span>!</span><p>{t.verify} <strong>{t.authority}.</strong></p></div>
+        <div className={`coverage-report ${report.text_coverage}`} role="status">
+          <strong>{t.coverageTitle}</strong>
+          <p>{report.text_coverage === 'all_pages_have_text' ? t.coverageFull :
+            report.text_coverage === 'partial' ? t.coveragePartial : t.coverageInconclusive}</p>
+          <p>{report.documents.map(d =>
+            `${d.filename}: ${d.pages_with_text}/${d.page_count} ${t.coveragePages}`
+          ).join(' · ')}</p>
+        </div>
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
         <div className="findings-list">{report.findings.map(f => <article className="finding" key={f.id}>
           <div className="finding-header"><div><span className={`status ${f.status}`}>{f.status.replaceAll('_', ' ')}</span><span className="category">{f.category.toUpperCase()}</span></div><span className="match-score">{Math.round(f.similarity * 100)}% context match</span></div>

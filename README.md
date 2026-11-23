@@ -9,7 +9,7 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 ## What works now
 
 - Two-PDF upload with file-size, file-type, encryption, and page-count checks.
-- Line-level PDF text extraction with **actual 1-based page references, source coordinates, and SHA-256 file fingerprints** from PyMuPDF.
+- Line-level PDF text extraction with **actual 1-based page references, source coordinates, and SHA-256 file fingerprints** from PyMuPDF. The API also reports per-document pages without extractable text and overall text-coverage status: all pages yielded text, partial, or inconclusive.
 - **Optional local OCR** for image-only PDF pages (English + Hindi). OCR provenance is attached to each extracted line, and OCR-derived changes cannot be labeled as confirmed purely by a text match. A limit of 12 OCR pages per document and a render-pixel ceiling bound work.
 - **PDF.js page preview with highlighted evidence coordinates** for unrotated pages, rendered locally from the user-selected File without sending it to a CDN; rotated pages deliberately omit potentially inaccurate highlights.
 - Three-pass matching: identical-text reconciliation, anchored value comparison, and globally ranked fuzzy proposals. Repeated headings are marked uncertain rather than overconfident.
@@ -55,7 +55,7 @@ npm run test:e2e
 
 ## API
 
-`POST /api/compare` accepts multipart fields `original` and `revised` (PDFs, maximum 10 MiB each, 80 pages each), plus optional `enable_ocr=true` (default is false). Returns `documents`, `findings`, `checklist`, `warnings`, and `verification_policy`. Matched findings may include `field_changes` containing `kind`, original and revised raw/canonical values, parser confidence, and an outcome of `changed`, `same_value`, or `uncertain`. This is syntactic interpretation, **not official source verification**.
+`POST /api/compare` accepts multipart fields `original` and `revised` (PDFs, maximum 10 MiB each, 80 pages each), plus optional `enable_ocr=true` (default is false). Returns `documents`, `findings`, `checklist`, `warnings`, `text_coverage`, and `verification_policy`. Each document reports `pages_with_text` and `pages_without_text`. Matched findings may include `field_changes` containing `kind`, original and revised raw/canonical values, parser confidence, and an outcome of `changed`, `same_value`, or `uncertain`. This is syntactic interpretation, **not official source verification**.
 
 All evidence references point to source text extracted from the uploaded PDFs, including the extraction method (`native` or `ocr`) and page geometry. Both source locations are included when a passage is matched. The application has **no durable upload storage**, but FastAPI/Starlette multipart parsing **may temporarily spool uploads to local OS temporary files**. Deployments must secure temporary storage, server logs, networking, reverse proxies, and crash dumps. Do not upload private or confidential files to an untrusted hosted instance.
 

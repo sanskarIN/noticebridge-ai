@@ -136,3 +136,38 @@ def test_ocr_sourced_deadlines_cannot_claim_a_contradiction(pdf_bytes):
     ))
     report = compare_documents(old, new)
     assert not any(f.status == "contradiction" for f in report.findings)
+
+
+def test_text_coverage_is_complete_only_when_every_page_has_extracted_text(pdf_bytes):
+    old = extract_pdf(
+        pdf_bytes([["Deadline: 13 December 2026"], ["Requirements unchanged"]]),
+        document_id="original", filename="old.pdf",
+    )
+    new = extract_pdf(
+        pdf_bytes([["Deadline: 14 December 2026"], ["Requirements unchanged"]]),
+        document_id="revised", filename="new.pdf",
+    )
+    assert compare_documents(old, new).text_coverage == "all_pages_have_text"
+
+
+def test_partial_text_coverage_is_visible_even_with_valid_findings(pdf_bytes):
+    old = extract_pdf(
+        pdf_bytes([["Deadline: 13 December 2026"], []]),
+        document_id="original", filename="old.pdf",
+    )
+    new = extract_pdf(
+        pdf_bytes([["Deadline: 14 December 2026"], ["Information"]]),
+        document_id="revised", filename="new.pdf",
+    )
+    report = compare_documents(old, new)
+    assert report.text_coverage == "partial"
+    assert any(f.status == "confirmed_change" for f in report.findings)
+    assert any("omit changes" in warning for warning in report.warnings)
+
+
+def test_inconclusive_text_coverage_when_either_document_has_no_text(pdf_bytes):
+    old = extract_pdf(pdf_bytes([[]]), document_id="original", filename="old.pdf")
+    new = extract_pdf(pdf_bytes([["Deadline: 14 December 2026"]]),
+                      document_id="revised", filename="new.pdf")
+    assert compare_documents(old, new).text_coverage == "inconclusive"
+

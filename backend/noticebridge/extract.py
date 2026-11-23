@@ -45,6 +45,7 @@ def extract_pdf(
         raise InvalidDocument("Malformed or unreadable PDF") from exc
     lines: list[ExtractedLine] = []
     warnings: list[str] = []
+    pages_without_text: list[int] = []
     total_characters = 0
     ocr_page_count = 0
     ocr_attempts = 0
@@ -130,6 +131,7 @@ def extract_pdf(
             if method == "ocr" and page_lines:
                 ocr_page_count += 1
             if page_lines == 0:
+                pages_without_text.append(index + 1)
                 explanation = (
                     "OCR not enabled" if not enable_ocr else "comparison may be incomplete"
                 )
@@ -152,6 +154,8 @@ def extract_pdf(
             has_extractable_text=bool(lines),
             sha256=hashlib.sha256(contents).hexdigest(),
             ocr_page_count=ocr_page_count,
+            pages_with_text=index + 1 - len(pages_without_text),
+            pages_without_text=pages_without_text,
         ),
         lines=lines,
         warnings=warnings,

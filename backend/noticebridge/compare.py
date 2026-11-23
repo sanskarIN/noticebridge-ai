@@ -61,7 +61,15 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
     checklist: list[ChecklistItem] = []
     warnings = [*old.warnings, *new.warnings]
     if not old.lines or not new.lines:
+        coverage = "inconclusive"
         warnings.append("At least one document has no extractable text; comparison is incomplete")
+    elif old.summary.pages_without_text or new.summary.pages_without_text:
+        coverage = "partial"
+        warnings.append(
+            "Some pages have no extractable text; comparisons may omit changes on those pages"
+        )
+    else:
+        coverage = "all_pages_have_text"
     # Pass one: preserve identical statements regardless of order. Doing this
     # before masking dates prevents reordered duplicate deadline headings from
     # producing spurious change reports.
@@ -262,4 +270,5 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         findings=findings,
         checklist=checklist,
         warnings=warnings,
+        text_coverage=coverage,
     )

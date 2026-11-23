@@ -19,6 +19,9 @@ def test_compare_endpoint(pdf_bytes):
     assert payload["findings"][0]["status"] == "confirmed_change"
     assert payload["findings"][0]["original"]["page"] == 1
     assert payload["documents"][0]["id"] == "original"
+    assert payload["text_coverage"] == "all_pages_have_text"
+    assert payload["documents"][0]["pages_with_text"] == 1
+    assert payload["documents"][0]["pages_without_text"] == []
 
 
 def test_bad_input_rejected(pdf_bytes):
@@ -100,6 +103,8 @@ def test_blank_pdfs_do_not_claim_successful_comparison(pdf_bytes):
     data = response.json()
     assert not data["findings"]
     assert all(not document["has_extractable_text"] for document in data["documents"])
+    assert data["text_coverage"] == "inconclusive"
+    assert all(document["pages_without_text"] == [1] for document in data["documents"])
     assert any("comparison is incomplete" in warning for warning in data["warnings"])
 
 
