@@ -85,3 +85,26 @@ Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tes
 ## Still not implemented
 
 Trustworthy amendment/issuer provenance resolution; independently evaluated semantic matching; calibrated OCR confidence; comprehensive independent pixel-level highlight validation across exotic PDFs; production-grade OS sandboxing, disk quotas and deployment authentication; persistent projects/checklists; calendar export; broad browser E2E tests; independent real-world accuracy measurements.
+
+## Consequential review-queue acceptance checks
+
+The English-only review workspace should never bury **unmatched deadlines,
+unparsed possible deadline wording, missing fees, or eligibility changes** just
+because a syntactic date or amount delta cannot be calculated. These are
+review priorities, not proof of an official amendment or cancellation.
+
+- Known native-text earlier deadlines may be labeled with a calculated day
+  difference, but only when the backend reports a confirmed text pairing and
+  two unambiguous canonical dates.
+- An explicit amendment is **possible**, not automatically official. A lone
+  deadline in either PDF must be labeled **unmatched**, not removed or added.
+- Possible deadline/fee wording differences without a parsed numeric field
+  still require human inspection; OCR-derived passages require visible
+  transcription checking before acting.
+- Eligibility, reporting-time and instruction changes should enter the
+  prioritized review queue. Existing evidence links, search filters and
+  full-report exports remain the way to examine all findings; the short
+  review queue is **not** an exhaustive result set.
+- E2E UI-fixture tests for uncertain states verify rendering and prioritization,
+  not extraction accuracy. Real PDF integration tests separately cover source
+  passage matching.

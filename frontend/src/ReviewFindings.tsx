@@ -119,10 +119,13 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
     new Map(report.checklist.map(item => [item.finding_id, item])), [report.checklist]
   );
   const reviewable = useMemo(() => new Set(checklist.keys()), [checklist]);
-  const priorities = useMemo(
+  const pendingPriorities = useMemo(
     () => reviewPriorities(report.findings, reviewable, checked),
     [report.findings, reviewable, checked],
   );
+  // The opening panel is intentionally short, but its count must make clear
+  // that additional consequential findings remain in the full review list.
+  const priorities = pendingPriorities.slice(0, 3);
   const indexed = useMemo(() => report.findings.map(finding => {
     const evidence = findingEvidence(finding);
     return { finding, evidence, quotes: evidence.map(item => normalizeSearch(item.text)) };
@@ -184,6 +187,8 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
       <div className="priority-intro">
         <h3 id="review-first-heading">Review first</h3>
         <p>Check urgent or uncertain changes against the source before acting.</p>
+        <p className="priority-remaining">Showing {priorities.length} of {pendingPriorities.length}
+          {' '}prioritized items. Review all findings below; this is not an official verification.</p>
       </div>
       <ul>{priorities.map(item =>
         <li key={item.id}>
