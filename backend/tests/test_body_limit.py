@@ -45,6 +45,151 @@ def _exercise(*, chunks, headers=(), path="/api/compare", method="POST"):
     return status, body, received_by_app
 
 
+@pytest.mark.parametrize("origin", [
+    b"https://evil.example",
+    b"http://localhost:5173.attacker.example",
+    b"http://localhost:5173@attacker.example",
+    b"http://localhost:5174",
+    b"http://127.0.0.1:8001",
+    b"https://localhost:5173",
+    b"http://localhost:5173/",
+    b"null",
+    b"",
+])
+def test_cross_origin_upload_is_rejected_before_reaching_parser(origin):
+    status, body, received = _exercise(
+        chunks=[b"attacker-controlled PDF payload"],
+        headers=[(b"origin", origin)],
+    )
+    assert status == 403
+    assert json.loads(body)["detail"] == (
+        "Browser origin is not permitted for PDF comparison"
+    )
+    assert not received
+
+
+@pytest.mark.parametrize("origin", [
+    b"http://localhost:5173",
+    b"http://127.0.0.1:5173",
+    b"http://localhost:8000",
+    b"http://127.0.0.1:8000",
+])
+def test_allowed_development_origins_reach_comparison(origin):
+    status, body, received = _exercise(
+        chunks=[b"valid request"], headers=[(b"Origin", origin)],
+    )
+    assert (status, body, received) == (200, b"ok", [b"valid request"])
+
+
+def test_browser_origin_guard_does_not_spool_cross_site_upload(monkeypatch):
+    def unexpected_spool(**kwargs):
+        pytest.fail("Blocked cross-origin request reached temporary storage")
+
+    monkeypatch.setattr(body_limit, "SpooledTemporaryFile", unexpected_spool)
+    status, _, received = _exercise(
+        chunks=[b"ignored"],
+        headers=[(b"Origin", b"https://untrusted.example")],
+    )
+    assert status == 403
+    assert not received
+
+
+@pytest.mark.parametrize("headers", [
+    [(b"Origin", b"http://localhost:5173"), (b"Origin", b"https://evil.example")],
+    [(b"Origin", b"http://localhost:5173"), (b"Origin", b"http://localhost:5173")],
+    [(b"Sec-Fetch-Site", b"same-origin"), (b"Sec-Fetch-Site", b"same-origin")],
+])
+def test_duplicate_browser_context_headers_are_rejected(headers):
+    status, _, received = _exercise(chunks=[b"ignored"], headers=headers)
+    assert status == 403
+    assert received == []
+
+
+@pytest.mark.parametrize(("site", "expected"), [
+    (b"cross-site", 403),
+    (b"CROSS-SITE", 403),
+    (b"same-origin", 200),
+    (b"same-site", 200),
+    (b"none", 200),
+    (b"invalid", 403),
+])
+def test_fetch_metadata_guards_originless_requests(site, expected):
+    status, _, received = _exercise(
+        chunks=[b"body"], headers=[(b"Sec-Fetch-Site", site)],
+    )
+    assert status == expected
+    assert received == ([b"body"] if expected == 200 else [])
+
+
+def test_exact_allowed_origin_takes_precedence_over_cross_site_metadata():
+    # Direct browser calls between localhost and 127.0.0.1 can be marked
+    # cross-site despite having an explicitly allowed Origin.
+    status, _, received = _exercise(
+        chunks=[b"body"], headers=[
+            (b"Origin", b"http://localhost:5173"),
+            (b"Sec-Fetch-Site", b"cross-site"),
+        ],
+    )
+    assert status == 200
+    assert received == [b"body"]
+
+
+def test_untrusted_origin_rejected_by_real_api_before_multipart_parsing():
+    response = TestClient(app).post(
+        "/api/compare",
+        content=b"not-even-multipart",
+        headers={
+            "Origin": "https://attacker.example",
+            "Content-Type": "multipart/form-data; boundary=x",
+        },
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Browser origin is not permitted for PDF comparison"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_valid_browser_origin_and_preflight_still_work(pdf_bytes):
+    client = TestClient(app)
+    preflight = client.options(
+        "/api/compare", headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "http://localhost:5173"
+    response = client.post(
+        "/api/compare",
+        files={
+            "original": (
+                "old.pdf", pdf_bytes([["Deadline: 13 December 2026"]]), "application/pdf",
+            ),
+            "revised": (
+                "new.pdf", pdf_bytes([["Deadline: 14 December 2026"]]), "application/pdf",
+            ),
+        },
+        headers={"Origin": "http://localhost:5173"},
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert response.json()["findings"]
+
+
+@pytest.mark.parametrize(("path", "method"), [
+    ("/api/health", "GET"),
+    ("/api/compare", "GET"),
+    ("/api/compare", "OPTIONS"),
+])
+def test_browser_origin_guard_does_not_block_other_routes_or_preflight(path, method):
+    status, body, received = _exercise(
+        chunks=[b"ignored"], path=path, method=method,
+        headers=[(b"Origin", b"https://evil.example")],
+    )
+    assert (status, body, received) == (200, b"ok", [b"ignored"])
+
+
 def test_oversized_content_length_rejected_before_reading(monkeypatch):
     monkeypatch.setattr(body_limit, "MAX_COMPARE_BODY_BYTES", 10)
     status, body, received = _exercise(
