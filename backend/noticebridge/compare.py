@@ -4,11 +4,18 @@ import re
 import unicodedata
 from collections import Counter, defaultdict, deque
 
+from .amendments import (
+    AmendmentKey,
+    Statement,
+    linked_amendment,
+    original_statement,
+    revised_amendment,
+)
 from .extract import ExtractedDocument
 from .facts import AMOUNT_TOKEN, DATE_TOKEN, WORD_CHAR, date_tokens, field_changes
 from .matching import StatementKey, fuzzy_proposals
 from .messages import SUMMARY_MESSAGES, review_messages
-from .models import ChecklistItem, ComparisonReport, Evidence, Finding
+from .models import ChecklistItem, ComparisonReport, Evidence, Finding, ValueChange
 from .warning_policy import MAX_CROSS_PAGE_DETAILS
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
@@ -83,6 +90,39 @@ def _statement_key(text: str) -> StatementKey:
     return category, anchor(text, category)
 
 
+def _link_amendments(
+    old: ExtractedDocument,
+    new: ExtractedDocument,
+    old_keys: list[StatementKey],
+    new_keys: list[StatementKey],
+    unmatched_old: set[int],
+    unmatched_new: set[int],
+) -> dict[int, tuple[int, ValueChange]]:
+    amendments: dict[AmendmentKey, list[tuple[int, Statement]]] = defaultdict(list)
+    for index, line in enumerate(new.lines):
+        if " from " not in normalize(line.text):
+            continue
+        statement = revised_amendment(line.text, new_keys[index][0])
+        if statement is not None:
+            amendments[statement.key].append((index, statement))
+    if not amendments:
+        return {}
+    originals: dict[AmendmentKey, list[tuple[int, Statement]]] = defaultdict(list)
+    for index, line in enumerate(old.lines):
+        statement = original_statement(line.text, old_keys[index][0])
+        if statement is not None and statement.key in amendments:
+            originals[statement.key].append((index, statement))
+    result = {}
+    for key, candidates in originals.items():
+        if len(candidates) == len(amendments[key]) == 1:
+            (oi, original), (ni, amendment) = candidates[0], amendments[key][0]
+            if oi in unmatched_old and ni in unmatched_new:
+                result[oi] = ni, linked_amendment(original, amendment)
+                unmatched_old.remove(oi)
+                unmatched_new.remove(ni)
+    return result
+
+
 def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> ComparisonReport:
     """Align by contextual similarity, then report exact text deltas with both source locations.
 
@@ -125,6 +165,7 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
     # events and their relationship is not inferable from their position.
     old_keys = [_statement_key(line.text) for line in old.lines]
     new_keys = [_statement_key(line.text) for line in new.lines]
+    amendments = _link_amendments(old, new, old_keys, new_keys, unmatched_old, unmatched_new)
     old_counts = Counter(old_keys)
     new_counts = Counter(new_keys)
     anchored: dict[tuple[str, str], deque[int]] = defaultdict(deque)
@@ -154,6 +195,16 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
 
     for oi, original in enumerate(old.lines):
         category = old_keys[oi][0]
+        if oi in amendments:
+            ni, change = amendments[oi]
+            summary_en, summary_hi = SUMMARY_MESSAGES["explicit_amendment"]
+            findings.append(Finding(
+                id=f"f{len(findings)+1}", status="possible_change", category=category,
+                summary_en=summary_en, summary_hi=summary_hi, original=original.evidence,
+                revised=new.lines[ni].evidence, similarity=0, match_method="explicit_amendment",
+                field_changes=[change],
+            ))
+            continue
         if oi not in match_for_old:
             # Missing line is not automatically a canceled requirement.
             findings.append(

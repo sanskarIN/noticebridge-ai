@@ -8,6 +8,7 @@ reject contradictory, fabricated-role or self-certified evidence structures.
 import hashlib
 import math
 
+from .amendments import linked_amendment, original_statement, revised_amendment
 from .compare import anchor, category_for, normalize
 from .extract import (
     MAX_EXTRACTED_LINES,
@@ -202,8 +203,8 @@ def verify_report_provenance(
         _require(finding.id not in finding_ids, "Finding IDs must be unique")
         finding_ids.add(finding.id)
         _require(not finding.authority_verified, "Worker claimed unverified official authority")
-        if finding.match_method == "semantic_proposal":
-            message_key = "semantic_proposal"
+        if finding.match_method in ("semantic_proposal", "explicit_amendment"):
+            message_key = finding.match_method
         elif finding.status == "missing_information":
             message_key = "missing_original" if finding.original else "missing_revised"
         else:
@@ -305,6 +306,25 @@ def verify_report_provenance(
             )
             ai_old_used.add(old_ref)
             ai_new_used.add(new_ref)
+        if finding.match_method == "explicit_amendment":
+            _require(
+                finding.status == "possible_change" and finding.similarity == 0
+                and finding.original is not None and finding.revised is not None
+                and not finding.supporting_evidence
+                and finding.category == category_for(finding.original.text)
+                and finding.category == category_for(finding.revised.text),
+                "An explicit amendment requires two matching source passages and human review",
+            )
+            prior = original_statement(finding.original.text, finding.category)
+            amendment = revised_amendment(finding.revised.text, finding.category)
+            _require(
+                prior is not None and amendment is not None and prior.key == amendment.key,
+                "Explicit amendment wording does not match the quoted original",
+            )
+            _require(
+                finding.field_changes == [linked_amendment(prior, amendment)],
+                "Explicit amendment value does not match the source quotations",
+            )
         for value in finding.field_changes:
             _require(
                 value.kind == value.original.kind == value.revised.kind,

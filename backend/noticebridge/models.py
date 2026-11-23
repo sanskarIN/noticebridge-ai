@@ -64,7 +64,9 @@ class Finding(BaseModel):
     revised: Evidence | None = None
     supporting_evidence: list[Evidence] = Field(default_factory=list)
     similarity: float = Field(ge=0, le=1)
-    match_method: Literal["deterministic", "semantic_proposal"] = "deterministic"
+    match_method: Literal[
+        "deterministic", "semantic_proposal", "explicit_amendment"
+    ] = "deterministic"
     authority_verified: bool = False
     field_changes: list[ValueChange] = Field(default_factory=list)
 

@@ -89,5 +89,19 @@
     "original": ["Please attach a passport photograph when applying"],
     "revised": ["Candidates should upload their recent photo on the portal"],
     "expected_status_counts": {"missing_information": 2}
+  },
+  {
+    "id": "separate_deadline_amendment",
+    "original": ["Application deadline: 19 Dec 2026"],
+    "revised": ["Application deadline revised from 19 Dec 2026 to 13 Dec 2026"],
+    "expected_status_counts": {"possible_change": 1},
+    "expected_field_outcomes": ["uncertain"]
+  },
+  {
+    "id": "separate_fee_amendment",
+    "original": ["Application fee: Rs. 500"],
+    "revised": ["Application fee reduced from Rs. 500 to Rs. 350"],
+    "expected_status_counts": {"possible_change": 1},
+    "expected_field_outcomes": ["uncertain"]
   }
 ]
