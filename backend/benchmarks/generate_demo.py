@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-import fitz
+import pymupdf as fitz
 
 # These are fictional examples; neither is issued by a real organization.
 COMMON = [

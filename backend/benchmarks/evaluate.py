@@ -5,7 +5,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-import fitz
+import pymupdf as fitz
 
 from noticebridge.compare import compare_documents
 from noticebridge.extract import extract_pdf

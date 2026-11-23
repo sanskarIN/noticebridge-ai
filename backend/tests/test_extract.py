@@ -29,7 +29,7 @@ def test_scanned_page_emits_warning(pdf_bytes):
 
 
 def test_rejects_pdf_with_too_many_pages():
-    import fitz
+    import pymupdf as fitz
 
     pdf = fitz.open()
     for _ in range(81):
@@ -41,7 +41,7 @@ def test_rejects_pdf_with_too_many_pages():
 
 
 def test_rejects_password_protected_pdf():
-    import fitz
+    import pymupdf as fitz
 
     pdf = fitz.open()
     pdf.new_page()
@@ -64,7 +64,7 @@ def test_source_digest_and_native_provenance(pdf_bytes):
 
 
 def test_ocr_is_opt_in_and_skips_native_text(pdf_bytes, monkeypatch):
-    import fitz
+    import pymupdf as fitz
 
     def forbidden(*args, **kwargs):
         raise AssertionError("OCR must not run without opt-in or on native text")
@@ -78,7 +78,7 @@ def test_ocr_is_opt_in_and_skips_native_text(pdf_bytes, monkeypatch):
 
 
 def test_missing_tesseract_is_reported_not_fabricated(pdf_bytes, monkeypatch):
-    import fitz
+    import pymupdf as fitz
 
     def unavailable(*args, **kwargs):
         raise RuntimeError("Tesseract unavailable")
@@ -92,7 +92,7 @@ def test_missing_tesseract_is_reported_not_fabricated(pdf_bytes, monkeypatch):
 
 
 def test_per_document_ocr_budget_is_visible(pdf_bytes, monkeypatch):
-    import fitz
+    import pymupdf as fitz
 
     from noticebridge import extract
 
@@ -120,7 +120,7 @@ def test_real_scanned_pdf_gets_ocr_when_installed():
     import shutil
     import subprocess
 
-    import fitz
+    import pymupdf as fitz
 
     if shutil.which("tesseract") is None:
         pytest.skip("Tesseract CLI not installed on this host")
@@ -151,7 +151,7 @@ def test_real_scanned_pdf_gets_ocr_when_installed():
 
 
 def test_rotated_source_geometry_is_marked_for_viewer():
-    import fitz
+    import pymupdf as fitz
 
     document = fitz.open()
     page = document.new_page(width=300, height=600)
@@ -175,7 +175,7 @@ def test_real_hindi_scan_ocr_with_installed_language_pack():
     from io import BytesIO
     from pathlib import Path
 
-    import fitz
+    import pymupdf as fitz
 
     if not shutil.which("tesseract"):
         pytest.skip("Tesseract is optional")
