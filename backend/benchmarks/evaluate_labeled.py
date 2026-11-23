@@ -473,7 +473,7 @@ def main() -> int:
         return 1
     # A fixed minimum distinct count does not prevent the rest of a corpus
     # from repeating easy cases and disproportionately increasing micro scores.
-    if args.require_distinct_independent_pairs and distinct != declared:
+    if args.require_distinct_independent_pairs and (not declared or distinct != declared):
         return 1
     counts = result["pair_counts"]
     true_positive = counts["true_positive"]
