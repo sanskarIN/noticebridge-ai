@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
 from .body_limit import CompareBodyLimit
-from .extract import MAX_UPLOAD_BYTES, InvalidDocument
+from .extract import MAX_UPLOAD_BYTES, InvalidDocument, parse_ocr_selection
 from .isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 from .models import ComparisonReport
 
@@ -76,8 +76,18 @@ async def compare(
     revised: Annotated[UploadFile, File()],
     enable_ocr: Annotated[bool, Form()] = False,
     enable_semantic: Annotated[bool, Form()] = False,
+    original_ocr_pages: Annotated[str, Form()] = "",
+    revised_ocr_pages: Annotated[str, Form()] = "",
 ) -> ComparisonReport:
     try:
+        try:
+            old_pages = parse_ocr_selection(original_ocr_pages)
+        except InvalidDocument as exc:
+            raise InvalidDocument(f"Original notice: {exc}") from exc
+        try:
+            new_pages = parse_ocr_selection(revised_ocr_pages)
+        except InvalidDocument as exc:
+            raise InvalidDocument(f"Updated notice: {exc}") from exc
         a = await _read_pdf(original)
         b = await _read_pdf(revised)
         # Never display an upload-controlled path as a filename in evidence.
@@ -90,6 +100,7 @@ async def compare(
                 run_isolated_comparison,
                 a, b, old_name=old_name, new_name=new_name,
                 enable_ocr=enable_ocr, enable_semantic=enable_semantic,
+                original_ocr_pages=old_pages, revised_ocr_pages=new_pages,
             )
     except InvalidDocument as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

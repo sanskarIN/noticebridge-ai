@@ -14,7 +14,7 @@ import tempfile
 
 from pydantic import ValidationError
 
-from .extract import MAX_UPLOAD_BYTES, InvalidDocument
+from .extract import MAX_UPLOAD_BYTES, InvalidDocument, validate_ocr_pages
 from .models import ComparisonReport
 from .provenance import InvalidReportProvenance, verify_report_provenance
 from .windows_job import WindowsWorkerJob
@@ -90,6 +90,8 @@ def run_isolated_comparison(
     new_name: str,
     enable_ocr: bool,
     enable_semantic: bool = False,
+    original_ocr_pages: tuple[int, ...] = (),
+    revised_ocr_pages: tuple[int, ...] = (),
 ) -> ComparisonReport:
     """Parse and compare both PDFs outside the API process.
 
@@ -103,6 +105,9 @@ def run_isolated_comparison(
         or len(revised) > MAX_UPLOAD_BYTES
     ):
         raise InvalidDocument("Each PDF must be nonempty and at most 10 MiB")
+    original_ocr_pages = validate_ocr_pages(original_ocr_pages)
+    revised_ocr_pages = validate_ocr_pages(revised_ocr_pages)
+    uses_ocr = enable_ocr or bool(original_ocr_pages or revised_ocr_pages)
     payload = json.dumps(
         {
             "original": {
@@ -115,14 +120,16 @@ def run_isolated_comparison(
             },
             "enable_ocr": enable_ocr,
             "enable_semantic": enable_semantic,
+            "original_ocr_pages": original_ocr_pages,
+            "revised_ocr_pages": revised_ocr_pages,
         },
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
     if enable_semantic:
-        timeout = OCR_SEMANTIC_TIMEOUT_SECONDS if enable_ocr else SEMANTIC_TIMEOUT_SECONDS
+        timeout = OCR_SEMANTIC_TIMEOUT_SECONDS if uses_ocr else SEMANTIC_TIMEOUT_SECONDS
     else:
-        timeout = OCR_TIMEOUT_SECONDS if enable_ocr else NATIVE_TIMEOUT_SECONDS
+        timeout = OCR_TIMEOUT_SECONDS if uses_ocr else NATIVE_TIMEOUT_SECONDS
     try:
         # Real stdout is redirected to a private temporary file rather than
         # subprocess.PIPE: communicate() otherwise accumulates unbounded worker
@@ -132,7 +139,7 @@ def run_isolated_comparison(
         with tempfile.TemporaryFile(mode="w+b") as output_file:
             process = subprocess.Popen(
                 [sys.executable, "-m", "noticebridge.worker_entry",
-                 "--ocr" if enable_ocr else "--native"],
+                 "--ocr" if uses_ocr else "--native"],
                 stdin=subprocess.PIPE,
                 stdout=output_file,
                 stderr=subprocess.DEVNULL,
@@ -193,6 +200,7 @@ def run_isolated_comparison(
             report, original=original, revised=revised,
             old_name=old_name, new_name=new_name,
             semantic_requested=enable_semantic, ocr_requested=enable_ocr,
+            original_ocr_pages=original_ocr_pages, revised_ocr_pages=revised_ocr_pages,
         )
         return report
     except (ValidationError, InvalidReportProvenance) as exc:

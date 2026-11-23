@@ -29,6 +29,12 @@ const translations = {
     invalidFile: 'Select a PDF no larger than 10 MiB.',
     ocr: 'Enable local OCR for scanned pages (English + Hindi)',
     ocrNote: 'Optional. Tesseract and the eng/hin language packs must be installed on the server. OCR text can be wrong; it never establishes an authoritative change. Up to 12 scanned pages per PDF.',
+    ocrRecovery: 'Recover text on selected pages with OCR',
+    ocrRecoveryHelp: 'Use PDF page numbers such as 1, 3–5 when the embedded text is garbled or incomplete. Selected pages use OCR only and take priority within the 12-page limit per PDF.',
+    ocrOriginalPages: 'Original notice OCR pages',
+    ocrRevisedPages: 'Updated notice OCR pages',
+    ocrSelected: 'Selected for OCR',
+    ocrRecovered: 'Text extracted by OCR',
     coverageTitle: 'Text extraction coverage',
     coverageFull: 'Every PDF page yielded some text, but this does not prove every statement was captured.',
     coveragePartial: 'Some PDF pages yielded no text. Changes on those pages may be missed.',
@@ -62,6 +68,12 @@ const translations = {
     invalidFile: 'केवल 10 MiB तक की PDF चुनें।',
     ocr: 'स्कैन किए गए पन्नों के लिए स्थानीय OCR चालू करें (हिंदी + अंग्रेज़ी)',
     ocrNote: 'वैकल्पिक। सर्वर पर Tesseract और eng/hin भाषा डेटा आवश्यक है। OCR में गलतियाँ हो सकती हैं। प्रत्येक PDF के अधिकतम 12 पन्ने।',
+    ocrRecovery: 'चुने हुए पृष्ठों का पाठ OCR से निकालें',
+    ocrRecoveryHelp: 'PDF का पाठ बिगड़ा या अधूरा हो तो १, ३–५ जैसे PDF पृष्ठ नंबर दें। चुने हुए पृष्ठों पर केवल OCR चलेगा। हर PDF की 12 पृष्ठों की सीमा में इन्हें प्राथमिकता मिलेगी।',
+    ocrOriginalPages: 'मूल सूचना के OCR पृष्ठ',
+    ocrRevisedPages: 'संशोधित सूचना के OCR पृष्ठ',
+    ocrSelected: 'OCR के लिए चुने गए पृष्ठ',
+    ocrRecovered: 'OCR से पाठ मिले पृष्ठ',
     coverageTitle: 'पाठ निष्कर्षण की स्थिति',
     coverageFull: 'हर PDF पृष्ठ से कुछ पाठ मिला, लेकिन इससे सभी कथन निकलने की पुष्टि नहीं होती।',
     coveragePartial: 'कुछ PDF पृष्ठों से पाठ नहीं मिला। उन पृष्ठों के बदलाव छूट सकते हैं।',
@@ -86,6 +98,9 @@ export default function App() {
   const [report, setReport] = useState<Report | null>(null);
   const [pending, setPending] = useState(false);
   const [enableOcr, setEnableOcr] = useState(false);
+  const [ocrPages, setOcrPages] = useState<Record<DocumentRole, string>>({
+    original: '', revised: '',
+  });
   const [enableSemantic, setEnableSemantic] = useState(false);
   const [error, setError] = useState('');
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
@@ -163,6 +178,7 @@ export default function App() {
 
   function setSource(role: DocumentRole, file: File | null) {
     clearComparison();
+    setOcrPages(pages => ({ ...pages, [role]: '' }));
     if (file && (!file.name.toLowerCase().endsWith('.pdf') || file.size > MAX_FILE_BYTES)) {
       setError(t.invalidFile);
       if (role === 'original') setOriginal(null); else setRevised(null);
@@ -228,6 +244,8 @@ export default function App() {
       const body = new FormData();
       body.append('original', original); body.append('revised', revised);
       body.append('enable_ocr', String(enableOcr));
+      body.append('original_ocr_pages', ocrPages.original);
+      body.append('revised_ocr_pages', ocrPages.revised);
       body.append('enable_semantic', String(enableSemantic));
       const response = await fetch('/api/compare', { method: 'POST', body, signal: controller.signal });
       if (!response.ok) {
@@ -279,6 +297,22 @@ export default function App() {
               </label>)}
           </div>
           <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => { clearComparison(); setEnableOcr(e.target.checked); }} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
+          <details className="ocr-recovery">
+            <summary>{t.ocrRecovery}</summary>
+            <p id="ocr-recovery-help">{t.ocrRecoveryHelp}</p>
+            <div className="ocr-recovery-fields">
+              {([['original', t.ocrOriginalPages], ['revised', t.ocrRevisedPages]] as const).map(([role, label]) =>
+                <label key={role}>
+                  {label}
+                  <input type="text" value={ocrPages[role]} maxLength={160}
+                    aria-describedby="ocr-recovery-help" autoComplete="off" spellCheck={false}
+                    onChange={event => {
+                      clearComparison();
+                      setOcrPages({ ...ocrPages, [role]: event.target.value });
+                    }} />
+                </label>)}
+            </div>
+          </details>
           <label className="ocr-option"><input type="checkbox" checked={enableSemantic} onChange={(e) => { clearComparison(); setEnableSemantic(e.target.checked); }} /><span><strong>{t.semantic}</strong><small>{t.semanticNote}</small></span></label>
           <div className="upload-footer"><p>{t.note}</p><button type="submit" disabled={!original || !revised || pending} className="primary-button">{pending ? t.comparing : t.button}<span>→</span></button></div>
           {error && <p role="alert" className="error-banner">{error}</p>}
@@ -304,6 +338,8 @@ export default function App() {
             report.text_coverage === 'partial' ? t.coveragePartial : t.coverageInconclusive}</p>
           <ul className="coverage-documents">{report.documents.map(d => <li key={d.id}>
             <span>{t[d.id]} · {d.filename} · {d.pages_with_text}/{d.page_count} {t.coveragePages}</span>
+            {!!d.ocr_override_pages?.length && <p>{t.ocrSelected} · {d.ocr_override_pages.join(', ')}</p>}
+            {!!d.ocr_pages?.length && <p>{t.ocrRecovered} · {d.ocr_pages.join(', ')}</p>}
             {d.pages_without_text.length > 0 && <details>
               <summary>{t.uncovered} ({d.pages_without_text.length})</summary>
               <div className="coverage-page-links">

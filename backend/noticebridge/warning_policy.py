@@ -78,18 +78,22 @@ def warning_supported(
             return 1 <= page <= summary.page_count and int(omitted[1]) <= MAX_EXTRACTED_LINES
         if page not in summary.pages_without_text:
             return False
+        page_ocr_requested = ocr_requested or page in summary.ocr_override_pages
         if description == "has no extractable text; OCR not enabled":
-            return not ocr_requested
+            return not page_ocr_requested
         if description == "has no extractable text; comparison may be incomplete":
-            return ocr_requested
-        return ocr_requested and (
+            return page_ocr_requested
+        return page_ocr_requested and (
             description in OCR_NOT_SCANNED
             or OCR_FAILURE_RE.fullmatch(description) is not None
         )
     match = OCR_TOTAL_RE.fullmatch(message)
     if match:
         role, count = match.groups()
-        return ocr_requested and int(count) == documents[role].ocr_page_count
+        return (
+            (ocr_requested or bool(documents[role].ocr_override_pages))
+            and int(count) == documents[role].ocr_page_count
+        )
     match = CROSS_PAGE_RE.fullmatch(message)
     if match:
         role, pages = match.groups()

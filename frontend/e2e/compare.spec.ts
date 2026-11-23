@@ -613,3 +613,32 @@ test('a saved checklist adds to current selections and stays bound to the active
   await expect(deadline).not.toBeChecked();
   await expect(fee).not.toBeChecked();
 });
+
+test('page-specific OCR reports a coverage gap when a selected page exceeds the render budget', async ({
+  page,
+}) => {
+  await addSources(page);
+  const original = page.locator('#original');
+  await original.setInputFiles({
+    name: 'wide-original.pdf', mimeType: 'application/pdf', buffer: widePagePdf(13),
+  });
+  await page.getByText('Recover text on selected pages with OCR', { exact: true }).click();
+  const pages = page.getByLabel('Original notice OCR pages');
+  const compare = page.getByRole('button', { name: /Compare documents/ });
+  await pages.fill('2');
+  await compare.click();
+  await expect(page.getByRole('alert')).toContainText('outside the original PDF');
+
+  await pages.fill('१');
+  await compare.click();
+  const coverage = page.locator('.coverage-report');
+  await expect(coverage).toContainText('Selected for OCR · 1');
+  await expect(coverage).toContainText('0/1 pages yielded text');
+  await expect(page.getByText(/page would exceed OCR pixel limit/)).toBeVisible();
+  await expect(page.locator('.finding')).toHaveCount(1);
+  await expect(page.locator('.finding')).not.toContainText('Deadline: 13 December 2026');
+  await page.getByRole('button', { name: 'हिंदी' }).click();
+  await expect(coverage).toContainText('OCR के लिए चुने गए पृष्ठ · 1');
+  await page.getByLabel('मूल सूचना के OCR पृष्ठ').fill('');
+  await expect(page.locator('.results')).toHaveCount(0);
+});

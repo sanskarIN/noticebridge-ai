@@ -291,6 +291,37 @@ def test_ocr_claim_must_match_reported_document_ocr_count(source_report):
         )
 
 
+def test_selected_ocr_page_must_be_transcribed_or_uncovered(source_report):
+    original, revised, report = source_report
+    verify_as_selected = dict(
+        original=original, revised=revised, old_name="old.pdf", new_name="new.pdf",
+        original_ocr_pages=(1,),
+    )
+    with pytest.raises(InvalidReportProvenance, match="differ from the request"):
+        verify_report_provenance(report, **verify_as_selected)
+
+    report.documents[0].ocr_override_pages = [1]
+    with pytest.raises(InvalidReportProvenance, match="must contain OCR evidence or be uncovered"):
+        verify_report_provenance(report, **verify_as_selected)
+
+    report.documents[0].ocr_pages = [1]
+    report.documents[0].ocr_page_count = 1
+    with pytest.raises(InvalidReportProvenance, match="Native evidence conflicts"):
+        verify_report_provenance(report, **verify_as_selected)
+
+
+def test_selected_ocr_consent_does_not_apply_to_the_other_document(source_report):
+    original, revised, report = source_report
+    report.documents[0].ocr_page_count = report.documents[1].ocr_page_count = 1
+    report.documents[0].ocr_pages = report.documents[1].ocr_pages = [1]
+    report.documents[0].ocr_override_pages = [1]
+    with pytest.raises(InvalidReportProvenance, match="OCR was used without opt-in"):
+        verify_report_provenance(
+            report, original=original, revised=revised, old_name="old.pdf", new_name="new.pdf",
+            original_ocr_pages=(1,),
+        )
+
+
 @pytest.mark.parametrize(("rotation", "unit"), [
     (0, 1),
     (90, 1),
@@ -337,6 +368,7 @@ def test_ocr_source_cannot_claim_a_certain_structured_field_change(source_report
     finding.summary_en, finding.summary_hi = SUMMARY_MESSAGES["possible_change"]
     finding.original.extraction_method = "ocr"
     report.documents[0].ocr_page_count = 1
+    report.documents[0].ocr_pages = [1]
     with pytest.raises(InvalidReportProvenance, match="Structured field claims"):
         verify_report_provenance(
             report, original=old_bytes, revised=new_bytes,

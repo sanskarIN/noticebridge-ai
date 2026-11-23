@@ -43,6 +43,8 @@ def verify_report_provenance(
     new_name: str,
     semantic_requested: bool = False,
     ocr_requested: bool = False,
+    original_ocr_pages: tuple[int, ...] = (),
+    revised_ocr_pages: tuple[int, ...] = (),
 ) -> None:
     """Validate document IDs, uploaded bytes, source references and claims."""
     _require(len(report.documents) == 2, "Expected exactly two document summaries")
@@ -59,6 +61,8 @@ def verify_report_provenance(
         "original": (original, old_name),
         "revised": (revised, new_name),
     }
+    overrides = {"original": original_ocr_pages, "revised": revised_ocr_pages}
+    ocr_pages_by_role: dict[str, set[int]] = {}
     for role, document in summaries.items():
         source_bytes, expected_name = sources[role]
         _require(
@@ -79,7 +83,13 @@ def verify_report_provenance(
             0 <= document.ocr_page_count <= min(MAX_OCR_PAGES, document.pages_with_text),
             f"{role} OCR count is inconsistent with text-covered pages",
         )
-        if not ocr_requested:
+        selected = overrides[role]
+        _require(
+            document.ocr_override_pages == list(selected)
+            and all(1 <= page <= document.page_count for page in selected),
+            f"{role} selected OCR pages differ from the request or exceed the document",
+        )
+        if not ocr_requested and not selected:
             _require(document.ocr_page_count == 0, "OCR was used without opt-in")
         empty_pages = document.pages_without_text
         _require(
@@ -87,6 +97,21 @@ def verify_report_provenance(
             and all(1 <= page <= document.page_count for page in empty_pages),
             f"{role} uncovered page indices are invalid or duplicated",
         )
+        ocr_pages = set(document.ocr_pages)
+        _require(
+            document.ocr_pages == sorted(ocr_pages)
+            and document.ocr_page_count == len(ocr_pages)
+            and all(1 <= page <= document.page_count for page in ocr_pages)
+            and ocr_pages.isdisjoint(empty_pages),
+            f"{role} OCR page indices are inconsistent with the document summary",
+        )
+        if not ocr_requested:
+            _require(ocr_pages.issubset(selected), "OCR was used without opt-in on this page")
+        _require(
+            all(page in ocr_pages or page in empty_pages for page in selected),
+            f"{role} selected OCR pages must contain OCR evidence or be uncovered",
+        )
+        ocr_pages_by_role[role] = ocr_pages
         _require(
             document.pages_with_text + len(empty_pages) == document.page_count,
             f"{role} extraction coverage does not account for every page",
@@ -140,10 +165,18 @@ def verify_report_provenance(
             "Evidence points to a page reported without source text",
         )
         if evidence.extraction_method == "ocr":
-            _require(ocr_requested, "OCR evidence appeared without opt-in")
             _require(
-                document.ocr_page_count > 0,
-                "OCR evidence is absent from the document summary",
+                ocr_requested or evidence.page in overrides[role],
+                "OCR evidence appeared without opt-in",
+            )
+            _require(
+                evidence.page in ocr_pages_by_role[role],
+                "OCR evidence page is absent from the document summary",
+            )
+        else:
+            _require(
+                evidence.page not in ocr_pages_by_role[role],
+                "Native evidence conflicts with a reported OCR page",
             )
 
     # Every AI suggestion must be traceable to the original unmatched

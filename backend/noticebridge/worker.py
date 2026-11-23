@@ -10,7 +10,7 @@ import json
 import sys
 
 from .compare import compare_documents
-from .extract import MAX_UPLOAD_BYTES, InvalidDocument, extract_pdf
+from .extract import MAX_UPLOAD_BYTES, InvalidDocument, extract_pdf, validate_ocr_pages
 from .semantic import propose_semantic_matches
 
 MAX_B64_CHARS = 4 * ((MAX_UPLOAD_BYTES + 2) // 3)
@@ -54,13 +54,17 @@ def main() -> int:
             raise InvalidDocument("Malformed comparison request")
         original, old_name = _decode_pdf(request.get("original"))
         revised, new_name = _decode_pdf(request.get("revised"))
+        old_pages = validate_ocr_pages(request.get("original_ocr_pages", []))
+        new_pages = validate_ocr_pages(request.get("revised_ocr_pages", []))
         old_document = extract_pdf(
             original, document_id="original", filename=old_name,
             enable_ocr=request["enable_ocr"],
+            ocr_override_pages=old_pages,
         )
         new_document = extract_pdf(
             revised, document_id="revised", filename=new_name,
             enable_ocr=request["enable_ocr"],
+            ocr_override_pages=new_pages,
         )
         report = compare_documents(old_document, new_document)
         if request.get("enable_semantic", False):

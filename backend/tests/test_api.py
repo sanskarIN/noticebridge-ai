@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from noticebridge.api import app
@@ -92,6 +93,77 @@ def test_api_ocr_form_flag_is_forwarded(pdf_bytes, monkeypatch):
     assert response.status_code == 200
     assert enabled == [True]
     assert len(response.json()["documents"][0]["sha256"]) == 64
+
+
+@pytest.mark.parametrize(("selection", "error"), [
+    ("3-2", "Original notice: OCR ranges"),
+    ("2", "outside the original PDF"),
+])
+def test_ocr_selection_errors_include_the_document_role(pdf_bytes, selection, error):
+    pdf = pdf_bytes([["Deadline: 13 December 2026"]])
+    response = client.post("/api/compare", data={"original_ocr_pages": selection}, files={
+        "original": ("a.pdf", pdf, "application/pdf"),
+        "revised": ("b.pdf", pdf, "application/pdf"),
+    })
+    assert response.status_code == 422
+    assert error in response.json()["detail"]
+
+
+def test_full_ocr_recovers_visible_text_when_the_embedded_mapping_is_wrong():
+    import shutil
+    import subprocess
+
+    import pymupdf as fitz
+
+    if not shutil.which("tesseract"):
+        pytest.skip("Tesseract CLI is optional")
+    languages = subprocess.run(
+        ["tesseract", "--list-langs"], check=True, capture_output=True, text=True,
+    ).stdout.splitlines()
+    if not {"eng", "hin"}.issubset(languages):
+        pytest.skip("Tesseract English and Hindi data are required")
+
+    def notice(date, malformed_mapping=False):
+        with fitz.open() as document:
+            page = document.new_page(width=600, height=200)
+            page.insert_text((40, 90), f"Application deadline: {date} December 2026", fontsize=24)
+            if malformed_mapping:
+                font_xref = page.get_fonts()[0][0]
+                cmap = document.get_new_xref()
+                document.update_object(cmap, "<< >>")
+                document.update_stream(cmap, b"""
+/CIDInit /ProcSet findresource begin 12 dict begin begincmap
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
+/CMapName /Scrambled def /CMapType 2 def
+1 begincodespacerange <00> <FF> endcodespacerange
+2 beginbfrange <41> <5A> <0061> <61> <7A> <0044> endbfrange
+endcmap CMapName currentdict /CMap defineresource pop end end""")
+                document.xref_set_key(font_xref, "ToUnicode", f"{cmap} 0 R")
+            return document.tobytes()
+
+    original, updated = notice(13), notice(14, malformed_mapping=True)
+    files = {
+        "original": ("a.pdf", original, "application/pdf"),
+        "revised": ("b.pdf", updated, "application/pdf"),
+    }
+    baseline = client.post("/api/compare", files=files)
+    assert baseline.status_code == 200
+    assert all(
+        finding["revised"] is None or "Application deadline" not in finding["revised"]["text"]
+        for finding in baseline.json()["findings"]
+    )
+    response = client.post("/api/compare", files=files, data={"revised_ocr_pages": "१"})
+    assert response.status_code == 200, response.text
+    output = response.json()
+    assert output["documents"][0]["ocr_pages"] == []
+    assert output["documents"][1]["ocr_override_pages"] == [1]
+    assert output["documents"][1]["ocr_pages"] == [1]
+    finding, = output["findings"]
+    assert finding["status"] == "possible_change"
+    assert finding["revised"]["extraction_method"] == "ocr"
+    delta, = finding["field_changes"]
+    assert delta["revised"]["canonical"] == "2026-12-14"
+    assert delta["outcome"] == "uncertain"
 
 
 def test_blank_pdfs_do_not_claim_successful_comparison(pdf_bytes):

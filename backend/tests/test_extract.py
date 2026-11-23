@@ -1,6 +1,6 @@
 import pytest
 
-from noticebridge.extract import InvalidDocument, extract_pdf
+from noticebridge.extract import InvalidDocument, extract_pdf, parse_ocr_selection
 
 
 def test_real_page_and_bbox(pdf_bytes):
@@ -87,12 +87,12 @@ def test_source_digest_and_native_provenance(pdf_bytes):
 
 
 def test_ocr_is_opt_in_and_skips_native_text(pdf_bytes, monkeypatch):
-    import pymupdf as fitz
+    from noticebridge import extract
 
     def forbidden(*args, **kwargs):
         raise AssertionError("OCR must not run without opt-in or on native text")
 
-    monkeypatch.setattr(fitz.Page, "get_textpage_ocr", forbidden)
+    monkeypatch.setattr(extract, "_extract_ocr_dict", forbidden)
     native = extract_pdf(pdf_bytes([["Exam notice"]]), document_id="original",
                          filename="native.pdf", enable_ocr=True)
     assert native.summary.ocr_page_count == 0
@@ -100,13 +100,84 @@ def test_ocr_is_opt_in_and_skips_native_text(pdf_bytes, monkeypatch):
     assert "OCR not enabled" in blank.warnings[0]
 
 
-def test_missing_tesseract_is_reported_not_fabricated(pdf_bytes, monkeypatch):
+@pytest.mark.parametrize(("selection", "expected"), [
+    ("", ()),
+    ("३–५, 1, 4", (1, 3, 4, 5)),
+    ("  80 , 2-2 ", (2, 80)),
+])
+def test_parse_selected_ocr_pages(selection, expected):
+    assert parse_ocr_selection(selection) == expected
+
+
+@pytest.mark.parametrize("selection", ["0", "81", "5-3", "1-13", "1,,2", "1,foo", "1" * 161])
+def test_reject_invalid_ocr_page_selection(selection):
+    with pytest.raises(InvalidDocument):
+        parse_ocr_selection(selection)
+
+
+def test_explicit_ocr_reserves_budget_and_replaces_the_native_layer(pdf_bytes, monkeypatch):
+    from noticebridge import extract
+
+    seen_pages = []
+
+    def ocr_dict(page):
+        seen_pages.append(page.number + 1)
+        return page.get_text("dict", flags=0)
+
+    monkeypatch.setattr(extract, "MAX_OCR_PAGES", 2)
+    monkeypatch.setattr(extract, "_extract_ocr_dict", ocr_dict)
+    result = extract_pdf(
+        pdf_bytes([[], [], ["Selected OCR passage"], ["Unselected native passage"]]),
+        document_id="original", filename="notice.pdf", enable_ocr=True, ocr_override_pages=(3,),
+    )
+    assert seen_pages == [1, 3]
+    assert result.summary.ocr_override_pages == [3]
+    assert result.summary.ocr_pages == [3]
+    assert result.summary.ocr_page_count == 1
+    assert result.summary.pages_without_text == [1, 2]
+    assert [(line.evidence.page, line.evidence.extraction_method) for line in result.lines] == [
+        (3, "ocr"), (4, "native"),
+    ]
+
+
+def test_selected_ocr_failure_leaves_the_unreliable_native_layer_uncovered(
+    pdf_bytes, monkeypatch,
+):
+    from noticebridge import extract
+
+    def failed(page, **options):
+        raise RuntimeError("OCR unavailable")
+
+    monkeypatch.setattr(extract, "_extract_ocr_dict", failed)
+    result = extract_pdf(
+        pdf_bytes([["Unreliable native text"], ["Keep this"]]),
+        document_id="revised", filename="notice.pdf", ocr_override_pages=(1,),
+    )
+    assert [line.text for line in result.lines] == ["Keep this"]
+    assert result.summary.ocr_override_pages == [1]
+    assert result.summary.ocr_pages == []
+    assert result.summary.pages_without_text == [1]
+    assert any("page 1 OCR unavailable" in warning for warning in result.warnings)
+
+
+def test_ocr_render_budget_counts_rounded_dimensions(monkeypatch):
     import pymupdf as fitz
+
+    from noticebridge import extract
+
+    monkeypatch.setattr(extract, "OCR_DPI", 72)
+    monkeypatch.setattr(extract, "MAX_OCR_RENDER_PIXELS", 100)
+    assert extract._within_ocr_pixel_budget(fitz.Rect(0, 0, 10, 10))
+    assert not extract._within_ocr_pixel_budget(fitz.Rect(0, 0, 9.1, 10.1))
+
+
+def test_missing_tesseract_is_reported_not_fabricated(pdf_bytes, monkeypatch):
+    from noticebridge import extract
 
     def unavailable(*args, **kwargs):
         raise RuntimeError("Tesseract unavailable")
 
-    monkeypatch.setattr(fitz.Page, "get_textpage_ocr", unavailable)
+    monkeypatch.setattr(extract, "_extract_ocr_dict", unavailable)
     document = extract_pdf(pdf_bytes([[]]), document_id="original",
                            filename="scan.pdf", enable_ocr=True)
     assert not document.lines
@@ -115,14 +186,12 @@ def test_missing_tesseract_is_reported_not_fabricated(pdf_bytes, monkeypatch):
 
 
 def test_per_document_ocr_budget_is_visible(pdf_bytes, monkeypatch):
-    import pymupdf as fitz
-
     from noticebridge import extract
 
     def unavailable(*args, **kwargs):
         raise RuntimeError("simulated OCR failure")
 
-    monkeypatch.setattr(fitz.Page, "get_textpage_ocr", unavailable)
+    monkeypatch.setattr(extract, "_extract_ocr_dict", unavailable)
     monkeypatch.setattr(extract, "MAX_OCR_PAGES", 1)
     document = extract_pdf(pdf_bytes([[], [], []]), document_id="revised",
                            filename="scan.pdf", enable_ocr=True)
@@ -191,6 +260,47 @@ def test_rotated_source_geometry_is_marked_for_viewer():
     assert evidence.extraction_method == "native"
 
 
+def test_rotated_scaled_ocr_boxes_overlap_the_visible_source():
+    import shutil
+    import subprocess
+
+    import pymupdf as fitz
+
+    if not shutil.which("tesseract"):
+        pytest.skip("Tesseract CLI is optional")
+    languages = subprocess.run(
+        ["tesseract", "--list-langs"], check=True, capture_output=True, text=True,
+    ).stdout.splitlines()
+    if not {"eng", "hin"}.issubset(languages):
+        pytest.skip("Tesseract English and Hindi data are required")
+
+    with fitz.open() as document:
+        for rotation, position in (
+            (0, (140, 200)), (90, (240, 570)), (180, (490, 400)), (270, (240, 180)),
+        ):
+            page = document.new_page(width=610, height=700)
+            page.insert_text(
+                position, "Application deadline: 14 December 2026", fontsize=20, rotate=rotation,
+            )
+            page.set_cropbox(fitz.Rect(55, 55, 555, 660))
+            page.set_rotation(rotation)
+            document.xref_set_key(page.xref, "UserUnit", "2")
+        payload = document.tobytes()
+    native = extract_pdf(payload, document_id="original", filename="native.pdf")
+    recovered = extract_pdf(
+        payload, document_id="original", filename="native.pdf",
+        ocr_override_pages=(1, 2, 3, 4),
+    )
+    assert recovered.summary.ocr_pages == [1, 2, 3, 4]
+    for source, ocr in zip(native.lines, recovered.lines, strict=True):
+        assert ocr.evidence.page == source.evidence.page
+        assert ocr.evidence.page_rotation == source.evidence.page_rotation
+        assert "14 December 2026" in " ".join(ocr.text.split())
+        native_box, ocr_box = fitz.Rect(source.evidence.bbox), fitz.Rect(ocr.evidence.bbox)
+        area = min(native_box.get_area(), ocr_box.get_area())
+        assert (native_box & ocr_box).get_area() > area * 0.8
+
+
 def test_real_hindi_scan_ocr_with_installed_language_pack():
     """Optional integration smoke test: all text must come from raster OCR."""
     import shutil
@@ -236,12 +346,12 @@ def test_real_hindi_scan_ocr_with_installed_language_pack():
 
 
 def test_ocr_missing_text_warning_retains_document_and_page(pdf_bytes, monkeypatch):
-    import pymupdf
+    from noticebridge import extract
 
     def unavailable(*args, **kwargs):
         raise RuntimeError("Tesseract unavailable")
 
-    monkeypatch.setattr(pymupdf.Page, "get_textpage_ocr", unavailable)
+    monkeypatch.setattr(extract, "_extract_ocr_dict", unavailable)
     document = extract_pdf(
         pdf_bytes([[]]), document_id="original", filename="scanned.pdf",
         enable_ocr=True,

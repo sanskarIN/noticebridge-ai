@@ -58,6 +58,8 @@ type DocumentSummary = {
   has_extractable_text: boolean;
   sha256: string;
   ocr_page_count: number;
+  ocr_pages?: number[];
+  ocr_override_pages?: number[];
   pages_with_text: number;
   pages_without_text: number[];
 };
