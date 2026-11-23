@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument
 from .models import ComparisonReport
+from .provenance import InvalidReportProvenance, verify_report_provenance
 
 NATIVE_TIMEOUT_SECONDS = 45
 OCR_TIMEOUT_SECONDS = 120
@@ -137,6 +138,11 @@ def run_isolated_comparison(
         message = result.get("message")
         raise InvalidDocument(message if isinstance(message, str) else "Invalid PDF document")
     try:
-        return ComparisonReport.model_validate(result)
-    except ValidationError as exc:
+        report = ComparisonReport.model_validate(result)
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name=old_name, new_name=new_name,
+        )
+        return report
+    except (ValidationError, InvalidReportProvenance) as exc:
         raise ProcessingFailed("PDF comparison worker returned invalid evidence") from exc
