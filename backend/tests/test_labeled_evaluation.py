@@ -1,0 +1,361 @@
+"""Labeled evaluation reports exact evidence-pair metrics, not vague accuracy."""
+
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+BENCHMARK_DIR = Path(__file__).resolve().parents[1] / "benchmarks"
+sys.path.insert(0, str(BENCHMARK_DIR))
+from evaluate_labeled import evaluate_labeled  # noqa: E402
+
+
+def _dataset(tmp_path, pdf_bytes, *, changed=True, labels=None):
+    old = pdf_bytes([["Deadline: 13 December 2026"]])
+    new_text = "Deadline: 14 December 2026" if changed else "Deadline: 13 December 2026"
+    new = pdf_bytes([[new_text]])
+    (tmp_path / "original.pdf").write_bytes(old)
+    (tmp_path / "revised.pdf").write_bytes(new)
+    pairs = labels if labels is not None else [{
+        "original_page": 1,
+        "original_text": "Deadline: 13 December 2026",
+        "revised_page": 1,
+        "revised_text": new_text,
+    }]
+    manifest = tmp_path / "labels.json"
+    manifest.write_text(json.dumps({
+        "version": 1,
+        "cases": [{
+            "id": "fictional_pair",
+            "original": "original.pdf",
+            "revised": "revised.pdf",
+            "expected_pairs": pairs,
+        }],
+    }), encoding="utf-8")
+    return manifest
+
+
+def test_labeled_changed_pair_metrics(tmp_path, pdf_bytes):
+    result = evaluate_labeled(_dataset(tmp_path, pdf_bytes))
+    assert result["precision"] == 1
+    assert result["recall"] == 1
+    assert result["pair_counts"] == {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "unsupported_confirmed_changes": 0,
+    }
+    assert result["incomplete_case_count"] == 0
+    assert result["dataset"] == "operator-supplied labels; not independently verified"
+
+
+def test_false_positive_is_visible_and_does_not_invent_recall(tmp_path, pdf_bytes):
+    result = evaluate_labeled(_dataset(tmp_path, pdf_bytes, labels=[]))
+    assert result["pair_counts"]["false_positive"] == 1
+    assert result["pair_counts"]["unsupported_confirmed_changes"] == 1
+    assert result["precision"] == 0
+    assert result["recall"] is None
+
+
+def test_no_predictions_and_no_gold_has_undefined_metrics(tmp_path, pdf_bytes):
+    result = evaluate_labeled(_dataset(tmp_path, pdf_bytes, changed=False, labels=[]))
+    assert result["pair_counts"]["true_positive"] == 0
+    assert result["precision"] is None
+    assert result["recall"] is None
+
+
+def test_duplicate_labeled_occurrences_not_collapsed(tmp_path, pdf_bytes):
+    pair = {
+        "original_page": 1,
+        "original_text": "Deadline: 13 December 2026",
+        "revised_page": 1,
+        "revised_text": "Deadline: 14 December 2026",
+    }
+    result = evaluate_labeled(_dataset(tmp_path, pdf_bytes, labels=[pair, pair]))
+    assert result["pair_counts"]["true_positive"] == 1
+    assert result["pair_counts"]["false_negative"] == 1
+    assert result["recall"] == 0.5
+
+
+@pytest.mark.parametrize("file_path", [
+    "../outside.pdf", "/tmp/outside.pdf", "notice.txt",
+    r"C:\\private\\outside.pdf", r"..\\outside.pdf",
+    r"\\\\server\\share\\outside.pdf",
+])
+def test_manifest_does_not_read_outside_or_non_pdf_files(
+    tmp_path, pdf_bytes, file_path
+):
+    manifest = _dataset(tmp_path, pdf_bytes)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["cases"][0]["original"] = file_path
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="relative .pdf"):
+        evaluate_labeled(manifest)
+
+
+def test_symlink_outside_dataset_is_rejected(tmp_path, pdf_bytes):
+    manifest = _dataset(tmp_path, pdf_bytes)
+    outsider = tmp_path.parent / "outside-fixture.pdf"
+    outsider.write_bytes(pdf_bytes([["Outside"]]))
+    try:
+        (tmp_path / "linked.pdf").symlink_to(outsider)
+    except OSError:
+        pytest.skip("Windows test account cannot create symlinks")
+    payload = json.loads(manifest.read_text())
+    payload["cases"][0]["original"] = "linked.pdf"
+    manifest.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="escapes"):
+        evaluate_labeled(manifest)
+
+
+def test_incomplete_gold_pair_and_duplicate_case_ids_are_rejected(tmp_path, pdf_bytes):
+    manifest = _dataset(tmp_path, pdf_bytes)
+    payload = json.loads(manifest.read_text())
+    payload["cases"][0]["expected_pairs"] = [{"original_page": 1}]
+    manifest.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="incomplete"):
+        evaluate_labeled(manifest)
+
+    payload["cases"][0]["expected_pairs"] = []
+    payload["cases"].append(dict(payload["cases"][0]))
+    manifest.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="unique"):
+        evaluate_labeled(manifest)
+
+
+def test_labeled_evaluation_never_uses_ollama(monkeypatch, tmp_path, pdf_bytes):
+    import evaluate_labeled as module
+
+    runner = module.run_isolated_comparison
+
+    def capture(*args, **kwargs):
+        assert kwargs["enable_semantic"] is False
+        return runner(*args, **kwargs)
+
+    monkeypatch.setattr(module, "run_isolated_comparison", capture)
+    result = evaluate_labeled(_dataset(tmp_path, pdf_bytes))
+    assert result["case_count"] == 1
+
+
+def _v2_manifest(manifest, *, source_kind="fictional", label_method="author_reviewed"):
+    root = manifest.parent
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["version"] = 2
+    for case in payload["cases"]:
+        case["original_sha256"] = hashlib.sha256(
+            (root / case["original"]).read_bytes()
+        ).hexdigest()
+        case["revised_sha256"] = hashlib.sha256(
+            (root / case["revised"]).read_bytes()
+        ).hexdigest()
+        case["source_kind"] = source_kind
+        case["label_method"] = label_method
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    return manifest
+
+
+def test_pinned_v2_corpus_preserves_metrics_and_provenance(tmp_path, pdf_bytes):
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    report = evaluate_labeled(manifest)
+    assert report["manifest_version"] == 2
+    assert len(report["manifest_sha256"]) == 64
+    assert report["source_kind_case_counts"] == {"fictional": 1}
+    assert report["label_method_case_counts"] == {"author_reviewed": 1}
+    assert report["cases"][0]["source_kind"] == "fictional"
+    assert report["precision"] == report["recall"] == 1
+
+
+def test_pinned_v2_corpus_fails_if_pdf_bytes_are_modified(tmp_path, pdf_bytes):
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    (tmp_path / "original.pdf").write_bytes(
+        pdf_bytes([["Deadline: 11 December 2026"]])
+    )
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        evaluate_labeled(manifest)
+
+
+def test_semantically_equal_manifest_has_stable_fingerprint(tmp_path, pdf_bytes):
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    first = evaluate_labeled(manifest)["manifest_sha256"]
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    manifest.write_text(json.dumps(data, sort_keys=True, indent=5), encoding="utf-8")
+    second = evaluate_labeled(manifest)["manifest_sha256"]
+    assert first == second
+
+
+@pytest.mark.parametrize(("mutation", "error"), [
+    ({"original_sha256": "abc"}, "original_sha256"),
+    ({"revised_sha256": "F" * 64}, "revised_sha256"),
+    ({"source_kind": "unknown"}, "source_kind"),
+    ({"label_method": "generated_by_ai"}, "label_method"),
+    ({"label_method": []}, "label_method"),
+])
+def test_v2_bad_source_metadata_is_rejected(
+    tmp_path, pdf_bytes, mutation, error
+):
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    data["cases"][0].update(mutation)
+    manifest.write_text(json.dumps(data), encoding="utf-8")
+    with pytest.raises(ValueError, match=error):
+        evaluate_labeled(manifest)
+
+
+def test_explicit_pinned_source_gate_rejects_v1(tmp_path, pdf_bytes, monkeypatch):
+    from evaluate_labeled import main
+
+    manifest = _dataset(tmp_path, pdf_bytes)
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--require-pinned-sources"]
+    )
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
+
+
+def test_legacy_v1_still_available_but_unpinned(tmp_path, pdf_bytes):
+    manifest = _dataset(tmp_path, pdf_bytes)
+    report = evaluate_labeled(manifest)
+    assert report["manifest_version"] == 1
+    assert report["source_kind_case_counts"] == {"unrecorded": 1}
+    assert report["label_method_case_counts"] == {"unrecorded": 1}
+
+
+def test_pin_tool_preserves_independent_labels_and_detects_mutations(tmp_path, pdf_bytes):
+    from pin_labeled_dataset import pin_dataset
+
+    source = _dataset(tmp_path, pdf_bytes)
+    original_labels = json.loads(source.read_text())["cases"][0]["expected_pairs"]
+    output = tmp_path / "labels-pinned.json"
+    result = pin_dataset(
+        source, output=output, source_kind="fictional",
+        label_method="author_reviewed",
+    )
+    assert result == output.resolve()
+    pinned = json.loads(output.read_text())
+    assert pinned["cases"][0]["expected_pairs"] == original_labels
+    assert evaluate_labeled(output)["precision"] == 1
+
+    (tmp_path / "revised.pdf").write_bytes(
+        pdf_bytes([["Deadline: 16 December 2026"]])
+    )
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        evaluate_labeled(output)
+
+
+def test_pin_tool_rejects_existing_output_and_invalid_metadata(tmp_path, pdf_bytes):
+    from pin_labeled_dataset import pin_dataset
+
+    source = _dataset(tmp_path, pdf_bytes)
+    output = tmp_path / "labels-pinned.json"
+    options = {"source_kind": "fictional", "label_method": "synthetic"}
+    pin_dataset(source, output=output, **options)
+    with pytest.raises(FileExistsError):
+        pin_dataset(source, output=output, **options)
+    with pytest.raises(ValueError, match="explicitly declared"):
+        pin_dataset(
+            source, output=tmp_path / "new.json",
+            source_kind="invalid", label_method="synthetic",
+        )
+    with pytest.raises(ValueError, match="manifest folder"):
+        pin_dataset(
+            source, output=tmp_path.parent / "outside.json", **options
+        )
+
+
+def test_pin_tool_refuses_source_file_with_parent_traversal(tmp_path, pdf_bytes):
+    from pin_labeled_dataset import pin_dataset
+
+    source = _dataset(tmp_path, pdf_bytes)
+    data = json.loads(source.read_text())
+    data["cases"][0]["original"] = "../secret.pdf"
+    source.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="relative .pdf"):
+        pin_dataset(
+            source, output=tmp_path / "pinned.json",
+            source_kind="fictional", label_method="synthetic",
+        )
+    assert not (tmp_path / "pinned.json").exists()
+
+
+def test_labeled_evaluation_ocr_opt_in_is_explicit_and_never_enables_ai(
+    monkeypatch, tmp_path, pdf_bytes
+):
+    import evaluate_labeled as module
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    real_runner = module.run_isolated_comparison
+    choices = []
+
+    def trace(*args, **kwargs):
+        choices.append((kwargs["enable_ocr"], kwargs["enable_semantic"]))
+        # Native-text PDFs need no actual Tesseract installation.
+        kwargs["enable_ocr"] = False
+        return real_runner(*args, **kwargs)
+
+    monkeypatch.setattr(module, "run_isolated_comparison", trace)
+    without = module.evaluate_labeled(manifest)
+    with_ocr = module.evaluate_labeled(manifest, enable_ocr=True)
+    assert choices == [(False, False), (True, False)]
+    assert without["ocr_enabled"] is False
+    assert with_ocr["ocr_enabled"] is True
+    assert with_ocr["ocr_page_count"] == 0
+    assert with_ocr["pages_without_text_count"] == 0
+    assert without["pair_counts"] == with_ocr["pair_counts"]
+
+
+def test_ocr_evaluation_reports_incomplete_scanned_pages_without_hallucinating(
+    tmp_path, pdf_bytes
+):
+    import evaluate_labeled as module
+
+    empty = pdf_bytes([[]])
+    (tmp_path / "original.pdf").write_bytes(empty)
+    (tmp_path / "revised.pdf").write_bytes(empty)
+    payload = {
+        "version": 1,
+        "cases": [{
+            "id": "empty_scan",
+            "original": "original.pdf",
+            "revised": "revised.pdf",
+            "expected_pairs": [],
+        }],
+    }
+    manifest = tmp_path / "labels.json"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    report = module.evaluate_labeled(manifest, enable_ocr=False)
+    assert report["ocr_enabled"] is False
+    assert report["ocr_page_count"] == 0
+    assert report["pages_without_text_count"] == 2
+    assert report["incomplete_case_count"] == 1
+    assert report["precision"] is None
+    assert report["recall"] is None
+
+
+def test_cli_forwards_ocr_flag_but_keeps_labeled_sources_local(
+    tmp_path, pdf_bytes, monkeypatch, capsys
+):
+    import evaluate_labeled as module
+
+    manifest = _dataset(tmp_path, pdf_bytes)
+    captured = {}
+
+    def fake_evaluate(path, *, enable_ocr=False):
+        captured.update({"path": path, "enable_ocr": enable_ocr})
+        return {
+            "manifest_version": 1,
+            "precision": None,
+            "recall": None,
+            "ocr_enabled": enable_ocr,
+        }
+
+    monkeypatch.setattr(module, "evaluate_labeled", fake_evaluate)
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--enable-ocr"]
+    )
+    assert module.main() == 0
+    assert captured == {"path": manifest, "enable_ocr": True}
+    assert json.loads(capsys.readouterr().out)["ocr_enabled"] is True
+

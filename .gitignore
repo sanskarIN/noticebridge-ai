@@ -221,3 +221,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# NoticeBridge AI: frontend builds, browser test artifacts and local secrets
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/playwright-report/
+frontend/test-results/
+frontend/coverage/
+demo-output/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example

@@ -1,0 +1,199 @@
+"""Disposable PDF comparison worker with a wall-clock processing deadline.
+
+This is process separation, not a security sandbox. Public internet deployments
+still need OS-level sandboxing, authentication, rate limiting and monitoring.
+"""
+
+import base64
+import json
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+
+from pydantic import ValidationError
+
+from .extract import MAX_UPLOAD_BYTES, InvalidDocument
+from .models import ComparisonReport
+from .provenance import InvalidReportProvenance, verify_report_provenance
+from .windows_job import WindowsWorkerJob
+
+NATIVE_TIMEOUT_SECONDS = 45
+OCR_TIMEOUT_SECONDS = 120
+SEMANTIC_TIMEOUT_SECONDS = 110
+OCR_SEMANTIC_TIMEOUT_SECONDS = 210
+MAX_RESULT_BYTES = 64 * 1024 * 1024
+
+# Explicitly avoid forwarding unrelated service credentials or cloud tokens to
+# a process parsing untrusted PDF data. Runtime libraries and Tesseract need
+# selected path, locale and temporary-directory settings.
+WORKER_ENV_KEYS = (
+    "PATH", "PYTHONPATH", "VIRTUAL_ENV", "SYSTEMROOT", "WINDIR",
+    "TESSDATA_PREFIX", "LANG", "LC_ALL", "LC_CTYPE",
+    "TMPDIR", "TMP", "TEMP", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
+    "PYTHONUTF8", "PYTHONIOENCODING", "NOTICEBRIDGE_LOCAL_MODEL",
+)
+
+
+def _worker_environment() -> dict[str, str]:
+    return {key: os.environ[key] for key in WORKER_ENV_KEYS if key in os.environ}
+
+
+
+class ProcessingTimedOut(RuntimeError):
+    """A document worker exceeded the configured wall-clock deadline."""
+
+
+class ProcessingFailed(RuntimeError):
+    """A worker crashed or returned an invalid response."""
+
+
+def _kill_worker(process: subprocess.Popen[bytes]) -> None:
+    """Stop the worker (and its process group on POSIX) after a timeout."""
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+            return
+        except ProcessLookupError:
+            return
+        except OSError:
+            pass
+    try:
+        process.kill()
+    except ProcessLookupError:
+        pass
+
+
+def _attach_windows_job(process: subprocess.Popen[bytes]) -> WindowsWorkerJob | None:
+    """Constrain Windows workers before sending any untrusted PDF bytes."""
+    if os.name != "nt":
+        return None
+    try:
+        return WindowsWorkerJob(process.pid)
+    except Exception as exc:
+        # An unexpected ctypes/Win32 setup exception must not strand a
+        # newly spawned, unassigned worker. The PDF bytes are still unread.
+        _kill_worker(process)
+        try:
+            process.communicate(timeout=2)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        raise ProcessingFailed("Windows worker process containment unavailable") from exc
+
+
+def run_isolated_comparison(
+    original: bytes,
+    revised: bytes,
+    *,
+    old_name: str,
+    new_name: str,
+    enable_ocr: bool,
+    enable_semantic: bool = False,
+) -> ComparisonReport:
+    """Parse and compare both PDFs outside the API process.
+
+    The OS process is disposable and never receives server credentials through
+    arguments. A timed-out worker cannot keep the request waiting indefinitely.
+    """
+    if (
+        not original
+        or not revised
+        or len(original) > MAX_UPLOAD_BYTES
+        or len(revised) > MAX_UPLOAD_BYTES
+    ):
+        raise InvalidDocument("Each PDF must be nonempty and at most 10 MiB")
+    payload = json.dumps(
+        {
+            "original": {
+                "filename": old_name,
+                "base64": base64.b64encode(original).decode("ascii"),
+            },
+            "revised": {
+                "filename": new_name,
+                "base64": base64.b64encode(revised).decode("ascii"),
+            },
+            "enable_ocr": enable_ocr,
+            "enable_semantic": enable_semantic,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    if enable_semantic:
+        timeout = OCR_SEMANTIC_TIMEOUT_SECONDS if enable_ocr else SEMANTIC_TIMEOUT_SECONDS
+    else:
+        timeout = OCR_TIMEOUT_SECONDS if enable_ocr else NATIVE_TIMEOUT_SECONDS
+    try:
+        # Real stdout is redirected to a private temporary file rather than
+        # subprocess.PIPE: communicate() otherwise accumulates unbounded worker
+        # output in API memory *before* we can enforce MAX_RESULT_BYTES.
+        # The worker itself caps JSON output and POSIX RLIMIT_FSIZE is a second
+        # limit. Public Windows hosting still requires OS disk quotas.
+        with tempfile.TemporaryFile(mode="w+b") as output_file:
+            process = subprocess.Popen(
+                [sys.executable, "-m", "noticebridge.worker_entry",
+                 "--ocr" if enable_ocr else "--native"],
+                stdin=subprocess.PIPE,
+                stdout=output_file,
+                stderr=subprocess.DEVNULL,
+                env=_worker_environment(),
+                start_new_session=os.name == "posix",
+            )
+            job = _attach_windows_job(process)
+            try:
+                try:
+                    # Nothing from the uploaded PDF reaches the worker until
+                    # Windows job assignment succeeds.
+                    process.communicate(input=payload, timeout=timeout)
+                except subprocess.TimeoutExpired as exc:
+                    if job is None or not job.terminate():
+                        _kill_worker(process)
+                    try:
+                        process.communicate(timeout=2)
+                    except (subprocess.TimeoutExpired, OSError):
+                        pass
+                    raise ProcessingTimedOut(
+                        "PDF comparison exceeded its processing time limit"
+                    ) from exc
+                except BaseException:
+                    # Broken pipes, interrupted writes and other unexpected
+                    # failures must also kill/reap the child process tree.
+                    # The normal completion path below only handles success.
+                    if job is None or not job.terminate():
+                        _kill_worker(process)
+                    try:
+                        process.communicate(timeout=2)
+                    except (subprocess.TimeoutExpired, OSError):
+                        pass
+                    raise
+
+                if process.returncode != 0:
+                    raise ProcessingFailed("PDF comparison worker failed")
+                output_file.seek(0)
+                output = output_file.read(MAX_RESULT_BYTES + 1)
+            finally:
+                # Closing the job also terminates surviving OCR descendants.
+                if job is not None:
+                    job.close()
+    except OSError as exc:
+        raise ProcessingFailed("PDF comparison worker could not start") from exc
+
+    if len(output) > MAX_RESULT_BYTES:
+        raise ProcessingFailed("PDF comparison result exceeded the safety limit")
+    try:
+        result = json.loads(output)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProcessingFailed("PDF comparison worker returned invalid JSON") from exc
+    if isinstance(result, dict) and result.get("error") == "invalid_document":
+        message = result.get("message")
+        raise InvalidDocument(message if isinstance(message, str) else "Invalid PDF document")
+    try:
+        report = ComparisonReport.model_validate(result)
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name=old_name, new_name=new_name,
+            semantic_requested=enable_semantic, ocr_requested=enable_ocr,
+        )
+        return report
+    except (ValidationError, InvalidReportProvenance) as exc:
+        raise ProcessingFailed("PDF comparison worker returned invalid evidence") from exc
