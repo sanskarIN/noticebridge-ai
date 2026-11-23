@@ -92,14 +92,28 @@ def test_forged_report_fields_are_rejected(source_report, mutation, expected_err
         )
 
 
-def test_valid_ai_suggestion_stays_unverified(source_report):
-    original, revised, report = source_report
-    finding = report.findings[0]
-    finding.status = "possible_change"
-    finding.match_method = "semantic_proposal"
-    finding.similarity = 0
-    finding.field_changes = []
-    report.semantic_assistance = "proposals_added"
+@pytest.fixture
+def ai_report(pdf_bytes, monkeypatch):
+    from noticebridge import semantic
+
+    original = pdf_bytes([["Deadline: 13 December 2026"]])
+    revised = pdf_bytes([["Apply by 14 December 2026"]])
+    old_doc = extract_pdf(original, document_id="original", filename="old.pdf")
+    new_doc = extract_pdf(revised, document_id="revised", filename="new.pdf")
+    deterministic = compare_documents(old_doc, new_doc)
+    old_id = next(f.id for f in deterministic.findings if f.original)
+    new_id = next(f.id for f in deterministic.findings if f.revised)
+    monkeypatch.setattr(semantic, "_model_pairs", lambda *args: {
+        "pairs": [{"original_id": old_id, "revised_id": new_id}]
+    })
+    report = semantic.propose_semantic_matches(deterministic)
+    assert report.semantic_assistance == "proposals_added"
+    assert len(report.findings) == 3
+    return original, revised, report
+
+
+def test_valid_ai_suggestion_stays_unverified(ai_report):
+    original, revised, report = ai_report
     verify_report_provenance(
         report, original=original, revised=revised,
         old_name="old.pdf", new_name="new.pdf",
@@ -129,19 +143,48 @@ def test_parent_rejects_a_forged_worker_payload(monkeypatch, source_report):
         )
 
 
-def test_ai_output_cannot_appear_without_explicit_opt_in(source_report):
-    original, revised, report = source_report
-    finding = report.findings[0]
-    finding.status = "possible_change"
-    finding.match_method = "semantic_proposal"
-    finding.similarity = 0
-    finding.field_changes = []
-    report.semantic_assistance = "proposals_added"
+def test_ai_output_cannot_appear_without_explicit_opt_in(ai_report):
+    original, revised, report = ai_report
     with pytest.raises(InvalidReportProvenance, match="without opt-in"):
         verify_report_provenance(
             report, original=original, revised=revised,
             old_name="old.pdf", new_name="new.pdf",
             semantic_requested=False,
+        )
+
+
+@pytest.mark.parametrize(("mutation", "message"), [
+    ("drop_old", "original unmatched"),
+    ("forge_text", "original unmatched"),
+    ("double_pair", "must not reuse"),
+])
+def test_semantic_proposals_cannot_erase_or_forge_source_evidence(
+    ai_report, mutation, message
+):
+    original, revised, report = ai_report
+    proposed = next(f for f in report.findings if f.match_method == "semantic_proposal")
+    if mutation == "drop_old":
+        report.findings = [
+            f for f in report.findings
+            if not (f.status == "missing_information" and f.original)
+        ]
+        report.checklist = [
+            c for c in report.checklist if c.finding_id in {f.id for f in report.findings}
+        ]
+    elif mutation == "forge_text":
+        proposed.original.text = "Invented deadline that does not appear in unmatched evidence"
+    elif mutation == "double_pair":
+        duplicate = proposed.model_copy(deep=True)
+        duplicate.id = "ai2"
+        report.findings.append(duplicate)
+        report.checklist.append(report.checklist[-1].model_copy(
+            update={"finding_id": "ai2"}
+        ))
+    with pytest.raises(InvalidReportProvenance, match=message):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+            semantic_requested=True,
         )
 
 

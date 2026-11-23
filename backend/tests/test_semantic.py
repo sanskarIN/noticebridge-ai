@@ -42,8 +42,9 @@ def test_opt_in_model_pairing_remains_unverified_and_preserves_citations(
     monkeypatch.setattr(semantic, "_model_pairs", propose)
     result = semantic.propose_semantic_matches(unmatched_report)
     assert result.semantic_assistance == "proposals_added"
-    assert len(result.findings) == 1
-    proposal = result.findings[0]
+    assert len(result.findings) == 3
+    assert sum(f.status == "missing_information" for f in result.findings) == 2
+    proposal = next(f for f in result.findings if f.match_method == "semantic_proposal")
     assert proposal.status == "possible_change"
     assert proposal.match_method == "semantic_proposal"
     assert proposal.original.text == original_text
@@ -51,8 +52,11 @@ def test_opt_in_model_pairing_remains_unverified_and_preserves_citations(
     assert proposal.original.page == proposal.revised.page == 1
     assert not proposal.authority_verified
     assert not proposal.field_changes
-    assert len(result.checklist) == 1
-    assert result.checklist[0].finding_id == proposal.id
+    assert len(result.checklist) == 3
+    assert any(item.finding_id == proposal.id for item in result.checklist)
+    assert [f.model_dump() for f in result.findings[:2]] == [
+        f.model_dump() for f in unmatched_report.findings
+    ]
     assert unmatched_report.semantic_assistance == "not_requested"
 
 
@@ -81,8 +85,10 @@ def test_duplicate_ai_suggestions_are_never_double_counted(monkeypatch, unmatche
     pair = {"original_id": old_id, "revised_id": new_id}
     monkeypatch.setattr(semantic, "_model_pairs", lambda *args: {"pairs": [pair, pair]})
     result = semantic.propose_semantic_matches(unmatched_report)
-    assert len(result.findings) == 1
-    assert result.findings[0].status == "possible_change"
+    assert len(result.findings) == 3
+    proposals = [f for f in result.findings if f.match_method == "semantic_proposal"]
+    assert len(proposals) == 1
+    assert proposals[0].status == "possible_change"
 
 
 def test_offline_model_does_not_break_deterministic_comparison(

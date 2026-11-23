@@ -115,6 +115,22 @@ def verify_report_provenance(
                 "OCR evidence appeared without opt-in",
             )
 
+    # Every AI suggestion must be traceable to the original unmatched
+    # deterministic evidence that is still present in this exact report.
+    unmatched_old = {
+        (f.category, f.original.model_dump_json())
+        for f in report.findings
+        if f.status == "missing_information" and f.original and not f.revised
+        and f.match_method == "deterministic"
+    }
+    unmatched_new = {
+        (f.category, f.revised.model_dump_json())
+        for f in report.findings
+        if f.status == "missing_information" and f.revised and not f.original
+        and f.match_method == "deterministic"
+    }
+    ai_old_used: set[tuple[str, str]] = set()
+    ai_new_used: set[tuple[str, str]] = set()
     finding_ids: set[str] = set()
     ai_proposals = 0
     for finding in report.findings:
@@ -168,6 +184,18 @@ def verify_report_provenance(
                 and finding.revised is not None,
                 "Unverified model proposals must not carry confirmed facts",
             )
+            old_ref = (finding.category, finding.original.model_dump_json())
+            new_ref = (finding.category, finding.revised.model_dump_json())
+            _require(
+                old_ref in unmatched_old and new_ref in unmatched_new,
+                "AI proposal must reference original unmatched source evidence",
+            )
+            _require(
+                old_ref not in ai_old_used and new_ref not in ai_new_used,
+                "AI proposals must not reuse an unmatched source passage",
+            )
+            ai_old_used.add(old_ref)
+            ai_new_used.add(new_ref)
         for value in finding.field_changes:
             _require(
                 value.kind == value.original.kind == value.revised.kind,

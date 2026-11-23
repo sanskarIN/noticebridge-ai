@@ -154,9 +154,9 @@ def propose_semantic_matches(report: ComparisonReport) -> ComparisonReport:
             "Local AI suggested no pairings that passed source-ID/category checks"
         )
         return result
-    excluded = claimed_originals | claimed_revisions
-    result.findings = [f for f in result.findings if f.id not in excluded] + suggestions
-    result.checklist = [c for c in result.checklist if c.finding_id not in excluded]
+    # AI is an annotation layer, never a replacement for the independently
+    # computed unmatched findings. Preserve the entire deterministic report.
+    result.findings.extend(suggestions)
     result.checklist.extend(checklists)
     result.semantic_assistance = "proposals_added"
     result.warnings.append("AI-suggested pairings require direct review of both PDF passages")
