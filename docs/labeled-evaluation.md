@@ -205,7 +205,7 @@ independently human-labeled version-2 manifest:
 PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
   evaluation/independent-pinned.json --require-pinned-sources \
   --require-independent-corpus --min-independent-cases 20 \
-  --min-independent-distinct-pairs 20 \
+  --min-independent-distinct-pairs 20 --require-distinct-independent-pairs \
   --min-precision 0.90 --min-recall 0.90 --max-unsupported-confirmed 0
 ~~~
 
@@ -227,6 +227,7 @@ An overall score can pass even while its smaller independent cohort fails:
 PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
   evaluation/mixed-pinned.json --require-pinned-sources \
   --min-independent-cases 20 --min-independent-distinct-pairs 20 \
+  --require-distinct-independent-pairs \
   --min-independent-precision 0.90 --min-independent-recall 0.90 \
   --max-independent-unsupported-confirmed 0
 ~~~
@@ -244,7 +245,13 @@ The older `--min-precision`, `--min-recall`, and
 `--max-unsupported-confirmed` flags still evaluate **all cases**. The
 minimum-independent-count and distinct-pair gates alone do not alter
 those aggregate metrics or de-duplicate repetitions when computing
-accuracy. Use the isolated accuracy gates when evaluating mixed data;
+accuracy. A minimum of 20 distinct pairs can still be accompanied by
+hundreds of repeated easy pairs, inflating micro-averaged scores.
+Use `--require-distinct-independent-pairs` to reject any repetition of
+the same two PDF SHA-256s in the independent cohort (including reversal).
+This gate does not detect semantically duplicate PDFs with different bytes
+or authenticate metadata; audit corpus construction separately.
+Use the isolated accuracy gates when evaluating mixed data;
 for a fully independent dataset, `--require-independent-corpus`
 makes the overall and independent populations equivalent.
 
