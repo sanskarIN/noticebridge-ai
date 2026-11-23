@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument
 from .models import ComparisonReport
 from .provenance import InvalidReportProvenance, verify_report_provenance
+from .windows_job import WindowsWorkerJob
 
 NATIVE_TIMEOUT_SECONDS = 45
 OCR_TIMEOUT_SECONDS = 120
@@ -62,6 +63,21 @@ def _kill_worker(process: subprocess.Popen[bytes]) -> None:
         process.kill()
     except ProcessLookupError:
         pass
+
+
+def _attach_windows_job(process: subprocess.Popen[bytes]) -> WindowsWorkerJob | None:
+    """Constrain Windows workers before sending any untrusted PDF bytes."""
+    if os.name != "nt":
+        return None
+    try:
+        return WindowsWorkerJob(process.pid)
+    except OSError as exc:
+        _kill_worker(process)
+        try:
+            process.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+        raise ProcessingFailed("Windows worker process containment unavailable") from exc
 
 
 def run_isolated_comparison(
@@ -121,22 +137,31 @@ def run_isolated_comparison(
                 env=_worker_environment(),
                 start_new_session=os.name == "posix",
             )
+            job = _attach_windows_job(process)
             try:
-                process.communicate(input=payload, timeout=timeout)
-            except subprocess.TimeoutExpired as exc:
-                _kill_worker(process)
                 try:
-                    process.communicate(timeout=2)
-                except subprocess.TimeoutExpired:
-                    pass
-                raise ProcessingTimedOut(
-                    "PDF comparison exceeded its processing time limit"
-                ) from exc
+                    # Nothing from the uploaded PDF reaches the worker until
+                    # Windows job assignment succeeds.
+                    process.communicate(input=payload, timeout=timeout)
+                except subprocess.TimeoutExpired as exc:
+                    if job is None or not job.terminate():
+                        _kill_worker(process)
+                    try:
+                        process.communicate(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    raise ProcessingTimedOut(
+                        "PDF comparison exceeded its processing time limit"
+                    ) from exc
 
-            if process.returncode != 0:
-                raise ProcessingFailed("PDF comparison worker failed")
-            output_file.seek(0)
-            output = output_file.read(MAX_RESULT_BYTES + 1)
+                if process.returncode != 0:
+                    raise ProcessingFailed("PDF comparison worker failed")
+                output_file.seek(0)
+                output = output_file.read(MAX_RESULT_BYTES + 1)
+            finally:
+                # Closing the job also terminates surviving OCR descendants.
+                if job is not None:
+                    job.close()
     except OSError as exc:
         raise ProcessingFailed("PDF comparison worker could not start") from exc
 
