@@ -4,6 +4,7 @@ Both Content-Length and the actual ASGI receive stream are checked. A reverse
 proxy must also enforce upload limits before forwarding untrusted traffic.
 """
 
+from fastapi import HTTPException
 from starlette.responses import JSONResponse
 
 from .extract import MAX_UPLOAD_BYTES
@@ -12,8 +13,11 @@ from .extract import MAX_UPLOAD_BYTES
 MAX_COMPARE_BODY_BYTES = (2 * MAX_UPLOAD_BYTES) + (1024 * 1024)
 
 
-class BodyTooLarge(Exception):
-    """The actual incoming ASGI request body exceeded its byte budget."""
+class BodyTooLarge(HTTPException):
+    """A 413 status that survives FastAPI's multipart parsing error handler."""
+
+    def __init__(self):
+        super().__init__(status_code=413, detail="Comparison upload is too large")
 
 
 class CompareBodyLimit:
