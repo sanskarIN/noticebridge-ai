@@ -142,6 +142,7 @@ def test_parent_rejects_a_forged_worker_payload(monkeypatch, source_report):
         isolation.subprocess, "Popen",
         lambda *args, **kwargs: ForgedProcess(kwargs["stdout"]),
     )
+    monkeypatch.setattr(isolation, "_attach_windows_job", lambda p: None)
     with pytest.raises(isolation.ProcessingFailed, match="invalid evidence"):
         isolation.run_isolated_comparison(
             original, revised, old_name="old.pdf", new_name="new.pdf",
