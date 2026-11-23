@@ -9,6 +9,8 @@ type ReviewPriority = {
 
 function describeFinding(finding: Finding): ReviewPriority | undefined {
   const { id, status, category } = finding;
+  const clockPriority = describeClockFinding(finding);
+  if (clockPriority) return clockPriority;
   if (status === 'contradiction') {
     return { id, rank: 0, title: 'Conflicting dates', detail: 'Check both dates in the same PDF.' };
   }
@@ -49,4 +51,32 @@ export function reviewPriorities(
     if (checked.has(finding.id) || !reviewable.has(finding.id)) return [];
     return describeFinding(finding) ?? [];
   }).sort((first, second) => first.rank - second.rank).slice(0, 3);
+}
+
+function describeClockFinding(finding: Finding): ReviewPriority | undefined {
+  const { id, category, field_changes: values } = finding;
+  const clock = values.find(change => change.kind === 'time');
+  if (!clock || clock.outcome === 'same_value') return undefined;
+
+  // Keep calendar-date moves at their existing priority and show both values in the finding.
+  const calendar = values.find(change => change.kind === 'date');
+  if (calendar?.outcome === 'changed') return undefined;
+
+  const isDeadline = category === 'deadline';
+  if (clock.outcome === 'changed' && calendar?.outcome !== 'uncertain') {
+    return {
+      id, rank: isDeadline ? 1 : 5,
+      title: isDeadline ? 'Deadline time changed' : 'Scheduled time changed',
+      detail: `${clock.original.raw} → ${clock.revised.raw}`,
+    };
+  }
+
+  const usesOcr = [finding.original, finding.revised].some(source => source?.extraction_method === 'ocr');
+  return {
+    id, rank: isDeadline ? 2 : 5,
+    title: isDeadline ? 'Deadline needs verification' : 'Scheduled time needs verification',
+    detail: usesOcr
+      ? 'Check the machine transcription against the source PDF and verify the intended time.'
+      : 'Inspect the quoted passages and confirm the intended date and time with the issuer.',
+  };
 }

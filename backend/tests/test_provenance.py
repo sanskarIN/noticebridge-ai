@@ -31,6 +31,27 @@ def test_valid_native_comparison_preserves_source_integrity(source_report):
     verify(source_report)
 
 
+def test_deadline_time_delta_is_recomputed_from_quoted_pdf_text(pdf_bytes):
+    original = pdf_bytes([["Deadline: 13 December 2026 at 5:00 PM IST"]])
+    revised = pdf_bytes([["Deadline: 13 December 2026 at 14:00 IST"]])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    (finding,) = report.findings
+    assert finding.status == "confirmed_change"
+    assert [(delta.kind, delta.outcome) for delta in finding.field_changes] == [
+        ("date", "same_value"), ("time", "changed"),
+    ]
+    clock = finding.field_changes[1]
+    assert (clock.original.canonical, clock.revised.canonical) == ("17:00", "14:00")
+    verify((original, revised, report))
+
+    clock.revised.canonical = "10:30"
+    with pytest.raises(InvalidReportProvenance, match="Structured field claims"):
+        verify((original, revised, report))
+
+
 @pytest.mark.parametrize(("mutation", "expected_error"), [
     ("wrong_sha", "fingerprint"),
     ("swapped_docs", "roles"),

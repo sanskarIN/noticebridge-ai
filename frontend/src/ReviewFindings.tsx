@@ -45,6 +45,7 @@ const categories: Record<FindingCategory, string> = {
 const valueKinds: Record<ValueChange['kind'], string> = {
   date: 'Date',
   amount: 'Amount',
+  time: 'Time',
 };
 
 const valueOutcomes: Record<ValueChange['outcome'], string> = {

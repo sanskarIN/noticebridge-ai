@@ -28,6 +28,32 @@ def test_evidence_linked_deadline_change(pdf_bytes):
     assert report.checklist[0].requires_human_verification
 
 
+@pytest.mark.parametrize(("original", "revised"), [
+    ("Reporting time for Shift 1: 17:00", "Reporting time for Shift 2: 18:00"),
+    ("Reporting time on 13 Dec 2026: 17:00", "Reporting time on 14 Dec 2026: 18:00"),
+    ("Reporting time: 17:00 IST", "Reporting time: 18:00 UTC"),
+    ("Reporting time: 17:00 UTC+05:30", "Reporting time: 18:00 UTC+06:00"),
+    ("Reporting time: 17:00", "Reporting time: 18:00 IST"),
+])
+def test_clock_matching_preserves_schedule_scope_and_time_zone(pdf_bytes, original, revised):
+    report = compare_documents(*_pair(pdf_bytes, original, revised))
+    assert not any(f.status == "confirmed_change" for f in report.findings)
+    assert not any(
+        delta.kind == "time" and delta.outcome == "changed"
+        for f in report.findings for delta in f.field_changes
+    )
+
+
+def test_different_clocks_do_not_create_a_calendar_date_conflict(pdf_bytes):
+    old = [
+        "Deadline: 13 December 2026 at 17:00",
+        "Deadline: 14 December 2026 at 18:00",
+    ]
+    original = extract_pdf(pdf_bytes([old]), document_id="original", filename="a.pdf")
+    revised = extract_pdf(pdf_bytes([old]), document_id="revised", filename="b.pdf")
+    assert compare_documents(original, revised).findings == []
+
+
 def test_identical_has_no_findings(pdf_bytes):
     report = compare_documents(*_pair(pdf_bytes, "Eligibility: class 12", "Eligibility: class 12"))
     assert not report.findings

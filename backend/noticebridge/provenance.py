@@ -255,7 +255,8 @@ def verify_report_provenance(
                 and first_dates[0].canonical != second_dates[0].canonical
                 and category_for(evidence[0].text) == "deadline"
                 and category_for(evidence[1].text) == "deadline"
-                and anchor(evidence[0].text, "deadline") == anchor(evidence[1].text, "deadline"),
+                and anchor(evidence[0].text, "deadline", mask_clock=False)
+                == anchor(evidence[1].text, "deadline", mask_clock=False),
                 "Contradiction must quote distinct parsed dates under the same label",
             )
         else:

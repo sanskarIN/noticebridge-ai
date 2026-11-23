@@ -20,7 +20,7 @@ This note documents the conservative behavior of the third engineering milestone
 14. Per-page text coverage is visible. Pages without extractable text are never silently treated as proven unchanged, even when the comparison found changes on other pages. `all_pages_have_text` means only that each page yielded some text, not that extraction was exhaustive.
 15. An `explicit_amendment` links one original labeled deadline or fee to a revised passage that gives a matching prior value and a replacement. The worker requires a unique label and prior value in both documents. The API recalculates the field from both quotes and requires a possible change with an uncertain outcome. Conditions, ambiguous values, and duplicate candidates stay outside the explicit link.
 
-## How date and fee tokens are interpreted
+## How date, time and fee tokens are interpreted
 
 | Input | Parser behavior |
 | --- | --- |
@@ -31,15 +31,19 @@ This note documents the conservative behavior of the third engineering milestone
 | `13/12/2026` | Unique day-month interpretation, `2026-12-13` |
 | `01/02/2026` | **Ambiguous** (1 Feb or 2 Jan), no canonical value |
 | `31 February 2026` | **Invalid** date, no canonical value |
+| `17:30`, `5:30 p.m.`, `5:30 PM` | Equivalent clock time, `17:30` |
+| `9:30` | **Ambiguous** single-digit hour without AM/PM |
+| `24:00`, `17:99` | **Invalid** clock values, no canonical value |
+| `09:00–17:00`, `5–7 PM` | Range remains visible in the quote without a structured time delta |
 | `Rs. 1,000`, `₹1,000`, `₹10,00,000`, `१,२५० रुपये` | Valid INR amounts, decimal canonical values |
 | `Rs. 1,2,3` | Invalid grouping, no canonical value |
 
-Unrecognized date and currency syntax is ignored rather than inferred. There is no automatic time-zone calculation or locale-specific deadline extension logic.
+A structured time delta requires one recognized clock expression in each quote. It describes the times as printed. Time-zone and offset text stays in the anchor, and a differing zone makes the pairing uncertain. The comparator does not convert time zones or interpret daylight saving time.
 
 ## Matching algorithm and uncertainty
 
 1. Exact normalized text matches are resolved across the entire document pair.
-2. Remaining lines are matched using category and masked value anchors. Deadlines mask date tokens and fees mask currency amounts. Other numbers, including phase and paper numbers, remain part of the context for both categories. Only unique native-text anchors support a matched text change.
+2. Remaining lines are matched using category and masked value anchors. Deadlines mask calendar dates and single clock values. Scheduled events mask a single clock value while preserving their date and other scope. Fees mask currency amounts. Only unique native-text anchors support a matched text change.
 3. Remaining potential matches are globally ranked using token-index retrieval and context similarity. All fuzzy pairings stay possible. Fuzzy matching examines contexts up to 512 characters, at most 64 entries per token or source passage, and at most 20,000 pairs and 20 million character products per comparison. The API independently caps rescoring work.
 4. Lines without a matched counterpart in the extracted text receive `missing_information`. `fuzzy_matching_limited` exposes skipped candidate work independently of page text coverage. Exact text and exact context matching still run on all extracted lines.
 
@@ -69,7 +73,7 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 
 - `backend/tests/test_extract.py`: source locations, SHA-256, malformed/scanned/password-protected/oversized-page PDFs, OCR gating/budgets/error paths, and English/Hindi OCR integration scans that skip if Tesseract language packs or fixture fonts are missing.
 - `backend/tests/test_compare.py`: changed/unchanged statements, reordered lines, duplicated deadline labels, same-page versus cross-page ambiguity handling, source location and lack of authority inference.
-- `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, date ambiguity, invalid calendar dates, currency canonicalization and malformed grouping.
+- `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, ambiguous and invalid dates or clock times, unsupported time ranges, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py` and `backend/tests/test_body_limit.py`: health, live multipart comparisons, multipart stream and header size enforcement, bad uploads, filename sanitization, response no-store headers.
 - `backend/tests/test_provenance.py`: forged document hashes, swapped source roles, out-of-range evidence, false authority claims, malformed field values and AI promotion attempts.
 - `backend/tests/test_isolation.py` and `backend/tests/test_worker_limits.py`: real worker roundtrips, malformed input, timeout/forced termination behavior, invalid worker output, API failure mapping, worker bootstrap and POSIX resource-ceiling behavior.
@@ -80,7 +84,7 @@ Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tes
 
 ## Synthetic evaluation (not representative accuracy)
 
-`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks 14 fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
+`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
 
 ## Still not implemented
 

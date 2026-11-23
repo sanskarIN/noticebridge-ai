@@ -1,4 +1,4 @@
-"""Conservative extraction of deadline/fee values from notice passages.
+"""Conservative extraction of dates, fees and clock times from notice passages.
 
 A raw token is evidence; a parsed value is only a *syntactic* interpretation,
 never a statement about the authority or correctness of the issuing notice.
@@ -10,7 +10,7 @@ import unicodedata
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from .models import ParsedValue, ValueChange
+from .models import ParsedValue, ValueChange, ValueKind
 
 MONTHS = {
     "jan": 1, "january": 1, "जनवरी": 1,
@@ -57,6 +57,22 @@ AMOUNT_TOKEN = re.compile(
     rf")(?!{WORD_CHAR}|[.,/]\d)",
     re.IGNORECASE,
 )
+CLOCK_SEPARATOR = r"[:：]"
+MERIDIEM = r"[ap]\.?m\.?"
+CLOCK_TOKEN = re.compile(
+    # Retain an attached UTC/GMT offset as context and skip it as a clock candidate.
+    rf"(?<!{WORD_CHAR})(?:UTC|GMT)\s*[+−-]\s*\d{{1,2}}(?:{CLOCK_SEPARATOR}\d{{2}})?"
+    rf"|(?<!{WORD_CHAR})(?<!\d[:：./])(?<![^\W\d_][-/])(?P<clock>"
+    rf"(?P<hour>\d{{1,2}})(?:{CLOCK_SEPARATOR}(?P<minute>\d{{2}})"
+    rf"(?:\s*(?P<suffix>{MERIDIEM}))?|\s*(?P<bare_suffix>{MERIDIEM}))"
+    rf")(?!{WORD_CHAR}|[:：./]\d)",
+    re.IGNORECASE,
+)
+RANGE_CONNECTOR = r"(?:[-–—]|\bto)"
+CLOCK_RANGE_PREFIX = re.compile(
+    rf"(?<!{WORD_CHAR})\d{{1,2}}\s*{RANGE_CONNECTOR}\s*$", re.IGNORECASE,
+)
+CLOCK_RANGE_SUFFIX = re.compile(rf"^\s*{RANGE_CONNECTOR}\s*\d", re.IGNORECASE)
 
 
 def ascii_digits(value: str) -> str:
@@ -111,6 +127,37 @@ def date_tokens(text: str) -> list[ParsedValue]:
     return [parse_date(match.group(0)) for match in DATE_TOKEN.finditer(text)]
 
 
+def single_clock_token(text: str) -> re.Match[str] | None:
+    """Find one standalone clock, leaving ranges and offsets in the source context."""
+    clocks = (token for token in CLOCK_TOKEN.finditer(text) if token["clock"] is not None)
+    clock = next(clocks, None)
+    if (
+        clock is None
+        or next(clocks, None) is not None
+        or CLOCK_RANGE_PREFIX.search(text[:clock.start()])
+        or CLOCK_RANGE_SUFFIX.match(text[clock.end():])
+    ):
+        return None
+    return clock
+
+
+def _parse_clock(token: re.Match[str]) -> ParsedValue:
+    raw = token["clock"]
+    hour = int(token["hour"])
+    minute = int(token["minute"] or "0")
+    meridiem = token["suffix"] or token["bare_suffix"]
+    valid_hour = (1 <= hour <= 12) if meridiem else (0 <= hour <= 23)
+    if not valid_hour or minute > 59:
+        return ParsedValue(kind="time", raw=raw, confidence="invalid")
+    if meridiem:
+        hour = hour % 12 + (12 if meridiem[0].lower() == "p" else 0)
+    elif len(token["hour"]) == 1 and hour != 0:
+        # A single-digit hour without AM/PM leaves morning vs evening unclear.
+        return ParsedValue(kind="time", raw=raw, confidence="ambiguous")
+    return ParsedValue(kind="time", raw=raw, canonical=f"{hour:02d}:{minute:02d}",
+                       confidence="parsed")
+
+
 def amount_tokens(text: str) -> list[ParsedValue]:
     values: list[ParsedValue] = []
     for match in AMOUNT_TOKEN.finditer(text):
@@ -146,11 +193,15 @@ def field_changes(
     original: str, revised: str, *, category: str, pairing_confirmed: bool = True,
 ) -> list[ValueChange]:
     """Return auditable field deltas, not semantic or authority conclusions."""
-    token_sets: list[tuple[str, list[ParsedValue], list[ParsedValue]]] = []
+    token_sets: list[tuple[ValueKind, list[ParsedValue], list[ParsedValue]]] = []
     if category == "deadline":
         token_sets.append(("date", date_tokens(original), date_tokens(revised)))
     if category == "fee":
         token_sets.append(("amount", amount_tokens(original), amount_tokens(revised)))
+    if category in ("deadline", "time"):
+        old_clock, new_clock = single_clock_token(original), single_clock_token(revised)
+        if old_clock is not None and new_clock is not None:
+            token_sets.append(("time", [_parse_clock(old_clock)], [_parse_clock(new_clock)]))
     changes: list[ValueChange] = []
     for kind, old, new in token_sets:
         # A paragraph with several dates cannot be reliably aligned token by token.
