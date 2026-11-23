@@ -20,6 +20,21 @@ NATIVE_TIMEOUT_SECONDS = 45
 OCR_TIMEOUT_SECONDS = 120
 MAX_RESULT_BYTES = 64 * 1024 * 1024
 
+# Explicitly avoid forwarding unrelated service credentials or cloud tokens to
+# a process parsing untrusted PDF data. Runtime libraries and Tesseract need
+# selected path, locale and temporary-directory settings.
+WORKER_ENV_KEYS = (
+    "PATH", "PYTHONPATH", "VIRTUAL_ENV", "SYSTEMROOT", "WINDIR",
+    "TESSDATA_PREFIX", "LANG", "LC_ALL", "LC_CTYPE",
+    "TMPDIR", "TMP", "TEMP", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
+    "PYTHONUTF8", "PYTHONIOENCODING",
+)
+
+
+def _worker_environment() -> dict[str, str]:
+    return {key: os.environ[key] for key in WORKER_ENV_KEYS if key in os.environ}
+
+
 
 class ProcessingTimedOut(RuntimeError):
     """A document worker exceeded the configured wall-clock deadline."""
@@ -87,6 +102,7 @@ def run_isolated_comparison(
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
+            env=_worker_environment(),
             start_new_session=os.name == "posix",
         )
         try:

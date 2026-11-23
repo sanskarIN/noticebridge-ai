@@ -34,10 +34,14 @@ def test_real_worker_roundtrip_retains_evidence(pdf_bytes):
     assert report.findings[0].field_changes[0].outcome == "changed"
 
 
-def test_worker_validation_error_is_preserved(pdf_bytes):
+@pytest.mark.parametrize(("payload", "error_text"), [
+    (b"not a pdf", "recognized as a PDF"),
+    (b"%PDF- invalid", "Malformed or unreadable PDF"),
+])
+def test_worker_validation_error_is_preserved(pdf_bytes, payload, error_text):
     good = pdf_bytes([["Hello"]])
-    with pytest.raises(InvalidDocument, match="recognized as a PDF"):
-        _run(b"%PDF- invalid", good)
+    with pytest.raises(InvalidDocument, match=error_text):
+        _run(payload, good)
 
 
 def test_worker_process_timeout_is_bounded(monkeypatch, pdf_bytes):
@@ -123,3 +127,16 @@ def test_worker_failure_response_is_validated(monkeypatch, pdf_bytes):
     good = pdf_bytes([["Text"]])
     with pytest.raises(InvalidDocument, match="Malformed"):
         _run(good, good)
+
+
+def test_worker_environment_excludes_unrelated_secrets(monkeypatch):
+    import noticebridge.isolation as module
+
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-sentinel")
+    monkeypatch.setenv("GITHUB_TOKEN", "another-secret")
+    monkeypatch.setenv("PATH", "/usr/bin")
+    environment = module._worker_environment()
+    assert environment["PATH"] == "/usr/bin"
+    assert "OPENAI_API_KEY" not in environment
+    assert "GITHUB_TOKEN" not in environment
+
