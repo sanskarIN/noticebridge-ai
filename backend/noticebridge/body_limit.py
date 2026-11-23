@@ -88,7 +88,17 @@ class CompareBodyLimit:
                 self._active -= 1
 
     async def _buffer_and_dispatch(self, scope, receive, send) -> None:
-        with SpooledTemporaryFile(mode="w+b", max_size=IN_MEMORY_SPOOL_BYTES) as spool:
+        try:
+            upload_spool = SpooledTemporaryFile(
+                mode="w+b", max_size=IN_MEMORY_SPOOL_BYTES
+            )
+        except OSError:
+            await self._reject(
+                scope, receive, send,
+                status=503, detail="Temporary upload storage is unavailable",
+            )
+            return
+        with upload_spool as spool:
             total = 0
             event_loop = asyncio.get_running_loop()
             deadline = event_loop.time() + MAX_RECEIVE_SECONDS
@@ -125,11 +135,25 @@ class CompareBodyLimit:
                         status=413, detail="Comparison upload is too large",
                     )
                     return
-                spool.write(body)
+                try:
+                    spool.write(body)
+                except OSError:
+                    await self._reject(
+                        scope, receive, send,
+                        status=503, detail="Temporary upload storage is unavailable",
+                    )
+                    return
                 if not message.get("more_body", False):
                     break
 
-            spool.seek(0)
+            try:
+                spool.seek(0)
+            except OSError:
+                await self._reject(
+                    scope, receive, send,
+                    status=503, detail="Temporary upload storage is unavailable",
+                )
+                return
             remaining = total
             sent_last = False
 
