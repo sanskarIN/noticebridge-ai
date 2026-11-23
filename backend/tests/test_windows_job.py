@@ -80,3 +80,47 @@ def test_closing_job_terminates_worker_descendants():
         if process.poll() is None:
             process.kill()
             process.communicate(timeout=5)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires Windows job assignment path")
+def test_failed_job_assignment_never_leaves_worker_running(monkeypatch):
+    import noticebridge.isolation as isolation
+
+    class FakeWorker:
+        pid = 7777
+
+        def __init__(self):
+            self.killed = False
+            self.reaped = False
+
+        def kill(self):
+            self.killed = True
+
+        def communicate(self, **kwargs):
+            assert kwargs == {"timeout": 2}
+            self.reaped = True
+            return None, None
+
+    def deny_assignment(pid):
+        raise OSError("simulated denied job assignment")
+
+    process = FakeWorker()
+    monkeypatch.setattr(isolation, "WindowsWorkerJob", deny_assignment)
+    with pytest.raises(
+        isolation.ProcessingFailed, match="containment unavailable"
+    ):
+        isolation._attach_windows_job(process)
+    assert process.killed
+    assert process.reaped
+
+
+@pytest.mark.skipif(os.name != "nt", reason="requires the Windows structure ABI")
+def test_extended_job_limits_match_native_windows_64bit_layout():
+    import ctypes
+    from noticebridge.windows_job import _ExtendedLimits
+
+    # Structures must agree with the Windows SDK ABI, otherwise a successful
+    # SetInformationJobObject could apply the wrong limits.
+    assert ctypes.sizeof(ctypes.c_void_p) == 8
+    assert ctypes.sizeof(_ExtendedLimits) == 144
+
