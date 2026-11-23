@@ -34,7 +34,7 @@ Temporary OS files can exist while receiving/parsing uploads or capturing worker
 - **P0 — Misleading notices:** Never present upload order, OCR transcription or a local AI suggestion as proof that an issuing organization approved a change.
 - **P1 — Temporary-file retention:** Audit cleanup after normal requests, malformed PDFs, client disconnects and timeouts; use protected temp directories and storage quotas.
 - **P1 — Service resource exhaustion:** Test concurrent uploads, slow requests, oversized chunks, runaway workers and reverse-proxy controls.
-- **P1 — Dependency drift:** A generated npm lockfile and `npm ci` now pin frontend resolution. Still review dependency advisories, establish Python reproducibility, and review CI Action versions.
+- **P1 — Dependency drift:** npm uses a committed integrity-bearing lockfile and `npm ci`. Python 3.12 CI installs from version constraints captured from a previously successful Linux/Windows run and verifies the installed versions. Python wheel hashes, Python 3.11/3.13 and OS-specific transitive resolution, dependency advisories, and CI Action pins still require review.
 - **P1 — Model response manipulation:** Retain unverified proposals and their deterministic unmatched evidence, and test malicious instructions embedded in source text.
 - **P2 — Document geometry and OCR:** Independently evaluate rotated/cropped PDFs, Hindi OCR quality, and missing-page coverage.
 

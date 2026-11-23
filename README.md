@@ -26,12 +26,15 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 
 ## Local development
 
-Requires Python 3.11+, Node 22+, and npm. Local AI suggestions also require Ollama running on the **backend** at `127.0.0.1:11434` with `qwen2.5:3b` installed (or another installed model named by `NOTICEBRIDGE_LOCAL_MODEL`). The model feature sends only selected unmatched text passages to this loopback endpoint when explicitly enabled; keep the backend and Ollama instance trusted. Optional OCR requires Tesseract with English (`eng`) and Hindi (`hin`) language data available on the **backend** machine, and a supported PyMuPDF build. Check with `tesseract --list-langs`. Without it, leave OCR disabled: native PDF extraction and comparison still work.
+Requires Python 3.11+, Node 22+, and npm. CI uses the tested Python 3.12 constraint set in `backend/constraints-py312.txt` and npm's `frontend/package-lock.json`. The Python constraints pin versions, **not wheel hashes**, and do not claim reproducibility on every supported Python/OS combination. Local AI suggestions also require Ollama running on the **backend** at `127.0.0.1:11434` with `qwen2.5:3b` installed (or another installed model named by `NOTICEBRIDGE_LOCAL_MODEL`). The model feature sends only selected unmatched text passages to this loopback endpoint when explicitly enabled; keep the backend and Ollama instance trusted. Optional OCR requires Tesseract with English (`eng`) and Hindi (`hin`) language data available on the **backend** machine, and a supported PyMuPDF build. Check with `tesseract --list-langs`. Without it, leave OCR disabled: native PDF extraction and comparison still work.
 
 ```bash
 python -m venv .venv
 # Activate the environment (.venv/Scripts/activate on Windows; source .venv/bin/activate on macOS/Linux)
-python -m pip install -e './backend[dev]'
+# For Python 3.12, reproduce the tested CI dependency set:
+python -m pip install -c backend/constraints-py312.txt -e './backend[dev]'
+python -m pip check
+python backend/scripts/verify_python_constraints.py
 uvicorn noticebridge.api:app --reload --port 8000
 ```
 

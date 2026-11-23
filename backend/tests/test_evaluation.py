@@ -10,6 +10,8 @@ BENCHMARK_DIR = Path(__file__).resolve().parents[1] / "benchmarks"
 sys.path.insert(0, str(BENCHMARK_DIR))
 from evaluate import evaluate  # noqa: E402
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
 
 def test_fictional_notice_evaluation_matrix():
     results = evaluate()
@@ -51,3 +53,30 @@ def test_fictional_benchmark_cli_emits_clean_json():
     assert payload["passing_cases"] == payload["synthetic_cases"]
     assert "Synthetic regression" in payload["warning"]
 
+
+
+def test_python_ci_constraint_manifest_has_strict_unique_versions():
+    """Future CI updates must not accidentally restore drifting package specs."""
+    from verify_python_constraints import expected_versions
+
+    versions = expected_versions()
+    assert len(versions) >= 20
+    assert versions["pymupdf"].count(".") == 2
+    assert versions["fastapi"].count(".") == 2
+
+
+def test_python_ci_constraint_parser_rejects_unpinned_or_duplicate_specs(tmp_path):
+    import pytest
+
+    from verify_python_constraints import expected_versions
+
+    original = (Path(__file__).resolve().parents[1] / "constraints-py312.txt").read_text()
+    for mutated in (
+        original + "\nfastapi>=0.115\n",
+        original + "\nfastapi==0.165.0\n",
+        original.replace("ruff==0.17.6", "ruff @ https://example.invalid/package.whl"),
+    ):
+        file = tmp_path / "constraints.txt"
+        file.write_text(mutated, encoding="utf-8")
+        with pytest.raises(ValueError):
+            expected_versions(file)

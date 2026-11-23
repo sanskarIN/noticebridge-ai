@@ -66,7 +66,8 @@ claims. If the independent set is insufficient, publish the limitation prominent
 - [ ] Implement or document production deployment isolation, rate limiting,
   resource budgets and authentication; no unaudited public hostile upload service.
 - [x] Commit npm-generated frontend lockfile and use `npm ci` for frontend and browser jobs.
-- [ ] Audit frontend/Python security advisories, establish Python lock/constraints and review CI Action versions.
+- [x] Pin Python 3.12 CI package versions from verified Linux/Windows installs and check installed distributions after pip install.
+- [ ] Independently audit frontend/Python security advisories, lock Python wheel hashes for each supported OS and review CI Action pins.
 
 **Gate:** No hidden external LLM calls; opt-in text transfer and data retention must
 be accurately documented and apparent in the UI.
