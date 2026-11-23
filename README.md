@@ -15,7 +15,7 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 - Three-pass matching: identical-text reconciliation, anchored value comparison, and globally ranked fuzzy proposals. Repeated headings are marked uncertain rather than overconfident.
 - **Structured date/fee deltas** alongside quoted evidence: canonical calendar dates and INR amounts only when syntax is unambiguous and valid.
 - Ambiguous dates like `01/02/2026` retain an `uncertain` outcome instead of assuming a date order. Supports English and Hindi written month names and Devanagari numerals.
-- Bilingual English/Hindi **templated** explanations. No LLM is used yet; neither AI accuracy nor authoritative conflict resolution is claimed.
+- Bilingual English/Hindi **templated** explanations. With explicit opt-in, an **experimental local Ollama model** can propose related unmatched passages. Every accepted proposal must reference real extracted source IDs and match the same category; it remains a `possible_change`, never verified, and no model-generated citations are accepted. Without opt-in, no model request occurs.
 - Human-verification checklist for changed deadlines, fees, eligibility, and instructions.
 - React/TypeScript comparison workspace with side-by-side evidence, locally rendered source pages, an explicit OCR opt-in, portable JSON evidence export, and review controls.
 - Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, Linux address-space ceilings (2 GiB), POSIX CPU/file/open-descriptor limits, no-cache responses, Pytest regression tests, and CI configuration.
@@ -24,7 +24,7 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 
 ## Local development
 
-Requires Python 3.11+, Node 22+, and npm. Optional OCR requires Tesseract with English (`eng`) and Hindi (`hin`) language data available on the **backend** machine, and a supported PyMuPDF build. Check with `tesseract --list-langs`. Without it, leave OCR disabled: native PDF extraction and comparison still work.
+Requires Python 3.11+, Node 22+, and npm. Local AI suggestions also require Ollama running on the **backend** at `127.0.0.1:11434` with `qwen2.5:3b` installed (or another installed model named by `NOTICEBRIDGE_LOCAL_MODEL`). The model feature sends only selected unmatched text passages to this loopback endpoint when explicitly enabled; keep the backend and Ollama instance trusted. Optional OCR requires Tesseract with English (`eng`) and Hindi (`hin`) language data available on the **backend** machine, and a supported PyMuPDF build. Check with `tesseract --list-langs`. Without it, leave OCR disabled: native PDF extraction and comparison still work.
 
 ```bash
 python -m venv .venv
@@ -55,14 +55,14 @@ npm run test:e2e
 
 ## API
 
-`POST /api/compare` accepts multipart fields `original` and `revised` (PDFs, maximum 10 MiB each, 80 pages each), plus optional `enable_ocr=true` (default is false). Returns `documents`, `findings`, `checklist`, `warnings`, `text_coverage`, and `verification_policy`. Each document reports `pages_with_text` and `pages_without_text`. Matched findings may include `field_changes` containing `kind`, original and revised raw/canonical values, parser confidence, and an outcome of `changed`, `same_value`, or `uncertain`. This is syntactic interpretation, **not official source verification**.
+`POST /api/compare` accepts multipart fields `original` and `revised` (PDFs, maximum 10 MiB each, 80 pages each), plus optional `enable_ocr=true` and `enable_semantic=true` (both default to false). Returns `documents`, `findings`, `checklist`, `warnings`, `text_coverage`, and `verification_policy`. Each document reports `pages_with_text` and `pages_without_text`. Matched findings may include `field_changes` containing `kind`, original and revised raw/canonical values, parser confidence, and an outcome of `changed`, `same_value`, or `uncertain`. This is syntactic interpretation, **not official source verification**.
 
 All evidence references point to source text extracted from the uploaded PDFs, including the extraction method (`native` or `ocr`) and page geometry. Both source locations are included when a passage is matched. The application has **no durable upload storage**, but FastAPI/Starlette multipart parsing **may temporarily spool uploads to local OS temporary files**. Deployments must secure temporary storage, server logs, networking, reverse proxies, and crash dumps. Do not upload private or confidential files to an untrusted hosted instance.
 
 ## Explicit limitations
 
 - **OCR is optional and fallible**: by default image-only PDFs produce warnings. If enabled, OCR requires Tesseract, applies only to pages with no native text, and is limited to 12 pages per PDF. Machine transcription may hallucinate or omit characters; OCR provenance lowers downstream confidence. There is no calibrated OCR confidence score.
-- **No LLM yet**: bilingual explanations are rule-based templates.
+- **Experimental local AI only**: explanations are rule-based; opt-in model suggestions are not proofs of meaning, accuracy, authority or document precedence. Invalid outputs and unavailable Ollama are explicitly reported without changing deterministic findings.
 - **No verified authority resolution**: a revised filename or upload position cannot establish official precedence.
 - **No robust semantic matching yet**: the initial similarity matcher can misalign duplicate headings or rephrased statements. Check every important finding against both sources.
 - **Limited canonical value parsing**: unambiguous date/fee syntax is normalized for comparisons, but many real-world formats, time zones, and cross-lingual equivalents remain unsupported.
@@ -73,7 +73,7 @@ All evidence references point to source text extracted from the uploaded PDFs, i
 
 ## Roadmap
 
-1. True semantic relationship analysis with cross-notice provenance and explicit issuer authority metadata.
+1. Independently evaluated semantic relationship analysis with provenance and issuer authority metadata; expand the experimental local proposals only after measured accuracy on a representative corpus.
 2. OS-level sandboxing and worker memory/CPU budgets, plus better OCR quality evaluation and calibrated confidence when supported.
 3. Semantic matching with structured LLM proposals and independent deterministic verification.
 4. PDF.js rotation/crop-aware coordinate transforms, visual regression tests, and optional reviewed CSV/calendar exports.

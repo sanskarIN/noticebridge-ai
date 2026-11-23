@@ -15,7 +15,8 @@ This note documents the conservative behavior of the third engineering milestone
 9. Every document summary includes a SHA-256 of the submitted bytes, for reproducible source identification. No digital signature or issuer authenticity is inferred from the hash.
 10. OCR is opt-in and used only for native-text-empty pages, with bounded page count and estimated rendering pixels. Its output is labeled `ocr`; it cannot alone produce a `confirmed_change` or a contradiction.
 11. Browser PDF.js rendering uses a locally selected File and same-origin worker; highlights are omitted for rotated pages rather than guessed.
-12. Per-page text coverage is visible. Pages without extractable text are never silently treated as proven unchanged, even when the comparison found changes on other pages. `all_pages_have_text` means only that each page yielded some text, not that extraction was exhaustive.
+12. Experimental local semantic proposals may only pair genuine original-only and revised-only evidence IDs with the same category. They are always `possible_change`, never verified facts or model-generated citations. No model request happens without explicit opt-in.
+13. Per-page text coverage is visible. Pages without extractable text are never silently treated as proven unchanged, even when the comparison found changes on other pages. `all_pages_have_text` means only that each page yielded some text, not that extraction was exhaustive.
 
 ## How date and fee tokens are interpreted
 
@@ -48,7 +49,7 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 - OCR uses Tesseract on the server, not a third-party API; it runs in a disposable worker with a restricted inherited environment with 120-second wall-clock timeout, but is not OS-sandboxed or reproducible across Tesseract versions. Native PDF comparisons have a 45-second deadline. On Linux, workers attempt a 2 GiB virtual address-space ceiling; on POSIX, workers also attempt CPU, file size, core dump and open-descriptor ceilings. These limits are best-effort and not a sandbox. Timed-out POSIX worker process groups are killed; Windows terminates the direct worker only.
 - Browser source preview uses local PDF.js rendering with a same-origin bundled worker, while the open-in-new-tab fallback uses a local `File` object URL that is revoked after preview closure. JSON export remains local to the browser unless a user independently shares it.
 - The service is **not hardened for arbitrary public internet exposure**: subprocess separation is not an OS sandbox; no authentication, rate limiting, OS-enforced memory/CPU quotas, malware isolation, or operational monitoring strategy exists yet.
-- Uploaded source text is treated as data, never as instructions to change verification policy.
+- Uploaded source text is treated as data, never as instructions to change verification policy. With explicit opt-in, bounded unmatched passages are sent to loopback Ollama at `127.0.0.1:11434` with HTTP proxies disabled. Source IDs/categories are independently checked; the meaning of suggested pairings is not independently certified.
 
 ## Automated regression suites
 

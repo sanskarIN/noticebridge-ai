@@ -10,13 +10,15 @@ type Finding = {
   id: string; status: 'confirmed_change' | 'possible_change' | 'contradiction' | 'missing_information';
   category: string; summary_en: string; summary_hi: string;
   original: Evidence | null; revised: Evidence | null; supporting_evidence: Evidence[];
-  similarity: number; authority_verified: boolean; field_changes: ValueChange[];
+  similarity: number; match_method: 'deterministic' | 'semantic_proposal';
+  authority_verified: boolean; field_changes: ValueChange[];
 };
 type Checklist = { description_en: string; description_hi: string; finding_id: string; requires_human_verification: boolean };
 type Report = {
   documents: { id: string; filename: string; page_count: number; line_count: number; has_extractable_text: boolean; sha256: string; ocr_page_count: number; pages_with_text: number; pages_without_text: number[] }[];
   findings: Finding[]; checklist: Checklist[]; warnings: string[]; verification_policy: string;
   text_coverage: 'all_pages_have_text' | 'partial' | 'inconclusive';
+  semantic_assistance: 'not_requested' | 'no_candidates' | 'unavailable' | 'no_verified_pairs' | 'proposals_added';
 };
 type Preview = { url: string; file: File; evidence: Evidence };
 
@@ -47,6 +49,9 @@ const translations = {
     coveragePartial: 'Some PDF pages yielded no text. Changes on those pages may be missed.',
     coverageInconclusive: 'One or both PDFs yielded no text. The comparison is inconclusive.',
     coveragePages: 'pages yielded text',
+    semantic: 'Suggest matches with local AI (experimental)',
+    semanticNote: 'Optional: sends selected unmatched text excerpts to Ollama running on the backend computer (127.0.0.1:11434). This feature does not call cloud APIs. Suggestions are unverified.',
+    semanticSuggested: 'Local AI suggestion — verify PDF source',
   },
   hi: {
     eyebrow: 'स्रोत-आधारित दस्तावेज़ विश्लेषण',
@@ -73,6 +78,9 @@ const translations = {
     coveragePartial: 'कुछ PDF पृष्ठों से पाठ नहीं मिला। उन पृष्ठों के बदलाव छूट सकते हैं।',
     coverageInconclusive: 'एक या दोनों PDF से कोई पाठ नहीं मिला। तुलना अनिर्णायक है।',
     coveragePages: 'पृष्ठों से पाठ मिला',
+    semantic: 'स्थानीय AI से संभावित मिलान सुझाएँ (प्रयोगात्मक)',
+    semanticNote: 'वैकल्पिक: कुछ बेमेल पाठ अंश बैकएंड पर चल रहे Ollama (127.0.0.1:11434) को भेजे जाएँगे। यह सुविधा क्लाउड API का उपयोग नहीं करती। सुझाव अप्रमाणित हैं।',
+    semanticSuggested: 'स्थानीय AI का सुझाव — PDF स्रोत जाँचें',
   },
 };
 
@@ -97,6 +105,7 @@ export default function App() {
   const [report, setReport] = useState<Report | null>(null);
   const [pending, setPending] = useState(false);
   const [enableOcr, setEnableOcr] = useState(false);
+  const [enableSemantic, setEnableSemantic] = useState(false);
   const [error, setError] = useState('');
   const [checked, setChecked] = useState<string[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -150,6 +159,7 @@ export default function App() {
       const body = new FormData();
       body.append('original', original); body.append('revised', revised);
       body.append('enable_ocr', String(enableOcr));
+      body.append('enable_semantic', String(enableSemantic));
       const response = await fetch('/api/compare', { method: 'POST', body, signal: controller.signal });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
@@ -200,6 +210,7 @@ export default function App() {
               </label>)}
           </div>
           <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => setEnableOcr(e.target.checked)} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
+          <label className="ocr-option"><input type="checkbox" checked={enableSemantic} onChange={(e) => setEnableSemantic(e.target.checked)} /><span><strong>{t.semantic}</strong><small>{t.semanticNote}</small></span></label>
           <div className="upload-footer"><p>{t.note}</p><button type="submit" disabled={!original || !revised || pending} className="primary-button">{pending ? t.comparing : t.button}<span>→</span></button></div>
           {error && <p role="alert" className="error-banner">{error}</p>}
         </form>
@@ -222,7 +233,8 @@ export default function App() {
         </div>
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
         <div className="findings-list">{report.findings.map(f => <article className="finding" key={f.id}>
-          <div className="finding-header"><div><span className={`status ${f.status}`}>{f.status.replaceAll('_', ' ')}</span><span className="category">{f.category.toUpperCase()}</span></div><span className="match-score">{Math.round(f.similarity * 100)}% context match</span></div>
+          <div className="finding-header"><div><span className={`status ${f.status}`}>{f.status.replaceAll('_', ' ')}</span><span className="category">{f.category.toUpperCase()}</span></div><span className="match-score">{f.match_method === 'semantic_proposal' ?
+            t.semanticSuggested : `${Math.round(f.similarity * 100)}% context match`}</span></div>
           <p className="finding-summary">{language === 'hi' ? f.summary_hi : f.summary_en}</p>
           {f.field_changes.length > 0 && <div className="value-changes"><b>{t.values}</b>{f.field_changes.map((delta, i) => <p key={i}><span className="value-outcome">{delta.kind}: {delta.outcome.replaceAll('_', ' ')}</span> {delta.original.raw} → {delta.revised.raw} {delta.outcome === 'uncertain' ? `(${t.uncertain})` : `(${delta.original.canonical} → ${delta.revised.canonical})`}</p>)}</div>}
           <div className="evidence-grid"><EvidenceCard evidence={f.original} label={t.original} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /><EvidenceCard evidence={f.revised} label={t.revised} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /></div>
