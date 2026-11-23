@@ -21,6 +21,7 @@ def test_compare_endpoint(pdf_bytes):
     assert payload["findings"][0]["original"]["page"] == 1
     assert payload["documents"][0]["id"] == "original"
     assert payload["text_coverage"] == "all_pages_have_text"
+    assert payload["automatic_ocr"] is False
     assert payload["documents"][0]["pages_with_text"] == 1
     assert payload["documents"][0]["pages_without_text"] == []
 
@@ -92,6 +93,7 @@ def test_api_ocr_form_flag_is_forwarded(pdf_bytes, monkeypatch):
     })
     assert response.status_code == 200
     assert enabled == [True]
+    assert response.json()["automatic_ocr"] is True
     assert len(response.json()["documents"][0]["sha256"]) == 64
 
 

@@ -71,5 +71,6 @@ export type Report = {
   verification_policy: string;
   text_coverage: 'all_pages_have_text' | 'partial' | 'inconclusive';
   fuzzy_matching_limited: boolean;
+  automatic_ocr?: boolean | null;
   semantic_assistance: 'not_requested' | 'no_candidates' | 'unavailable' | 'no_verified_pairs' | 'proposals_added';
 };

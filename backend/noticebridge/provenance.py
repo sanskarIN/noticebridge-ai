@@ -57,6 +57,10 @@ def verify_report_provenance(
         report.verification_policy == EXPECTED_POLICY,
         "Worker attempted to change the source verification policy",
     )
+    _require(
+        report.automatic_ocr is None or report.automatic_ocr == ocr_requested,
+        "Recorded automatic OCR mode differs from the requested mode",
+    )
     summaries = dict(zip(("original", "revised"), report.documents, strict=True))
     sources = {
         "original": (original, old_name),

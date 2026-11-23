@@ -35,7 +35,7 @@ def test_cli_replays_browser_export_with_renamed_local_source_files(tmp_path, so
     report = _compare(original, revised)
     evidence_file = tmp_path / "evidence.json"
     evidence_file.write_text(json.dumps({
-        **report.model_dump(mode="json"),
+        **report.model_dump(mode="json", exclude={"automatic_ocr"}),
         "review": ["f1"],
         "comparison_source": "live_upload",
         "exported_at": "2026-11-23T10:00:00.000Z",
@@ -95,7 +95,7 @@ def test_selected_page_ocr_must_be_requested_and_is_replayed_from_saved_page_num
 
     def replay(*args, **kwargs):
         calls.append(kwargs)
-        return report
+        return report.model_copy(update={"automatic_ocr": kwargs["enable_ocr"]})
 
     monkeypatch.setattr(verify_report, "run_isolated_comparison", replay)
     with pytest.raises(ReplayError, match="This report used OCR"):
@@ -106,15 +106,43 @@ def test_selected_page_ocr_must_be_requested_and_is_replayed_from_saved_page_num
     assert calls[0]["enable_ocr"] is False
     assert calls[0]["original_ocr_pages"] == (1,)
     assert calls[0]["revised_ocr_pages"] == ()
+    calls.clear()
+    verify_saved_report(report.model_copy(update={"automatic_ocr": False}), original, revised)
+    assert [call["original_ocr_pages"] for call in calls] == [(1,)]
 
 
-def test_automatic_ocr_mode_reproduces_saved_coverage_warnings(pdf_bytes):
+def test_cli_replays_automatic_ocr_even_when_no_page_yielded_ocr_text(pdf_bytes, tmp_path):
     original = pdf_bytes([["Application deadline: 19 December 2026"], []])
     revised = pdf_bytes([["Application deadline: 13 December 2026"]])
     report = verify_report.run_isolated_comparison(
         original, revised, old_name="original.pdf", new_name="revised.pdf", enable_ocr=True,
     )
-    verify_saved_report(report, original, revised, ocr="automatic")
+    assert report.automatic_ocr is True
+    assert report.documents[0].ocr_pages == []
+    assert report.documents[0].pages_without_text == [2]
+    saved = tmp_path / "automatic-ocr.json"
+    old_path = tmp_path / "original.pdf"
+    new_path = tmp_path / "revised.pdf"
+    saved.write_text(report.model_dump_json(), encoding="utf-8")
+    old_path.write_bytes(original)
+    new_path.write_bytes(revised)
+    assert verify_report.main([str(saved), str(old_path), str(new_path)]) == 0
+
+    with pytest.raises(InvalidReportProvenance, match="Recorded automatic OCR mode differs"):
+        verify_saved_report(report, original, revised, ocr="off")
+    legacy = report.model_copy(update={"automatic_ocr": None})
+    verify_saved_report(legacy, original, revised, ocr="automatic")
+
+
+def test_saved_ocr_metadata_requires_a_json_boolean(sources, tmp_path, capsys):
+    saved = tmp_path / "report.json"
+    payload = _compare(*sources).model_dump(mode="json")
+    payload["automatic_ocr"] = "true"
+    saved.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(SystemExit) as result:
+        verify_report.main([str(saved), "unused-original.pdf", "unused-revised.pdf"])
+    assert result.value.code == 1
+    assert "does not contain a valid evidence report" in capsys.readouterr().err
 
 
 def test_replay_requires_experimental_ai_to_be_disabled(sources, monkeypatch):

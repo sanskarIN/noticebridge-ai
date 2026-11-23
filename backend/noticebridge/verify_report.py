@@ -65,7 +65,7 @@ def _load_report(path: Path) -> ComparisonReport:
 
 
 def verify_saved_report(
-    report: ComparisonReport, original: bytes, revised: bytes, *, ocr: OcrMode = "off",
+    report: ComparisonReport, original: bytes, revised: bytes, *, ocr: OcrMode | None = None,
 ) -> None:
     """Check fingerprints and reproduce the engine fields from the supplied bytes."""
     if [document.id for document in report.documents] != ["original", "revised"]:
@@ -76,6 +76,13 @@ def verify_saved_report(
     old, new = report.documents
     old_pages = validate_ocr_pages(old.ocr_override_pages)
     new_pages = validate_ocr_pages(new.ocr_override_pages)
+    if ocr is None:
+        if report.automatic_ocr is True:
+            ocr = "automatic"
+        elif report.automatic_ocr is False and (old_pages or new_pages):
+            ocr = "selected"
+        else:
+            ocr = "off"
     if ocr == "off" and (old_pages or new_pages or old.ocr_page_count or new.ocr_page_count):
         raise ReplayError("This report used OCR. Select --ocr selected or --ocr automatic.")
     options = {
@@ -91,6 +98,8 @@ def verify_saved_report(
         report, original=original, revised=revised, ocr_requested=automatic, **options,
     )
     replayed = run_isolated_comparison(original, revised, enable_ocr=automatic, **options)
+    if report.automatic_ocr is None:
+        replayed = replayed.model_copy(update={"automatic_ocr": None})
     if replayed != report:
         raise ReplayError(
             "The saved evidence differs from the replay. "
@@ -104,8 +113,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("original", type=Path, help="Original source PDF")
     parser.add_argument("revised", type=Path, help="Revised source PDF")
     parser.add_argument(
-        "--ocr", choices=("off", "selected", "automatic"), default="off",
-        help="Match the export's OCR mode. Selected pages are read from the saved report.",
+        "--ocr", choices=("off", "selected", "automatic"),
+        help="Set the OCR mode for an older export. New exports record it automatically.",
     )
     args = parser.parse_args(argv)
     try:

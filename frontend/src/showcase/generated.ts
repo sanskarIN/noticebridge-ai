@@ -252,6 +252,7 @@ export default {
     "warnings": [],
     "text_coverage": "all_pages_have_text",
     "fuzzy_matching_limited": false,
+    "automatic_ocr": false,
     "semantic_assistance": "not_requested",
     "verification_policy": "Uploaded order does not establish authority. Verify consequential claims against the issuing organization's official publications."
   }

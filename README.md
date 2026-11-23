@@ -79,10 +79,11 @@ replays the comparison in the local worker and checks the saved findings,
 quotations, page coordinates, and coverage. Renaming a local PDF is fine when its
 bytes match the export. A failed check exits with a nonzero status.
 
-Use `--ocr selected` if OCR was enabled only for selected pages. Use
-`--ocr automatic` if the automatic OCR checkbox was enabled. The command uses
-the selections recorded in the report. For reproducible output, use the same
-NoticeBridge version and OCR environment as the original comparison.
+New reports record whether automatic OCR was enabled and which pages were
+selected. The verifier uses those settings by default. For an older report,
+pass `--ocr selected` if OCR was enabled only for selected pages, or
+`--ocr automatic` if the automatic OCR checkbox was enabled. Use the same
+NoticeBridge revision and OCR environment as the original comparison.
 
 Replay accepts deterministic exports with experimental AI disabled. It verifies
 the comparison engine fields. Checklist selections express a reviewer's
