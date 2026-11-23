@@ -13,6 +13,7 @@ from .extract import MAX_EXTRACTED_LINES, MAX_LINE_CHARACTERS, MAX_OCR_PAGES, MA
 from .facts import date_tokens, field_changes
 from .messages import HINDI_CATEGORY, SUMMARY_MESSAGES, review_messages
 from .models import ComparisonReport, Evidence
+from .warning_policy import warning_supported
 
 EXPECTED_POLICY = ComparisonReport.model_fields["verification_policy"].default
 
@@ -95,6 +96,22 @@ def verify_report_provenance(
     else:
         coverage = "all_pages_have_text"
     _require(report.text_coverage == coverage, "Reported extraction coverage is inconsistent")
+    _require(
+        len(report.warnings) <= 6 * MAX_PAGES + 12,
+        "Worker report includes excessive warning messages",
+    )
+    _require(
+        all(
+            warning_supported(
+                warning, summaries,
+                ocr_requested=ocr_requested,
+                semantic_requested=semantic_requested,
+                text_coverage=coverage,
+            )
+            for warning in report.warnings
+        ),
+        "Worker warning text is not supported by the verification policy",
+    )
 
     def check_evidence(evidence: Evidence, expected_role: str | None = None) -> None:
         role = evidence.document_id
