@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 BENCHMARK_DIR = Path(__file__).resolve().parents[1] / "benchmarks"
 sys.path.insert(0, str(BENCHMARK_DIR))
 from evaluate import evaluate  # noqa: E402
@@ -66,8 +68,6 @@ def test_python_ci_constraint_manifest_has_strict_unique_versions():
 
 
 def test_python_ci_constraint_parser_rejects_unpinned_or_duplicate_specs(tmp_path):
-    import pytest
-
     from verify_python_constraints import expected_versions
 
     original = (Path(__file__).resolve().parents[1] / "constraints-py312.txt").read_text()
