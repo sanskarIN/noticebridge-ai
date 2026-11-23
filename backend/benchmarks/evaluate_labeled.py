@@ -56,9 +56,11 @@ def _manifest(path: Path) -> tuple[int, list[dict], str]:
                 digest = case.get(key)
                 if not isinstance(digest, str) or not SHA256_PATTERN.fullmatch(digest):
                     raise ValueError(f"{label}: {key} must be a lowercase SHA-256 digest")
-            if case.get("source_kind") not in SOURCE_KINDS:
+            origin = case.get("source_kind")
+            method = case.get("label_method")
+            if not isinstance(origin, str) or origin not in SOURCE_KINDS:
                 raise ValueError(f"{label}: source_kind must identify its source category")
-            if case.get("label_method") not in LABEL_METHODS:
+            if not isinstance(method, str) or method not in LABEL_METHODS:
                 raise ValueError(f"{label}: label_method must identify how labels were prepared")
         pairs = case.get("expected_pairs")
         if not isinstance(pairs, list) or len(pairs) > MAX_GOLD_PAIRS:
@@ -164,8 +166,14 @@ def evaluate_labeled(manifest: Path) -> dict:
     root = resolved.parent
     results = []
     for case in cases:
-        old = _pdf(root, case.get("original"), case.get("original_sha256"))
-        new = _pdf(root, case.get("revised"), case.get("revised_sha256"))
+        old = _pdf(
+            root, case.get("original"),
+            case["original_sha256"] if version == 2 else None,
+        )
+        new = _pdf(
+            root, case.get("revised"),
+            case["revised_sha256"] if version == 2 else None,
+        )
         results.append(_score(case, old, new))
     tp = sum(case["true_positive"] for case in results)
     fp = sum(case["false_positive"] for case in results)
