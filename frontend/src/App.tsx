@@ -52,6 +52,10 @@ const translations = {
     semantic: 'Suggest matches with local AI (experimental)',
     semanticNote: 'Optional: sends selected unmatched text excerpts to Ollama running on the backend computer (127.0.0.1:11434). This feature does not call cloud APIs. Suggestions are unverified.',
     semanticSuggested: 'Local AI suggestion — verify PDF source',
+    semanticAdded: 'Local AI suggested possible passage pairings. None are verified.',
+    semanticNoCandidates: 'No unmatched category-labeled passages were eligible for local AI review.',
+    semanticUnavailable: 'Local AI was unavailable; deterministic findings remain available.',
+    semanticRejected: 'No local AI suggestions passed source verification.',
   },
   hi: {
     eyebrow: 'स्रोत-आधारित दस्तावेज़ विश्लेषण',
@@ -81,6 +85,10 @@ const translations = {
     semantic: 'स्थानीय AI से संभावित मिलान सुझाएँ (प्रयोगात्मक)',
     semanticNote: 'वैकल्पिक: कुछ बेमेल पाठ अंश बैकएंड पर चल रहे Ollama (127.0.0.1:11434) को भेजे जाएँगे। यह सुविधा क्लाउड API का उपयोग नहीं करती। सुझाव अप्रमाणित हैं।',
     semanticSuggested: 'स्थानीय AI का सुझाव — PDF स्रोत जाँचें',
+    semanticAdded: 'स्थानीय AI ने संभावित अंश मिलान सुझाए हैं। कोई भी सत्यापित नहीं है।',
+    semanticNoCandidates: 'स्थानीय AI समीक्षा के लिए उपयुक्त बेमेल अंश नहीं मिले।',
+    semanticUnavailable: 'स्थानीय AI उपलब्ध नहीं था; नियम-आधारित निष्कर्ष उपलब्ध हैं।',
+    semanticRejected: 'स्थानीय AI का कोई सुझाव स्रोत जाँच में सफल नहीं हुआ।',
   },
 };
 
@@ -223,6 +231,12 @@ export default function App() {
           <div><b>{report.findings.filter(f => f.status === 'possible_change').length}</b><span>{t.possible}</span></div>
         </div>
         <div className="caution"><span>!</span><p>{t.verify} <strong>{t.authority}.</strong></p></div>
+        {report.semantic_assistance !== 'not_requested' && <p className="ai-feedback" role="status">
+          {report.semantic_assistance === 'proposals_added' ? t.semanticAdded :
+            report.semantic_assistance === 'no_candidates' ? t.semanticNoCandidates :
+            report.semantic_assistance === 'unavailable' ? t.semanticUnavailable :
+            t.semanticRejected}
+        </p>}
         <div className={`coverage-report ${report.text_coverage}`} role="status">
           <strong>{t.coverageTitle}</strong>
           <p>{report.text_coverage === 'all_pages_have_text' ? t.coverageFull :

@@ -59,6 +59,7 @@ test('keeps experimental local AI opt-in and submits only on explicit choice', a
   await page.getByRole('button', { name: /Compare documents/ }).click();
   const response = await responsePromise;
   expect((await response.json()).semantic_assistance).toBe('no_candidates');
+  await expect(page.getByText(/No unmatched category-labeled passages/)).toBeVisible();
   await expect(page.locator('.finding')).toHaveCount(1);
 });
 
