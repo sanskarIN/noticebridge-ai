@@ -806,3 +806,16 @@ def test_strict_independent_pair_gate_prevents_duplicate_weighting(
     assert json.loads(capsys.readouterr().out)["cohorts"][
         "declared_independent_nonfictional"
     ]["unique_pdf_pair_count"] == 1
+
+def test_strict_diversity_gate_rejects_missing_independent_cohort(tmp_path, pdf_bytes, monkeypatch, capsys):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(
+        sys, "argv",
+        ["evaluate_labeled", str(manifest), "--require-distinct-independent-pairs"],
+    )
+    assert main() == 1
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["case_count"] == 0
