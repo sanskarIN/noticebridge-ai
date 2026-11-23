@@ -11,7 +11,7 @@ import math
 from .compare import _score, anchor, category_for, normalize
 from .extract import MAX_EXTRACTED_LINES, MAX_LINE_CHARACTERS, MAX_OCR_PAGES, MAX_PAGES
 from .facts import date_tokens, field_changes
-from .messages import SUMMARY_MESSAGES, review_messages
+from .messages import HINDI_CATEGORY, SUMMARY_MESSAGES, review_messages
 from .models import ComparisonReport, Evidence
 
 EXPECTED_POLICY = ComparisonReport.model_fields["verification_policy"].default
@@ -324,14 +324,17 @@ def verify_report_provenance(
                 "Structured field claims do not match the source quotations",
             )
 
+    findings_by_id = {finding.id: finding for finding in report.findings}
     checklist_ids: set[str] = set()
     for item in report.checklist:
         _require(item.finding_id in finding_ids, "Checklist references a missing finding")
         _require(item.finding_id not in checklist_ids, "Duplicate review checklist entry")
         checklist_ids.add(item.finding_id)
         _require(item.requires_human_verification, "Human review was disabled")
-        referenced = next(
-            finding for finding in report.findings if finding.id == item.finding_id
+        referenced = findings_by_id[item.finding_id]
+        _require(
+            referenced.category in HINDI_CATEGORY,
+            "Review task unexpectedly references an uncategorized finding",
         )
         expected_review = review_messages(
             referenced.category,
