@@ -130,11 +130,17 @@ def test_parent_rejects_a_forged_worker_payload(monkeypatch, source_report):
     class ForgedProcess:
         returncode = 0
 
+        def __init__(self, stdout):
+            self.stdout = stdout
+
         def communicate(self, **kwargs):
-            return report.model_dump_json().encode("utf-8"), None
+            self.stdout.write(report.model_dump_json().encode("utf-8"))
+            self.stdout.flush()
+            return None, None
 
     monkeypatch.setattr(
-        isolation.subprocess, "Popen", lambda *args, **kwargs: ForgedProcess()
+        isolation.subprocess, "Popen",
+        lambda *args, **kwargs: ForgedProcess(kwargs["stdout"]),
     )
     with pytest.raises(isolation.ProcessingFailed, match="invalid evidence"):
         isolation.run_isolated_comparison(

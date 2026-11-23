@@ -79,13 +79,18 @@ def test_worker_crash_or_untrusted_output_is_rejected(monkeypatch, pdf_bytes, re
     import noticebridge.isolation as module
 
     class Process:
-        def __init__(self):
+        def __init__(self, stdout):
             self.returncode = returncode
+            self.stdout = stdout
 
         def communicate(self, **kwargs):
-            return output, None
+            self.stdout.write(output)
+            self.stdout.flush()
+            return None, None
 
-    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: Process())
+    monkeypatch.setattr(
+        module.subprocess, "Popen", lambda *a, **kw: Process(kw["stdout"])
+    )
     good = pdf_bytes([["Text"]])
     with pytest.raises(ProcessingFailed):
         _run(good, good)
@@ -118,12 +123,19 @@ def test_worker_failure_response_is_validated(monkeypatch, pdf_bytes):
     class Process:
         returncode = 0
 
-        def communicate(self, **kwargs):
-            return json.dumps({
-                "error": "invalid_document", "message": "Malformed or unreadable PDF"
-            }).encode(), None
+        def __init__(self, stdout):
+            self.stdout = stdout
 
-    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: Process())
+        def communicate(self, **kwargs):
+            self.stdout.write(json.dumps({
+                "error": "invalid_document", "message": "Malformed or unreadable PDF"
+            }).encode())
+            self.stdout.flush()
+            return None, None
+
+    monkeypatch.setattr(
+        module.subprocess, "Popen", lambda *a, **kw: Process(kw["stdout"])
+    )
     good = pdf_bytes([["Text"]])
     with pytest.raises(InvalidDocument, match="Malformed"):
         _run(good, good)
@@ -149,12 +161,19 @@ def test_subprocess_bootstrap_receives_ocr_budget(monkeypatch, pdf_bytes):
     class Process:
         returncode = 0
 
+        def __init__(self, stdout):
+            self.stdout = stdout
+
         def communicate(self, **kwargs):
-            return b'{"error":"invalid_document","message":"not a valid PDF"}', None
+            self.stdout.write(
+                b'{"error":"invalid_document","message":"not a valid PDF"}'
+            )
+            self.stdout.flush()
+            return None, None
 
     def start(command, **kwargs):
         commands.append(command)
-        return Process()
+        return Process(kwargs["stdout"])
 
     monkeypatch.setattr(module.subprocess, "Popen", start)
     pdf = pdf_bytes([["Hello"]])

@@ -10,6 +10,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 
 from pydantic import ValidationError
 
@@ -105,29 +106,40 @@ def run_isolated_comparison(
     else:
         timeout = OCR_TIMEOUT_SECONDS if enable_ocr else NATIVE_TIMEOUT_SECONDS
     try:
-        process = subprocess.Popen(
-            [sys.executable, "-m", "noticebridge.worker_entry",
-             "--ocr" if enable_ocr else "--native"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            env=_worker_environment(),
-            start_new_session=os.name == "posix",
-        )
-        try:
-            output, _ = process.communicate(input=payload, timeout=timeout)
-        except subprocess.TimeoutExpired as exc:
-            _kill_worker(process)
+        # Real stdout is redirected to a private temporary file rather than
+        # subprocess.PIPE: communicate() otherwise accumulates unbounded worker
+        # output in API memory *before* we can enforce MAX_RESULT_BYTES.
+        # The worker itself caps JSON output and POSIX RLIMIT_FSIZE is a second
+        # limit. Public Windows hosting still requires OS disk quotas.
+        with tempfile.TemporaryFile(mode="w+b") as output_file:
+            process = subprocess.Popen(
+                [sys.executable, "-m", "noticebridge.worker_entry",
+                 "--ocr" if enable_ocr else "--native"],
+                stdin=subprocess.PIPE,
+                stdout=output_file,
+                stderr=subprocess.DEVNULL,
+                env=_worker_environment(),
+                start_new_session=os.name == "posix",
+            )
             try:
-                process.communicate(timeout=2)
-            except subprocess.TimeoutExpired:
-                pass
-            raise ProcessingTimedOut("PDF comparison exceeded its processing time limit") from exc
+                process.communicate(input=payload, timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                _kill_worker(process)
+                try:
+                    process.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    pass
+                raise ProcessingTimedOut(
+                    "PDF comparison exceeded its processing time limit"
+                ) from exc
+
+            if process.returncode != 0:
+                raise ProcessingFailed("PDF comparison worker failed")
+            output_file.seek(0)
+            output = output_file.read(MAX_RESULT_BYTES + 1)
     except OSError as exc:
         raise ProcessingFailed("PDF comparison worker could not start") from exc
 
-    if process.returncode != 0:
-        raise ProcessingFailed("PDF comparison worker failed")
     if len(output) > MAX_RESULT_BYTES:
         raise ProcessingFailed("PDF comparison result exceeded the safety limit")
     try:
