@@ -117,6 +117,7 @@ def test_failed_job_assignment_never_leaves_worker_running(monkeypatch):
 @pytest.mark.skipif(os.name != "nt", reason="requires the Windows structure ABI")
 def test_extended_job_limits_match_native_windows_64bit_layout():
     import ctypes
+
     from noticebridge.windows_job import _ExtendedLimits
 
     # Structures must agree with the Windows SDK ABI, otherwise a successful
