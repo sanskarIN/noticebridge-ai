@@ -139,3 +139,29 @@ test('source preview traps keyboard focus, closes on Escape and restores focus',
   await expect(page.locator('main')).not.toHaveAttribute('inert');
 });
 
+test('mobile comparison stays within viewport and discloses temporary storage', async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    baseURL: 'http://127.0.0.1:5173',
+  });
+  try {
+    const page = await context.newPage();
+    await addSources(page);
+    await expect(page.getByText(/temporary OS storage/)).toBeVisible();
+    await page.getByRole('button', { name: /Compare documents/ }).click();
+    await expect(page.locator('.finding')).toHaveCount(1);
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+    await page.getByRole('button', { name: /Open PDF page/ }).first().click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'हिंदी' }).click();
+    await expect(page.getByText(/अस्थायी सिस्टम स्टोरेज/)).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+

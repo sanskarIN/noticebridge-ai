@@ -30,7 +30,7 @@ const translations = {
     detail: 'Compare two official PDFs and inspect the original passages behind every finding. No invented citations. No automatic authority claims.',
     original: 'Original notice', revised: 'Updated notice', drop: 'Select a PDF (up to 10 MiB)',
     button: 'Compare documents', comparing: 'Comparing source passages…',
-    note: 'Your PDFs are processed in memory on the server; they are not intentionally stored by this application.',
+    note: 'Your PDFs are sent to this backend. Uploads may use temporary OS storage while processing; the app does not intentionally retain them permanently.',
     findings: 'Findings', confirmed: 'Matched text changes', possible: 'Possible changes',
     checklist: 'Review checklist', source: 'Source evidence', noFindings: 'No wording differences were identified in extractable text. This does not prove that the PDFs are equivalent.',
     insufficient: 'Comparison is inconclusive because one or both PDFs have no extractable text. Enable OCR for scanned pages or supply text-based PDFs.',
@@ -56,6 +56,7 @@ const translations = {
     semanticNoCandidates: 'No unmatched category-labeled passages were eligible for local AI review.',
     semanticUnavailable: 'Local AI was unavailable; deterministic findings remain available.',
     semanticRejected: 'No local AI suggestions passed source verification.',
+    similarityLabel: 'text similarity (not confidence)',
   },
   hi: {
     eyebrow: 'स्रोत-आधारित दस्तावेज़ विश्लेषण',
@@ -63,7 +64,7 @@ const translations = {
     detail: 'दो आधिकारिक PDF की तुलना करें और हर निष्कर्ष के मूल प्रमाण देखें। कोई काल्पनिक संदर्भ या स्वतः आधिकारिक दावा नहीं।',
     original: 'मूल सूचना', revised: 'संशोधित सूचना', drop: 'PDF चुनें (अधिकतम 10 MiB)',
     button: 'दस्तावेज़ों की तुलना करें', comparing: 'स्रोत अंशों की तुलना जारी…',
-    note: 'PDF सर्वर की मेमोरी में प्रोसेस होती हैं; यह ऐप उन्हें जानबूझकर स्टोर नहीं करता।',
+    note: 'PDF इस बैकएंड पर भेजी जाती हैं। प्रोसेसिंग के दौरान अस्थायी सिस्टम स्टोरेज उपयोग हो सकता है; ऐप इन्हें स्थायी रूप से रखने का उद्देश्य नहीं रखता।',
     findings: 'निष्कर्ष', confirmed: 'मिलते अंशों में बदलाव', possible: 'संभावित बदलाव',
     checklist: 'सत्यापन सूची', source: 'मूल प्रमाण', noFindings: 'निकाले जा सकने वाले पाठ में अंतर नहीं मिला। इससे दोनों PDF एक जैसी सिद्ध नहीं होतीं।',
     insufficient: 'तुलना अधूरी है क्योंकि किसी एक या दोनों PDF से पाठ नहीं मिला। स्कैन किए पन्नों के लिए OCR चालू करें या पाठ वाली PDF चुनें।',
@@ -89,6 +90,7 @@ const translations = {
     semanticNoCandidates: 'स्थानीय AI समीक्षा के लिए उपयुक्त बेमेल अंश नहीं मिले।',
     semanticUnavailable: 'स्थानीय AI उपलब्ध नहीं था; नियम-आधारित निष्कर्ष उपलब्ध हैं।',
     semanticRejected: 'स्थानीय AI का कोई सुझाव स्रोत जाँच में सफल नहीं हुआ।',
+    similarityLabel: 'पाठ समानता (सटीकता की पुष्टि नहीं)',
   },
 };
 
@@ -295,7 +297,7 @@ export default function App() {
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
         <div className="findings-list">{report.findings.map(f => <article className="finding" key={f.id}>
           <div className="finding-header"><div><span className={`status ${f.status}`}>{f.status.replaceAll('_', ' ')}</span><span className="category">{f.category.toUpperCase()}</span></div><span className="match-score">{f.match_method === 'semantic_proposal' ?
-            t.semanticSuggested : `${Math.round(f.similarity * 100)}% context match`}</span></div>
+            t.semanticSuggested : `${Math.round(f.similarity * 100)}% ${t.similarityLabel}`}</span></div>
           <p className="finding-summary">{language === 'hi' ? f.summary_hi : f.summary_en}</p>
           {f.field_changes.length > 0 && <div className="value-changes"><b>{t.values}</b>{f.field_changes.map((delta, i) => <p key={i}><span className="value-outcome">{delta.kind}: {delta.outcome.replaceAll('_', ' ')}</span> {delta.original.raw} → {delta.revised.raw} {delta.outcome === 'uncertain' ? `(${t.uncertain})` : `(${delta.original.canonical} → ${delta.revised.canonical})`}</p>)}</div>}
           <div className="evidence-grid"><EvidenceCard evidence={f.original} label={t.original} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /><EvidenceCard evidence={f.revised} label={t.revised} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /></div>
