@@ -125,9 +125,24 @@ PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py demo-output/lab
 ```
 
 The command is entirely local, calls the isolated PDF comparison worker, and
-**never** calls Ollama or a cloud model. OCR is disabled in this initial
-evidence-pair metric runner. The experimental AI pairing feature therefore
-requires a separate evaluation protocol before performance claims.
+**never** calls Ollama or a cloud model. OCR is **off by default**; for a scanned
+evaluation corpus, explicitly opt into local Tesseract English/Hindi OCR:
+
+```sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
+  demo-output/labels-pinned.json --require-pinned-sources --enable-ocr
+```
+
+Check that the backend host actually has Tesseract plus `eng` and `hin`
+language data. Results report `ocr_enabled`, the number of
+`ocr_page_count` pages, `pages_without_text_count`, per-case OCR page counts,
+processing warnings, and incomplete-case counts. If no OCR data is available,
+the tool does not invent transcriptions or artificially increase recall.
+Do not compare OCR-on and OCR-off evaluation results without identifying the
+different extraction mode and environment. OCR-derived possible text
+relationships must not be interpreted as confirmed official changes.
+The experimental AI pairing feature still requires a separately designed
+evaluation protocol before performance claims.
 
 ## 3. Interpret the numbers
 

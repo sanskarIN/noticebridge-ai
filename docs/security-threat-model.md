@@ -14,11 +14,11 @@
 
 | Control | Current safeguard | Remaining exposure |
 | --- | --- | --- |
-| Multipart | 10 MiB per PDF; 21 MiB aggregate request; 1 MiB in-memory spool before temporary-disk rollover | External proxy abuse, temporary-disk limits |
+| Multipart | 10 MiB per PDF; 21 MiB aggregate request; 1 MiB in-memory spool before temporary-disk rollover. Storage open/write/seek failures now return a controlled 503 and request slots are released; disconnects close temporary upload spools | External proxy abuse, storage quotas, OS-level cleanup guarantees |
 | Streaming | 90-second receive deadline; maximum 8 simultaneous compare requests per API process | Cross-process abuse, volumetric attacks and network rate limiting |
 | PDFs | Reject encrypted PDFs and excessive page, line or text counts | Native parser vulnerabilities, decompression bombs |
 | OCR | Explicit opt-in, 12-page limit, 16M estimated render pixels per page | Inaccurate transcription, external tool exploitation |
-| Worker | Disposable subprocess; timeouts; restricted inherited environment; best-effort Linux/POSIX limits; Windows Job Object kill-on-close with 2 GiB memory ceiling and max eight worker-tree processes | Native PDF parser vulnerabilities, Windows process pre-assignment startup, full OS confinement and host CPU/disk quotas |
+| Worker | Disposable subprocess; timeouts; restricted inherited environment; best-effort Linux/POSIX limits; Windows Job Object kill-on-close with 2 GiB memory ceiling and max eight worker-tree processes; unexpected process-I/O errors trigger kill/reap before return | Native PDF parser vulnerabilities, Windows process pre-assignment startup, full OS confinement and host CPU/disk quotas |
 | Result | Private file-backed worker stdout, parent reads at most 64 MiB + one byte | Disk usage without OS quotas |
 | Evidence | Byte SHA-256, source-page metadata, human-review gate, independent structural integrity checks | Fake issuer, altered source documents, unsafe interpretation |
 | Local AI | Loopback-only URL, no HTTP proxy environment, 64 KiB streaming HTTP response limit, same-category source references | Prompt injection and false semantic relationships |
