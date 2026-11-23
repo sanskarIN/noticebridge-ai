@@ -821,3 +821,96 @@ def test_strict_diversity_gate_rejects_missing_independent_cohort(
     assert json.loads(capsys.readouterr().out)["cohorts"][
         "declared_independent_nonfictional"
     ]["case_count"] == 0
+
+
+def test_independent_full_coverage_gate_detects_unreadable_pages(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="consented", label_method="independent_human",
+    )
+    # The labeled deadline matches perfectly, but page 2 of each
+    # document has no extractable text. Accuracy alone cannot certify coverage.
+    original = pdf_bytes([["Deadline: 13 December 2026"], []])
+    revised = pdf_bytes([["Deadline: 14 December 2026"], []])
+    (tmp_path / "original.pdf").write_bytes(original)
+    (tmp_path / "revised.pdf").write_bytes(revised)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["cases"][0]["original_sha256"] = hashlib.sha256(original).hexdigest()
+    payload["cases"][0]["revised_sha256"] = hashlib.sha256(revised).hexdigest()
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    report = evaluate_labeled(manifest)
+    independent = report["cohorts"]["declared_independent_nonfictional"]
+    assert independent["case_count"] == 1
+    assert independent["incomplete_case_count"] == 1
+    assert independent["pages_without_text_count"] == 2
+    assert independent["precision"] == independent["recall"] == 1
+
+    argv = [
+        "evaluate_labeled", str(manifest), "--max-independent-incomplete-cases",
+    ]
+    monkeypatch.setattr(sys, "argv", argv + ["0"])
+    assert main() == 1
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", argv + ["1"])
+    assert main() == 0
+    capsys.readouterr()
+
+
+def test_independent_limited_matching_gate_isolated_from_aggregate(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    import evaluate_labeled as module
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="consented", label_method="independent_human",
+    )
+    actual_score = module._score
+
+    def simulated_limited_matching(*args, **kwargs):
+        score = actual_score(*args, **kwargs)
+        score["fuzzy_matching_limited"] = True
+        return score
+
+    monkeypatch.setattr(module, "_score", simulated_limited_matching)
+    monkeypatch.setattr(
+        sys, "argv",
+        ["evaluate_labeled", str(manifest), "--max-independent-limited-matching-cases", "0"],
+    )
+    assert module.main() == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["cohorts"]["declared_independent_nonfictional"][
+        "fuzzy_matching_limited_case_count"
+    ] == 1
+    assert result["precision"] == 1
+    monkeypatch.setattr(
+        sys, "argv",
+        ["evaluate_labeled", str(manifest), "--max-independent-limited-matching-cases", "1"],
+    )
+    assert module.main() == 0
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("flag", [
+    "--max-independent-incomplete-cases",
+    "--max-independent-limited-matching-cases",
+])
+def test_independent_coverage_gates_fail_on_empty_cohort_and_invalid_arguments(
+    tmp_path, pdf_bytes, monkeypatch, capsys, flag,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, "0"])
+    assert main() == 1
+    capsys.readouterr()
+
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, "-1"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
