@@ -65,6 +65,29 @@ npm run test:e2e
 
 All evidence references point to source text extracted from the uploaded PDFs, including the extraction method (`native` or `ocr`) and page geometry. Both source locations are included when a passage is matched. The application has **no durable upload storage**, but FastAPI/Starlette multipart parsing **may temporarily spool uploads to local OS temporary files**. Deployments must secure temporary storage, server logs, networking, reverse proxies, and crash dumps. Do not upload private or confidential files to an untrusted hosted instance.
 
+## Verify a saved evidence report
+
+After installing the backend, run the following command with the exported JSON
+and the exact original and revised PDFs.
+
+```bash
+python -m noticebridge.verify_report noticebridge-evidence-report.json original.pdf revised.pdf
+```
+
+The command checks both SHA-256 fingerprints before parsing either file, then
+replays the comparison in the local worker and checks the saved findings,
+quotations, page coordinates, and coverage. Renaming a local PDF is fine when its
+bytes match the export. A failed check exits with a nonzero status.
+
+Use `--ocr selected` if OCR was enabled only for selected pages. Use
+`--ocr automatic` if the automatic OCR checkbox was enabled. The command uses
+the selections recorded in the report. For reproducible output, use the same
+NoticeBridge version and OCR environment as the original comparison.
+
+Replay accepts deterministic exports with experimental AI disabled. It verifies
+the comparison engine fields. Checklist selections express a reviewer's
+decisions, and the issuer's authority must be confirmed separately.
+
 ## Explicit limitations
 
 - **OCR is optional and fallible**: by default image-only PDFs produce warnings. OCR requires Tesseract and shares one limit of 12 page attempts per PDF. If a selected page yields no OCR text, it appears under pages without extracted text for manual inspection. Machine transcription may hallucinate or omit characters; OCR provenance lowers downstream confidence. There is no calibrated OCR confidence score.
