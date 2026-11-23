@@ -29,14 +29,15 @@ async def disable_cache(request: Request, call_next):
     return response
 
 
+# The body guard runs before multipart parsing. CORS wraps it so allowed
+# browser clients can inspect 400/413 responses rather than receiving opaque failures.
+app.add_middleware(CompareBodyLimit)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
-# Keep the pure ASGI body guard outermost, before multipart parsing/spooling.
-app.add_middleware(CompareBodyLimit)
 
 
 @app.get("/api/health")

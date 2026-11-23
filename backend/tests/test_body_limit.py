@@ -60,6 +60,7 @@ def test_oversized_content_length_rejected_before_reading(monkeypatch):
     [b"-1"],
     [b"1", b"1"],
     [b"12.5"],
+    [b"9" * 10000],
 ])
 def test_malformed_or_duplicate_lengths_rejected(header_values):
     status, body, received = _exercise(
@@ -125,3 +126,18 @@ def test_real_api_rejects_oversized_declared_request():
     assert response.status_code == 413
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_body_limit_error_exposes_cors_to_permitted_origin():
+    response = TestClient(app).post(
+        "/api/compare",
+        content=b"placeholder",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(body_limit.MAX_COMPARE_BODY_BYTES + 1),
+        },
+    )
+    assert response.status_code == 413
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
