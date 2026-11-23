@@ -745,7 +745,7 @@ test('Review first includes uncertain deadline wording without a parsed field de
   await expect(first.locator('strong')).toHaveText(['Possible deadline wording change']);
   await expect(first).toContainText('without a reliably parsed date');
   await expect(first).toContainText('OCR transcription must be checked');
-  await first.getByRole('button', { name: /Inspect finding: Possible deadline wording change' }).click();
+  await first.getByRole('button', { name: /Inspect finding: Possible deadline wording change/ }).click();
   await expect(page.locator('.finding')).toBeFocused();
 });
 
