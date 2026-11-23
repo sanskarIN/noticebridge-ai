@@ -17,6 +17,7 @@ MAX_OCR_PAGES = 12
 MAX_OCR_RENDER_PIXELS = 16_000_000
 OCR_DPI = 150
 OCR_LANGUAGES = "eng+hin"
+NATIVE_TEXT_FLAGS = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
 
 
 class InvalidDocument(ValueError):
@@ -28,6 +29,16 @@ class ExtractedDocument:
     summary: DocumentSummary
     lines: list[ExtractedLine]
     warnings: list[str]
+
+
+def bbox_intersects_page(
+    bbox: tuple[float, float, float, float], width: float, height: float, rotation: int,
+) -> bool:
+    """Text boxes use unrotated coordinates, even when the page is rotated."""
+    if rotation in (90, 270):
+        width, height = height, width
+    x0, y0, x1, y1 = bbox
+    return x1 > 0 and y1 > 0 and x0 < width and y0 < height
 
 
 def extract_pdf(
@@ -46,6 +57,7 @@ def extract_pdf(
     lines: list[ExtractedLine] = []
     warnings: list[str] = []
     pages_without_text: list[int] = []
+    total_lines = 0
     total_characters = 0
     ocr_page_count = 0
     ocr_attempts = 0
@@ -55,10 +67,17 @@ def extract_pdf(
         if not 1 <= len(pdf) <= MAX_PAGES:
             raise InvalidDocument(f"PDF must contain 1 to {MAX_PAGES} pages")
         for index, page in enumerate(pdf):
+            page_number = index + 1
             page_lines = 0
+            skipped_boxes = 0
+            rect = page.rect
+            width, height = round(float(rect.width), 2), round(float(rect.height), 2)
+            rotation = page.rotation
             # Original text is always preferred. OCR only runs for pages with
             # no native text, avoiding duplicate lines and false certainty.
-            data = page.get_text("dict", sort=True)
+            # The dict API normally copies image streams into each block, but
+            # native text extraction does not consume them.
+            data = page.get_text("dict", flags=NATIVE_TEXT_FLAGS, sort=True)
             native_has_text = any(
                 span.get("text", "").strip()
                 for block in data.get("blocks", []) if block.get("type") == 0
@@ -69,15 +88,14 @@ def extract_pdf(
             if not native_has_text and enable_ocr:
                 if ocr_attempts >= MAX_OCR_PAGES:
                     warnings.append(
-                        f"{document_id}: page {index + 1} was not OCR-scanned: "
+                        f"{document_id}: page {page_number} was not OCR-scanned: "
                         f"per-document OCR limit of {MAX_OCR_PAGES} pages reached"
                     )
                 elif (
-                    page.rect.width * page.rect.height * (OCR_DPI / 72) ** 2
-                    > MAX_OCR_RENDER_PIXELS
+                    rect.width * rect.height * (OCR_DPI / 72) ** 2 > MAX_OCR_RENDER_PIXELS
                 ):
                     warnings.append(
-                        f"{document_id}: page {index + 1} was not OCR-scanned: "
+                        f"{document_id}: page {page_number} was not OCR-scanned: "
                         "page would exceed OCR pixel limit"
                     )
                 else:
@@ -92,7 +110,7 @@ def extract_pdf(
                         # OCR packs and Tesseract are not present on all hosts.
                         # Don't return guessed or unverified text as evidence.
                         warnings.append(
-                            f"{document_id}: page {index + 1} OCR unavailable "
+                            f"{document_id}: page {page_number} OCR unavailable "
                             f"({type(exc).__name__}); install Tesseract eng+hin language data"
                         )
             for block in data.get("blocks", []):
@@ -105,38 +123,47 @@ def extract_pdf(
                         continue
                     if len(text) > MAX_LINE_CHARACTERS:
                         raise InvalidDocument("PDF contains an excessively long text line")
+                    total_lines += 1
+                    if total_lines > MAX_EXTRACTED_LINES:
+                        raise InvalidDocument("PDF contains too many text lines")
                     total_characters += len(text)
                     if total_characters > MAX_TOTAL_CHARACTERS:
                         raise InvalidDocument("PDF contains too much extractable text")
-                    box = rawline.get("bbox")
-                    if not box or len(box) != 4 or not all(
-                        math.isfinite(float(c)) for c in box
+                    box = tuple(round(float(c), 2) for c in (rawline.get("bbox") or ()))
+                    if (
+                        len(box) != 4 or not all(math.isfinite(c) for c in box)
+                        or box[0] >= box[2] or box[1] >= box[3]
+                        or not bbox_intersects_page(box, width, height, rotation)
                     ):
+                        skipped_boxes += 1
                         continue
                     evidence = Evidence(
                         document_id=document_id,
                         filename=filename,
-                        page=index + 1,
+                        page=page_number,
                         text=text,
-                        bbox=tuple(round(float(c), 2) for c in box),
+                        bbox=box,
                         extraction_method=method,
-                        page_width=round(float(page.rect.width), 2),
-                        page_height=round(float(page.rect.height), 2),
-                        page_rotation=page.rotation,
+                        page_width=width,
+                        page_height=height,
+                        page_rotation=rotation,
                     )
                     lines.append(ExtractedLine(text=text, evidence=evidence))
                     page_lines += 1
-                    if len(lines) > MAX_EXTRACTED_LINES:
-                        raise InvalidDocument("PDF contains too many text lines")
             if method == "ocr" and page_lines:
                 ocr_page_count += 1
+            if skipped_boxes:
+                warnings.append(
+                    f"{document_id}: page {page_number} omitted {skipped_boxes} text line(s) "
+                    "with invalid source coordinates"
+                )
             if page_lines == 0:
-                pages_without_text.append(index + 1)
+                pages_without_text.append(page_number)
                 explanation = (
                     "OCR not enabled" if not enable_ocr else "comparison may be incomplete"
                 )
                 warnings.append(
-                    f"{document_id}: page {index + 1} has no extractable text; {explanation}"
+                    f"{document_id}: page {page_number} has no extractable text; {explanation}"
                 )
         if ocr_page_count:
             warnings.append(

@@ -3,12 +3,13 @@
 import re
 import unicodedata
 from collections import Counter, defaultdict, deque
-from difflib import SequenceMatcher
 
 from .extract import ExtractedDocument
 from .facts import AMOUNT_TOKEN, DATE_TOKEN, WORD_CHAR, date_tokens, field_changes
+from .matching import StatementKey, fuzzy_proposals
 from .messages import SUMMARY_MESSAGES, review_messages
 from .models import ChecklistItem, ComparisonReport, Evidence, Finding
+from .warning_policy import MAX_CROSS_PAGE_DETAILS
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
 SPACE = re.compile(r"\s+")
@@ -77,13 +78,7 @@ def anchor(text: str, category: str) -> str:
     return SPACE.sub(" ", value).strip()
 
 
-def context_similarity(original_context: str, revised_context: str) -> float:
-    if original_context == revised_context:
-        return 1.0
-    return SequenceMatcher(None, original_context, revised_context, autojunk=False).ratio()
-
-
-def _statement_key(text: str) -> tuple[str, str]:
+def _statement_key(text: str) -> StatementKey:
     category = category_for(text)
     return category, anchor(text, category)
 
@@ -147,21 +142,9 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
 
     # Pass three: global best-first fuzzy assignment instead of greedy old-line
     # ordering. Token posting lists cap candidate work for large documents.
-    by_token: dict[tuple[str, str], list[int]] = defaultdict(list)
-    for ni in sorted(unmatched_new):
-        category, text = new_keys[ni]
-        for token in set(re.findall(r"[\w\u0900-\u097f]{4,}", text)):
-            by_token[(category, token)].append(ni)
-    proposals: list[tuple[float, int, int]] = []
-    for oi in sorted(unmatched_old):
-        category, text = old_keys[oi]
-        candidates: set[int] = set()
-        for token in sorted(set(re.findall(r"[\w\u0900-\u097f]{4,}", text))):
-            candidates.update(by_token.get((category, token), [])[:120])
-        for ni in sorted(candidates):
-            score = context_similarity(text, new_keys[ni][1])
-            if score >= 0.66:
-                proposals.append((score, oi, ni))
+    proposals, fuzzy_matching_limited = fuzzy_proposals(
+        old_keys, new_keys, unmatched_old, unmatched_new,
+    )
     for score, oi, ni in sorted(proposals, key=lambda p: (-p[0], p[1], p[2])):
         if oi not in unmatched_old or ni not in unmatched_new:
             continue
@@ -233,6 +216,7 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
     # contradictions. Cross-page differences remain explicit review warnings.
     for document, keys in ((old, old_keys), (new, new_keys)):
         grouped: dict[str, list[tuple[str, Evidence]]] = defaultdict(list)
+        cross_page_warnings = 0
         for line, (category, context) in zip(document.lines, keys, strict=True):
             if (
                 category != "deadline"
@@ -269,12 +253,19 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                     similarity=1.0,
                 ))
             if len(by_page) > 1 and not has_same_page_conflict:
-                page_list = ", ".join(str(page) for page in sorted(by_page))
-                warnings.append(
-                    f"{document.summary.id}: differing dates under a repeated deadline "
-                    f"label on pages {page_list}; verify whether they concern the "
-                    "same requirement"
-                )
+                cross_page_warnings += 1
+                if cross_page_warnings <= MAX_CROSS_PAGE_DETAILS:
+                    page_list = ", ".join(str(page) for page in sorted(by_page))
+                    warnings.append(
+                        f"{document.summary.id}: differing dates under a repeated deadline "
+                        f"label on pages {page_list}; verify whether they concern the "
+                        "same requirement"
+                    )
+        if cross_page_warnings > MAX_CROSS_PAGE_DETAILS:
+            warnings.append(
+                f"{document.summary.id}: {cross_page_warnings - MAX_CROSS_PAGE_DETAILS} "
+                "additional repeated deadline labels need review"
+            )
 
     for finding in findings:
         if finding.category in {"deadline", "eligibility", "fee", "time", "instruction"}:
@@ -291,4 +282,5 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         checklist=checklist,
         warnings=warnings,
         text_coverage=coverage,
+        fuzzy_matching_limited=fuzzy_matching_limited,
     )

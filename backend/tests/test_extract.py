@@ -16,6 +16,29 @@ def test_real_page_and_bbox(pdf_bytes):
     assert document.lines[1].evidence.filename == "notice.pdf"
 
 
+def test_invalid_source_box_is_omitted_without_losing_valid_text(pdf_bytes, monkeypatch):
+    import pymupdf as fitz
+
+    get_text = fitz.Page.get_text
+
+    def add_invalid_line(page, *args, **kwargs):
+        assert kwargs["flags"] & fitz.TEXT_PRESERVE_IMAGES == 0
+        result = get_text(page, *args, **kwargs)
+        result["blocks"][0]["lines"].append({
+            "spans": [{"text": "Unusable text"}],
+            "bbox": (9000, 9000, 9010, 9010),
+        })
+        return result
+
+    monkeypatch.setattr(fitz.Page, "get_text", add_invalid_line)
+    document = extract_pdf(
+        pdf_bytes([["Usable source text"]]), document_id="original", filename="source.pdf",
+    )
+    assert [line.text for line in document.lines] == ["Usable source text"]
+    assert document.summary.has_extractable_text
+    assert any("page 1 omitted 1 text line" in warning for warning in document.warnings)
+
+
 @pytest.mark.parametrize("payload", [b"", b"not a pdf", b"%PDF- definitely not a pdf"])
 def test_rejects_invalid_pdf(payload):
     with pytest.raises(InvalidDocument):

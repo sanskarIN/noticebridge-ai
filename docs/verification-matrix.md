@@ -38,8 +38,13 @@ Unrecognized date and currency syntax is ignored rather than inferred. There is 
 
 1. Exact normalized text matches are resolved across the entire document pair.
 2. Remaining lines are matched using category and masked value anchors. Deadlines mask date tokens and fees mask currency amounts. Other numbers, including phase and paper numbers, remain part of the context for both categories. Only unique native-text anchors support a matched text change.
-3. Remaining potential matches are globally ranked using token-index retrieval and context similarity. All fuzzy pairings stay possible.
-4. Lines without defensible matches receive `missing_information` rather than claims of repeal or addition.
+3. Remaining potential matches are globally ranked using token-index retrieval and context similarity. All fuzzy pairings stay possible. Fuzzy matching examines contexts up to 512 characters, at most 64 entries per token or source passage, and at most 20,000 pairs and 20 million character products per comparison. The API independently caps rescoring work.
+4. Lines without a matched counterpart in the extracted text receive `missing_information`. `fuzzy_matching_limited` exposes skipped candidate work independently of page text coverage. Exact text and exact context matching still run on all extracted lines.
+
+Native extraction skips copying image streams. Text boxes that collapse after
+coordinate rounding or lie wholly off-page are omitted with a page-specific
+warning. Cross-page deadline warnings list up to 20 label groups per PDF and
+report the count of additional groups.
 
 Category detection uses Unicode-aware token boundaries instead of arbitrary substring
 matches, so incidental words such as "coffee" and "repayment" do not create fee

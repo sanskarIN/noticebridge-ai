@@ -8,9 +8,16 @@ reject contradictory, fabricated-role or self-certified evidence structures.
 import hashlib
 import math
 
-from .compare import anchor, category_for, context_similarity, normalize
-from .extract import MAX_EXTRACTED_LINES, MAX_LINE_CHARACTERS, MAX_OCR_PAGES, MAX_PAGES
+from .compare import anchor, category_for, normalize
+from .extract import (
+    MAX_EXTRACTED_LINES,
+    MAX_LINE_CHARACTERS,
+    MAX_OCR_PAGES,
+    MAX_PAGES,
+    bbox_intersects_page,
+)
 from .facts import date_tokens, field_changes
+from .matching import MIN_FUZZY_SIMILARITY, FuzzyBudget, context_similarity
 from .messages import HINDI_CATEGORY, SUMMARY_MESSAGES, review_messages
 from .models import ComparisonReport, Evidence
 from .warning_policy import warning_supported
@@ -118,17 +125,10 @@ def verify_report_provenance(
         )
         # PyMuPDF always reports text boxes before page rotation. Reject a
         # wholly off-page box while allowing a legitimate partly clipped glyph.
-        unrotated_width = (
-            evidence.page_width if evidence.page_rotation in (0, 180)
-            else evidence.page_height
-        )
-        unrotated_height = (
-            evidence.page_height if evidence.page_rotation in (0, 180)
-            else evidence.page_width
-        )
         _require(
-            x1 > 0 and y1 > 0
-            and x0 < unrotated_width and y0 < unrotated_height,
+            bbox_intersects_page(
+                evidence.bbox, evidence.page_width, evidence.page_height, evidence.page_rotation,
+            ),
             "Evidence source box is outside the source page",
         )
         _require(
@@ -164,6 +164,7 @@ def verify_report_provenance(
     ai_new_used: set[tuple[str, str]] = set()
     finding_ids: set[str] = set()
     ai_proposals = 0
+    fuzzy_budget = FuzzyBudget()
     for finding in report.findings:
         _require(finding.id not in finding_ids, "Finding IDs must be unique")
         finding_ids.add(finding.id)
@@ -302,9 +303,14 @@ def verify_report_provenance(
                     old_context == new_context,
                     "Confirmed change requires matching source context",
                 )
-            expected_similarity = round(context_similarity(old_context, new_context), 3)
+            if old_context != new_context:
+                _require(
+                    fuzzy_budget.reserve(old_context, new_context),
+                    "Report exceeds the fuzzy verification budget",
+                )
+            similarity = context_similarity(old_context, new_context)
             _require(
-                finding.similarity == expected_similarity,
+                similarity >= MIN_FUZZY_SIMILARITY and finding.similarity == round(similarity, 3),
                 "Reported text similarity does not match its quotations",
             )
             expected = field_changes(

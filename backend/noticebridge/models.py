@@ -80,6 +80,7 @@ class ComparisonReport(BaseModel):
     checklist: list[ChecklistItem]
     warnings: list[str]
     text_coverage: Literal["all_pages_have_text", "partial", "inconclusive"] = "inconclusive"
+    fuzzy_matching_limited: bool = False
     semantic_assistance: Literal[
         "not_requested", "no_candidates", "unavailable", "no_verified_pairs",
         "proposals_added"

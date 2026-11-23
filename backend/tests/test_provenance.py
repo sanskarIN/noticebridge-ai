@@ -368,6 +368,52 @@ def test_possible_native_pair_cannot_claim_a_certain_structured_field_change(pdf
         verify(source)
 
 
+def test_parent_reserves_work_before_rescoring_fuzzy_report(pdf_bytes, monkeypatch):
+    from noticebridge import matching
+
+    original = pdf_bytes([["Phase 1 deadline: 13 December 2026"]])
+    revised = pdf_bytes([["Phase 2 deadline: 14 December 2026"]])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    source = (original, revised, report)
+    verify(source)
+    monkeypatch.setattr(matching, "MAX_FUZZY_WORK", 1)
+    with pytest.raises(InvalidReportProvenance, match="fuzzy verification budget"):
+        verify(source)
+
+
+def test_dense_cross_page_deadline_warnings_are_bounded_and_accepted(pdf_bytes):
+    from noticebridge.warning_policy import MAX_CROSS_PAGE_DETAILS
+
+    source = pdf_bytes([
+        [f"Track {i} deadline: {day} December 2026" for i in range(MAX_CROSS_PAGE_DETAILS + 2)]
+        for day in (13, 14)
+    ])
+    report = compare_documents(
+        extract_pdf(source, document_id="original", filename="old.pdf"),
+        extract_pdf(source, document_id="revised", filename="new.pdf"),
+    )
+    assert not report.findings
+    assert len(report.warnings) == 2 * (MAX_CROSS_PAGE_DETAILS + 1)
+    assert "original: 2 additional repeated deadline labels need review" in report.warnings
+    assert "revised: 2 additional repeated deadline labels need review" in report.warnings
+    verify((source, source, report))
+
+
+def test_geometry_warning_requires_a_valid_source_page(source_report):
+    _, _, report = source_report
+    report.warnings.append(
+        "original: page 1 omitted 1 text line(s) with invalid source coordinates"
+    )
+    verify(source_report)
+
+    report.warnings[-1] = report.warnings[-1].replace("page 1", "page 2")
+    with pytest.raises(InvalidReportProvenance, match="warning text"):
+        verify(source_report)
+
+
 @pytest.mark.parametrize("mutation", ["same_date", "different_label"])
 def test_contradictions_require_two_distinct_dates_under_same_label(
     pdf_bytes, mutation
