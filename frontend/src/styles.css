@@ -10,12 +10,14 @@
 .coverage-report {
   margin: 1rem 0;
   padding: 1rem 1.25rem;
-  border: 1px solid var(--border, #d6dce6);
+  border: 1px solid #35566b;
   border-radius: 0.75rem;
-  background: var(--surface, #fff);
+  background: #102638;
+  color: #d7e8f1;
 }
 .coverage-report p {
   margin: 0.35rem 0 0;
+  color: #c9dbe9;
   overflow-wrap: anywhere;
 }
 .coverage-report.partial,
@@ -26,8 +28,10 @@
 .ai-feedback {
   padding: 0.85rem 1rem;
   margin: 0.75rem 0;
-  border: 1px solid var(--border, #d6dce6);
+  border: 1px solid #35566b;
   border-radius: 0.65rem;
+  background: #122e41;
+  color: #d7e8f1;
   overflow-wrap: anywhere;
 }
 

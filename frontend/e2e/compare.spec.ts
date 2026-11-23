@@ -249,3 +249,37 @@ test('refuses a source marker when reported PDF page geometry is inconsistent', 
   await expect(page.locator('.evidence-highlight')).toHaveCount(0);
 });
 
+
+test('dark theme displays readable text extraction and local AI status panels', async ({ page }) => {
+  await addSources(page);
+  await page.getByLabel(/Suggest matches with local AI/).check();
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const coverage = page.locator('.coverage-report');
+  const modelFeedback = page.locator('.ai-feedback');
+  await expect(coverage).toBeVisible();
+  await expect(modelFeedback).toBeVisible();
+
+  async function contrastRatio(selector: string): Promise<number> {
+    return page.locator(selector).evaluate((element) => {
+      const panel = element.closest('.coverage-report, .ai-feedback') ?? element;
+      const background = getComputedStyle(panel).backgroundColor;
+      const foreground = getComputedStyle(element).color;
+      const channels = (color: string) =>
+        [...color.matchAll(/[0-9]+(?:\.[0-9]+)?/g)]
+          .slice(0, 3).map(match => Number(match[0]) / 255);
+      const luminance = (color: string) => {
+        const [r, g, b] = channels(color).map(value =>
+          value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+        );
+        return r * 0.2126 + g * 0.7152 + b * 0.0722;
+      };
+      const a = luminance(background);
+      const b = luminance(foreground);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    });
+  }
+
+  expect(await contrastRatio('.coverage-report p')).toBeGreaterThanOrEqual(4.5);
+  expect(await contrastRatio('.ai-feedback')).toBeGreaterThanOrEqual(4.5);
+});
+
