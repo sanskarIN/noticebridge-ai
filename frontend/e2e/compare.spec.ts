@@ -165,3 +165,87 @@ test('mobile comparison stays within viewport and discloses temporary storage', 
   }
 });
 
+
+function geometryPdf(day: number, rotation: 0 | 90 | 180 | 270, crop: boolean, unit: number): Buffer {
+  // Fictional PDF using PDF-level /Rotate, /CropBox and /UserUnit.
+  const stream = 'BT /F1 18 Tf 160 530 Td (Deadline: ' + day + ' December 2026) Tj ET\n';
+  const media = '/MediaBox [0 0 600 800]';
+  const cropBox = crop ? '/CropBox [100 100 500 700]' : '';
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R ' + media + ' ' + cropBox + ' /Rotate ' + rotation +
+      ' /UserUnit ' + unit + ' /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    '<< /Length ' + Buffer.byteLength(stream) + ' >>\nstream\n' + stream + 'endstream',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [0];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += (index + 1) + ' 0 obj\n' + object + '\nendobj\n';
+  }
+  const xref = Buffer.byteLength(pdf);
+  pdf += 'xref\n0 ' + (objects.length + 1) + '\n0000000000 65535 f \n';
+  for (const offset of offsets.slice(1)) {
+    pdf += String(offset).padStart(10, '0') + ' 00000 n \n';
+  }
+  pdf += 'trailer\n<< /Size ' + (objects.length + 1) +
+    ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+  return Buffer.from(pdf);
+}
+
+for (const setting of [
+  { rotation: 0 as const, crop: false, unit: 1 },
+  { rotation: 90 as const, crop: false, unit: 1 },
+  { rotation: 180 as const, crop: true, unit: 1 },
+  { rotation: 270 as const, crop: true, unit: 2 },
+]) {
+  test('source highlight follows rotation ' + setting.rotation +
+    ' crop ' + setting.crop + ' user unit ' + setting.unit, async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#original').setInputFiles({
+      name: 'geometry-original.pdf', mimeType: 'application/pdf',
+      buffer: geometryPdf(13, setting.rotation, setting.crop, setting.unit),
+    });
+    await page.locator('#revised').setInputFiles({
+      name: 'geometry-revised.pdf', mimeType: 'application/pdf',
+      buffer: geometryPdf(14, setting.rotation, setting.crop, setting.unit),
+    });
+    await page.getByRole('button', { name: /Compare documents/ }).click();
+    await expect(page.locator('.finding')).toHaveCount(1);
+    await page.getByRole('button', { name: /Open PDF page/ }).first().click();
+    await expect(page.locator('.preview-dialog canvas')).toBeVisible();
+    const marker = page.locator('.evidence-highlight');
+    await expect(marker).toBeVisible();
+    const geometry = await page.evaluate(() => {
+      const canvas = document.querySelector('.preview-dialog canvas')!.getBoundingClientRect();
+      const mark = document.querySelector('.evidence-highlight')!.getBoundingClientRect();
+      return {
+        width: mark.width, height: mark.height,
+        inside: mark.left >= canvas.left - 2 && mark.top >= canvas.top - 2 &&
+          mark.right <= canvas.right + 2 && mark.bottom <= canvas.bottom + 2,
+      };
+    });
+    expect(geometry.width).toBeGreaterThan(0);
+    expect(geometry.height).toBeGreaterThan(0);
+    expect(geometry.inside).toBe(true);
+  });
+}
+
+test('refuses a source marker when reported PDF page geometry is inconsistent', async ({ page }) => {
+  await page.route('**/api/compare', async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    data.findings[0].original.page_width = 9999;
+    await route.fulfill({ response, json: data });
+  });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(page.locator('.finding')).toHaveCount(1);
+  await page.getByRole('button', { name: /Open PDF page/ }).first().click();
+  await expect(page.locator('.preview-dialog canvas')).toBeVisible();
+  await expect(page.getByText(/geometry could not be verified/)).toBeVisible();
+  await expect(page.locator('.evidence-highlight')).toHaveCount(0);
+});
+
