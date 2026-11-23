@@ -142,6 +142,7 @@ def run_isolated_comparison(
         verify_report_provenance(
             report, original=original, revised=revised,
             old_name=old_name, new_name=new_name,
+            semantic_requested=enable_semantic, ocr_requested=enable_ocr,
         )
         return report
     except (ValidationError, InvalidReportProvenance) as exc:

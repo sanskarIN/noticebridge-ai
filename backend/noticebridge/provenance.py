@@ -30,6 +30,8 @@ def verify_report_provenance(
     revised: bytes,
     old_name: str,
     new_name: str,
+    semantic_requested: bool = False,
+    ocr_requested: bool = False,
 ) -> None:
     """Validate document IDs, uploaded bytes, source references and claims."""
     _require(len(report.documents) == 2, "Expected exactly two document summaries")
@@ -66,6 +68,8 @@ def verify_report_provenance(
             0 <= document.ocr_page_count <= min(MAX_OCR_PAGES, document.pages_with_text),
             f"{role} OCR count is inconsistent with text-covered pages",
         )
+        if not ocr_requested:
+            _require(document.ocr_page_count == 0, "OCR was used without opt-in")
         empty_pages = document.pages_without_text
         _require(
             empty_pages == sorted(set(empty_pages))
@@ -105,6 +109,11 @@ def verify_report_provenance(
             "Evidence contains invalid source coordinates",
         )
         _require(bool(evidence.text.strip()), "Evidence has no source quotation")
+        if not ocr_requested:
+            _require(
+                evidence.extraction_method == "native",
+                "OCR evidence appeared without opt-in",
+            )
 
     finding_ids: set[str] = set()
     ai_proposals = 0
@@ -182,3 +191,13 @@ def verify_report_provenance(
         (report.semantic_assistance == "proposals_added") == (ai_proposals > 0),
         "Semantic assistance outcome does not match the proposed findings",
     )
+    if semantic_requested:
+        _require(
+            report.semantic_assistance != "not_requested",
+            "Opted-in semantic assistance outcome was omitted",
+        )
+    else:
+        _require(
+            report.semantic_assistance == "not_requested" and ai_proposals == 0,
+            "Semantic assistance appeared without opt-in",
+        )

@@ -103,6 +103,7 @@ def test_valid_ai_suggestion_stays_unverified(source_report):
     verify_report_provenance(
         report, original=original, revised=revised,
         old_name="old.pdf", new_name="new.pdf",
+        semantic_requested=True,
     )
 
 
@@ -126,3 +127,31 @@ def test_parent_rejects_a_forged_worker_payload(monkeypatch, source_report):
             original, revised, old_name="old.pdf", new_name="new.pdf",
             enable_ocr=False,
         )
+
+
+def test_ai_output_cannot_appear_without_explicit_opt_in(source_report):
+    original, revised, report = source_report
+    finding = report.findings[0]
+    finding.status = "possible_change"
+    finding.match_method = "semantic_proposal"
+    finding.similarity = 0
+    finding.field_changes = []
+    report.semantic_assistance = "proposals_added"
+    with pytest.raises(InvalidReportProvenance, match="without opt-in"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+            semantic_requested=False,
+        )
+
+
+def test_ocr_metadata_cannot_appear_without_explicit_opt_in(source_report):
+    original, revised, report = source_report
+    report.documents[0].ocr_page_count = 1
+    with pytest.raises(InvalidReportProvenance, match="OCR was used without opt-in"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+            ocr_requested=False,
+        )
+
