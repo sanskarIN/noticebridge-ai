@@ -71,11 +71,13 @@ def _attach_windows_job(process: subprocess.Popen[bytes]) -> WindowsWorkerJob | 
         return None
     try:
         return WindowsWorkerJob(process.pid)
-    except OSError as exc:
+    except Exception as exc:
+        # An unexpected ctypes/Win32 setup exception must not strand a
+        # newly spawned, unassigned worker. The PDF bytes are still unread.
         _kill_worker(process)
         try:
             process.communicate(timeout=2)
-        except subprocess.TimeoutExpired:
+        except (subprocess.TimeoutExpired, OSError):
             pass
         raise ProcessingFailed("Windows worker process containment unavailable") from exc
 
@@ -148,11 +150,22 @@ def run_isolated_comparison(
                         _kill_worker(process)
                     try:
                         process.communicate(timeout=2)
-                    except subprocess.TimeoutExpired:
+                    except (subprocess.TimeoutExpired, OSError):
                         pass
                     raise ProcessingTimedOut(
                         "PDF comparison exceeded its processing time limit"
                     ) from exc
+                except BaseException:
+                    # Broken pipes, interrupted writes and other unexpected
+                    # failures must also kill/reap the child process tree.
+                    # The normal completion path below only handles success.
+                    if job is None or not job.terminate():
+                        _kill_worker(process)
+                    try:
+                        process.communicate(timeout=2)
+                    except (subprocess.TimeoutExpired, OSError):
+                        pass
+                    raise
 
                 if process.returncode != 0:
                     raise ProcessingFailed("PDF comparison worker failed")
