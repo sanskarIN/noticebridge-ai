@@ -485,7 +485,16 @@ def main() -> int:
     # Aggregate scores may be dominated by fictional or duplicated easy cases.
     # Always enforce independent-cohort gates on their own *raw* pair counts,
     # including when the caller intentionally evaluates a mixed manifest.
-    independent_counts = result["cohorts"]["declared_independent_nonfictional"]["pair_counts"]
+    independent = result["cohorts"]["declared_independent_nonfictional"]
+    independent_gate_requested = any(value is not None for value in (
+        args.min_independent_precision,
+        args.min_independent_recall,
+        args.max_independent_unsupported_confirmed,
+    ))
+    # A zero-error check over zero independent cases is not evidence of safety.
+    if independent_gate_requested and independent["case_count"] == 0:
+        return 1
+    independent_counts = independent["pair_counts"]
     independent_tp = independent_counts["true_positive"]
     for denominator, threshold in (
         (
