@@ -311,6 +311,47 @@ human-reviewed examples with recorded provenance:
 - A frozen test split independent of development examples and the fictional
   demonstration.
 
+### Reconcile two independent reviews
+
+Give both reviewers the same version-2 manifest with the PDF fingerprints pinned
+and the `expected_pairs` arrays empty. Keep the reviewers' copies separate, and
+have each reviewer label the PDFs without seeing the other person's labels or the
+engine's predictions. In each finished case, set
+`"label_method": "independent_human"` and `"review_complete": true`. The
+completion field distinguishes a reviewed case with zero expected pairs from an
+unreviewed case. Use pseudonymous reviewer IDs.
+
+Run the reconciliation from the repository root. Keep the manifests in the same
+directory as each other so their relative PDF paths refer to the same dataset.
+
+~~~bash
+python backend/benchmarks/reconcile_labeled_reviews.py \
+  evaluation/review-a.json evaluation/review-b.json \
+  --reviewer-a reviewer-a --reviewer-b reviewer-b \
+  --output evaluation/labels-reconciled.json
+~~~
+
+The audit prints case IDs, counts, and input manifest fingerprints. It omits
+source quotations. Exact pair agreement uses the same page numbers, quote
+normalization, and occurrence counts as the evaluator. The positive pair
+agreement score is twice the number of shared pairs divided by the total number
+of pairs labeled by both reviewers, with a null score when neither labels a pair.
+
+If reviewers disagree, the command exits with status 1 and leaves the output
+path untouched. Have a third person review only the disputed cases against the
+PDFs. Their separate version-2 manifest must include every disputed case
+and its complete corrected labels, even when the correct result is an empty list.
+Mark those cases complete and rerun with
+`--adjudication evaluation/review-c.json --adjudicator reviewer-c`. The resolved
+manifest retains the audit and can be passed to `evaluate_labeled.py` with
+`--require-pinned-sources`. Use the independent-corpus gate for the required
+number of distinct non-fictional pairs.
+
+Review completion and reviewer roles are recorded declarations. The command
+checks that both reviews refer to the same pinned PDFs and uses the adjudicated
+labels for disputed cases. The private review manifests preserve source
+quotations and should stay with the evaluation data.
+
 When reporting results, state sample counts, scope, version/commit, extraction
 coverage, and known failure cases. Keep exact user or applicant data private.
 A public GitHub demo should use fictional or properly permissioned documents.
