@@ -44,9 +44,9 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 
 - API: two PDFs at most 10 MiB each; at most 80 pages and 12,000 extracted text lines per PDF; bounded text length; encrypted or malformed files rejected.
 - Backend retains extracted content only in the request context and does not intentionally persist it. Starlette can spool multipart uploads temporarily to OS disk; operators must protect and clean temporary storage. No-cache headers discourage response caching but cannot control every intermediary.
-- OCR uses Tesseract on the server, not a third-party API; it is not guaranteed to be fast, sandboxed, or reproducible across Tesseract versions.
+- OCR uses Tesseract on the server, not a third-party API; it runs in a disposable worker with 120-second wall-clock timeout, but is not OS-sandboxed or reproducible across Tesseract versions. Native PDF comparisons have a 45-second deadline. Timed-out POSIX worker process groups are killed; Windows terminates the direct worker only.
 - Browser source preview uses local PDF.js rendering with a same-origin bundled worker, while the open-in-new-tab fallback uses a local `File` object URL that is revoked after preview closure. JSON export remains local to the browser unless a user independently shares it.
-- The service is **not hardened for arbitrary public internet exposure**: no authentication, rate limiting, malware isolation, sandbox worker pool, or operational monitoring strategy exists yet.
+- The service is **not hardened for arbitrary public internet exposure**: subprocess separation is not an OS sandbox; no authentication, rate limiting, OS-enforced memory/CPU quotas, malware isolation, or operational monitoring strategy exists yet.
 - Uploaded source text is treated as data, never as instructions to change verification policy.
 
 ## Automated regression suites
@@ -55,6 +55,7 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 - `backend/tests/test_compare.py`: changed/unchanged statements, reordered lines, duplicated deadline labels, ambiguity handling, source location and lack of authority inference.
 - `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, date ambiguity, invalid calendar dates, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py`: health, live multipart comparisons, bad uploads, upload size, filename sanitization, response no-store headers.
+- `backend/tests/test_isolation.py`: real worker roundtrips, malformed input, timeout/forced termination behavior, invalid worker output and API failure mapping.
 
 Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tests` and `ruff check backend` from repository root. GitHub Actions also runs the React/TypeScript production build and a Playwright/Chromium browser job against a locally running FastAPI + Vite stack, using two generated fictional PDF notices. The browser suite checks rendering, highlighting, export and Hindi explanation switching. Browser coverage is intentionally small and does not certify all PDFs or platforms.
 
@@ -64,4 +65,4 @@ Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tes
 
 ## Still not implemented
 
-Trustworthy amendment/issuer provenance resolution; LLM-powered semantic matching with independent verification; rotated/cropped-page coordinate-accurate highlights; calibrated OCR confidence; production-grade PDF/OCR worker isolation and timeouts; persistent projects/checklists; calendar export; comprehensive browser E2E tests; independent real-world benchmark accuracy measurements.
+Trustworthy amendment/issuer provenance resolution; LLM-powered semantic matching with independent verification; rotated/cropped-page coordinate-accurate highlights; calibrated OCR confidence; production-grade OS sandboxing, resource quotas and worker orchestration; persistent projects/checklists; calendar export; comprehensive browser E2E tests; independent real-world benchmark accuracy measurements.

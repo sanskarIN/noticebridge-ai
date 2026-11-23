@@ -8,15 +8,15 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
-from .compare import compare_documents
-from .extract import MAX_UPLOAD_BYTES, InvalidDocument, extract_pdf
+from .extract import MAX_UPLOAD_BYTES, InvalidDocument
+from .isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 from .models import ComparisonReport
 
 app = FastAPI(
     title="NoticeBridge AI", version="0.1.0", description="Evidence-first PDF comparisons"
 )
-# Extraction is CPU / memory intensive. Bound simultaneous document parsing
-# inside one worker; production servers still need isolated upload workers.
+# Bound simultaneous disposable workers per API process. Public deployments
+# still require authentication, rate limiting, and operating-system sandboxing.
 parse_slots = asyncio.Semaphore(4)
 
 
@@ -79,17 +79,22 @@ async def compare(
         old_name = safe_filename(original.filename, fallback="original.pdf")
         new_name = safe_filename(revised.filename, fallback="revised.pdf")
         async with parse_slots:
-            # Move PDF extraction off the ASGI event loop. No durable app
-            # storage is used; multipart parsing may spool temporary files.
-            old_doc = await run_in_threadpool(
-                extract_pdf, a, document_id="original", filename=old_name, enable_ocr=enable_ocr
+            # Isolate parser/OCR work in a disposable subprocess with a hard
+            # wall-clock deadline; never block the ASGI event loop.
+            return await run_in_threadpool(
+                run_isolated_comparison,
+                a, b, old_name=old_name, new_name=new_name, enable_ocr=enable_ocr,
             )
-            new_doc = await run_in_threadpool(
-                extract_pdf, b, document_id="revised", filename=new_name, enable_ocr=enable_ocr
-            )
-            return await run_in_threadpool(compare_documents, old_doc, new_doc)
     except InvalidDocument as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ProcessingTimedOut as exc:
+        raise HTTPException(
+            status_code=504, detail="PDF processing timed out; try smaller documents"
+        ) from exc
+    except ProcessingFailed as exc:
+        raise HTTPException(
+            status_code=503, detail="PDF processing failed; no evidence report was generated"
+        ) from exc
     finally:
         await original.close()
         await revised.close()

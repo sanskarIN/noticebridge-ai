@@ -18,7 +18,7 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 - Bilingual English/Hindi **templated** explanations. No LLM is used yet; neither AI accuracy nor authoritative conflict resolution is claimed.
 - Human-verification checklist for changed deadlines, fees, eligibility, and instructions.
 - React/TypeScript comparison workspace with side-by-side evidence, locally rendered source pages, an explicit OCR opt-in, portable JSON evidence export, and review controls.
-- Stateless FastAPI endpoint with bounded PDF parsing concurrency, no-cache responses, Pytest regression tests, and CI configuration.
+- Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, no-cache responses, Pytest regression tests, and CI configuration.
 - **Browser end-to-end tests** (Playwright/Chromium) verifying upload, evidence display, local PDF.js canvas/highlights, Hindi switching, and JSON export.
 - A reproducible **12-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
 
@@ -69,12 +69,12 @@ All evidence references point to source text extracted from the uploaded PDFs, i
 - **Limited PDF.js coordinate highlighting**: the UI renders a highlighted excerpt for unrotated pages using source coordinates. On rotated pages it intentionally shows the page without an overlay. Complex cropped/transformed PDFs may also need manual visual checking.
 - **No persistent checklist**: selections reset when the page reloads. Reviewing a checklist item does not by itself verify official authority. You can export a JSON snapshot of findings and review state.
 - **Ambiguous dates**: dates are parsed conservatively. A numeric date with both first and second parts ≤12 and different is not interpreted as DD/MM or MM/DD. Month-name and ISO formats are safer. Not all language/date/amount formats are recognized.
-- **Security**: document processing is request-scoped and application data is not durably persisted; multipart uploads may be spooled to OS temp storage before parsing. The backend is **not hardened for hostile public internet uploads**; production deployments need isolated parser/OCR workers with timeouts, authentication, rate limiting, operational safeguards, and malware controls. Encrypted PDFs and >80-page PDFs are rejected.
+- **Security**: document processing uses a short-lived subprocess with a hard wall-clock deadline, and application data is not durably persisted; multipart uploads may be spooled to OS temp storage before parsing. On POSIX, timed-out worker process groups are terminated; on Windows, only the direct worker is terminated. This is **not an OS sandbox** and is **not yet hardened for hostile public internet uploads**. Deployments still need OS isolation and memory/CPU quotas, authentication, rate limiting, malware controls and operational safeguards. Encrypted PDFs and >80-page PDFs are rejected.
 
 ## Roadmap
 
 1. True semantic relationship analysis with cross-notice provenance and explicit issuer authority metadata.
-2. Better OCR quality evaluation and configurable safe worker isolation/timeouts; add calibrated OCR confidence when supported.
+2. OS-level sandboxing and worker memory/CPU budgets, plus better OCR quality evaluation and calibrated confidence when supported.
 3. Semantic matching with structured LLM proposals and independent deterministic verification.
 4. PDF.js rotation/crop-aware coordinate transforms, visual regression tests, and optional reviewed CSV/calendar exports.
 5. Stronger adversarial testing, privacy/security hardening, and an accessible deployed demo.

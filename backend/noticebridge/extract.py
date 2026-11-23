@@ -130,9 +130,11 @@ def extract_pdf(
             if method == "ocr" and page_lines:
                 ocr_page_count += 1
             if page_lines == 0:
-                warnings.append(
-                    f"{document_id}: page {index + 1} has no extractable text; "
+                explanation = (
                     "OCR not enabled" if not enable_ocr else "comparison may be incomplete"
+                )
+                warnings.append(
+                    f"{document_id}: page {index + 1} has no extractable text; {explanation}"
                 )
         if ocr_page_count:
             warnings.append(

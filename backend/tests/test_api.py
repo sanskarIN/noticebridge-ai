@@ -74,20 +74,20 @@ def test_api_strips_untrusted_paths_from_filenames(pdf_bytes):
 def test_api_ocr_form_flag_is_forwarded(pdf_bytes, monkeypatch):
     import noticebridge.api as module
 
-    original = module.extract_pdf
+    original = module.run_isolated_comparison
     enabled: list[bool] = []
 
     def record(*args, **kwargs):
         enabled.append(kwargs.get("enable_ocr", False))
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(module, "extract_pdf", record)
+    monkeypatch.setattr(module, "run_isolated_comparison", record)
     response = client.post("/api/compare", data={"enable_ocr": "true"}, files={
         "original": ("a.pdf", pdf_bytes([["Hello"]]), "application/pdf"),
         "revised": ("b.pdf", pdf_bytes([["World"]]), "application/pdf"),
     })
     assert response.status_code == 200
-    assert enabled == [True, True]
+    assert enabled == [True]
     assert len(response.json()["documents"][0]["sha256"]) == 64
 
 
