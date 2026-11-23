@@ -703,3 +703,68 @@ test('links a separate amendment to the quoted original without accepting its au
   await finding.getByRole('button', { name: /Open PDF page/ }).last().click();
   await expect(page.locator('.evidence-highlight')).toBeVisible();
 });
+
+
+test('Review first promotes unmatched deadlines without implying a revoked deadline', async ({
+  page,
+}) => {
+  await compareReviewFixture(
+    page,
+    [['Application deadline: 13 December 2026', 'Application fee: Rs. 200']],
+    [['Eligibility requirement: diploma', 'Application fee: Rs. 300']],
+  );
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText([
+    'Unmatched deadline statement', 'Fee changed', 'Unmatched eligibility statement',
+  ]);
+  await expect(first).toContainText('Do not assume it was added or withdrawn');
+  await first.getByRole('button', { name: 'Inspect finding: Unmatched deadline statement' }).click();
+  const finding = page.locator('.finding').filter({ hasText: 'Application deadline: 13 December 2026' });
+  await expect(finding).toBeFocused();
+  await expect(finding.locator('.status')).toHaveText('Unmatched statement');
+  await finding.getByRole('checkbox').check();
+  await expect(first.getByText('Unmatched deadline statement')).toHaveCount(0);
+});
+
+test('Review first includes uncertain deadline wording without a parsed field delta', async ({
+  page,
+}) => {
+  // The route controls the UI fixture, not the source extraction algorithm.
+  await page.route('**/api/compare', async route => {
+    const response = await route.fetch();
+    const report = await response.json();
+    const finding = report.findings[0];
+    finding.status = 'possible_change';
+    finding.field_changes = [];
+    finding.original.extraction_method = 'ocr';
+    await route.fulfill({ response, json: report });
+  });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText(['Possible deadline wording change']);
+  await expect(first).toContainText('without a reliably parsed date');
+  await expect(first).toContainText('OCR transcription must be checked');
+  await first.getByRole('button', { name: /Inspect finding: Possible deadline wording change' }).click();
+  await expect(page.locator('.finding')).toBeFocused();
+});
+
+test('Review first never silently treats an uncertain fee relationship as confirmed', async ({
+  page,
+}) => {
+  await page.route('**/api/compare', async route => {
+    const response = await route.fetch();
+    const report = await response.json();
+    const finding = report.findings[0];
+    finding.category = 'fee';
+    finding.status = 'possible_change';
+    finding.field_changes = [];
+    await route.fulfill({ response, json: report });
+  });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText(['Possible fee wording change']);
+  await expect(first).not.toContainText('Fee changed');
+  await expect(first).toContainText('verify the intended requirement with the issuer');
+});
