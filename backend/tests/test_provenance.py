@@ -354,3 +354,27 @@ def test_contradictions_require_two_distinct_dates_under_same_label(
             old_name="old.pdf", new_name="new.pdf",
         )
 
+
+def test_forged_cross_page_contradiction_is_rejected(pdf_bytes):
+    # The worker cannot promote separate-page deadline examples to a verified
+    # conflict by swapping a source location.
+    original = pdf_bytes([
+        ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
+        ["Requirements unchanged"],
+    ])
+    revised = pdf_bytes([
+        ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
+        ["Requirements unchanged"],
+    ])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    finding = next(f for f in report.findings if f.status == "contradiction")
+    finding.supporting_evidence[1].page = 2
+    with pytest.raises(InvalidReportProvenance, match="one PDF page"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+        )
+

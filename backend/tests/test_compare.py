@@ -171,3 +171,50 @@ def test_inconclusive_text_coverage_when_either_document_has_no_text(pdf_bytes):
                       document_id="revised", filename="new.pdf")
     assert compare_documents(old, new).text_coverage == "inconclusive"
 
+
+def test_repeated_deadline_label_across_pages_is_review_warning_not_contradiction(
+    pdf_bytes,
+):
+    # Separate pages may concern separate phases or distinct requirements.
+    old_bytes = pdf_bytes([
+        ["Deadline: 13 December 2026"],
+        ["Deadline: 14 December 2026"],
+    ])
+    new_bytes = pdf_bytes([
+        ["Deadline: 13 December 2026"],
+        ["Deadline: 14 December 2026"],
+    ])
+    old = extract_pdf(old_bytes, document_id="original", filename="old.pdf")
+    new = extract_pdf(new_bytes, document_id="revised", filename="new.pdf")
+    result = compare_documents(old, new)
+    assert not result.findings
+    assert sum("repeated deadline label on pages 1, 2" in w for w in result.warnings) == 2
+
+
+def test_same_page_contradictions_remain_evidence_linked_across_multiple_pages(
+    pdf_bytes,
+):
+    original = extract_pdf(
+        pdf_bytes([
+            ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
+            ["Deadline: 18 December 2026", "Deadline: 19 December 2026"],
+        ]),
+        document_id="original", filename="old.pdf",
+    )
+    revised = extract_pdf(
+        pdf_bytes([
+            ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
+            ["Deadline: 18 December 2026", "Deadline: 19 December 2026"],
+        ]),
+        document_id="revised", filename="new.pdf",
+    )
+    report = compare_documents(original, revised)
+    contradictions = [f for f in report.findings if f.status == "contradiction"]
+    assert len(contradictions) == 4
+    assert all(
+        len({e.document_id for e in f.supporting_evidence}) == 1
+        and len({e.page for e in f.supporting_evidence}) == 1
+        for f in contradictions
+    )
+    assert not any("repeated deadline label on pages" in w for w in report.warnings)
+
