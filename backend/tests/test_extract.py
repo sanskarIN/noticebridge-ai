@@ -210,3 +210,20 @@ def test_real_hindi_scan_ocr_with_installed_language_pack():
     assert all(line.evidence.extraction_method == "ocr" for line in result.lines)
     # Correct Hindi OCR is a quality benchmark, not guaranteed: readers still
     # need to verify numbers against the scanned original.
+
+
+def test_ocr_missing_text_warning_retains_document_and_page(pdf_bytes, monkeypatch):
+    import pymupdf
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("Tesseract unavailable")
+
+    monkeypatch.setattr(pymupdf.Page, "get_textpage_ocr", unavailable)
+    document = extract_pdf(
+        pdf_bytes([[]]), document_id="original", filename="scanned.pdf",
+        enable_ocr=True,
+    )
+    assert any(
+        "original: page 1 has no extractable text; comparison may be incomplete" in warning
+        for warning in document.warnings
+    )

@@ -4,7 +4,7 @@ import hashlib
 import math
 from dataclasses import dataclass
 
-import fitz
+import pymupdf as fitz
 
 from .models import DocumentSummary, Evidence, ExtractedLine
 
