@@ -279,3 +279,83 @@ def test_pin_tool_refuses_source_file_with_parent_traversal(tmp_path, pdf_bytes)
         )
     assert not (tmp_path / "pinned.json").exists()
 
+
+def test_labeled_evaluation_ocr_opt_in_is_explicit_and_never_enables_ai(
+    monkeypatch, tmp_path, pdf_bytes
+):
+    import evaluate_labeled as module
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    real_runner = module.run_isolated_comparison
+    choices = []
+
+    def trace(*args, **kwargs):
+        choices.append((kwargs["enable_ocr"], kwargs["enable_semantic"]))
+        # Native-text PDFs need no actual Tesseract installation.
+        kwargs["enable_ocr"] = False
+        return real_runner(*args, **kwargs)
+
+    monkeypatch.setattr(module, "run_isolated_comparison", trace)
+    without = module.evaluate_labeled(manifest)
+    with_ocr = module.evaluate_labeled(manifest, enable_ocr=True)
+    assert choices == [(False, False), (True, False)]
+    assert without["ocr_enabled"] is False
+    assert with_ocr["ocr_enabled"] is True
+    assert with_ocr["ocr_page_count"] == 0
+    assert with_ocr["pages_without_text_count"] == 0
+    assert without["pair_counts"] == with_ocr["pair_counts"]
+
+
+def test_ocr_evaluation_reports_incomplete_scanned_pages_without_hallucinating(
+    tmp_path, pdf_bytes
+):
+    import evaluate_labeled as module
+
+    empty = pdf_bytes([[]])
+    (tmp_path / "original.pdf").write_bytes(empty)
+    (tmp_path / "revised.pdf").write_bytes(empty)
+    payload = {
+        "version": 1,
+        "cases": [{
+            "id": "empty_scan",
+            "original": "original.pdf",
+            "revised": "revised.pdf",
+            "expected_pairs": [],
+        }],
+    }
+    manifest = tmp_path / "labels.json"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    report = module.evaluate_labeled(manifest, enable_ocr=False)
+    assert report["ocr_enabled"] is False
+    assert report["ocr_page_count"] == 0
+    assert report["pages_without_text_count"] == 2
+    assert report["incomplete_case_count"] == 1
+    assert report["precision"] is None
+    assert report["recall"] is None
+
+
+def test_cli_forwards_ocr_flag_but_keeps_labeled_sources_local(
+    tmp_path, pdf_bytes, monkeypatch, capsys
+):
+    import evaluate_labeled as module
+
+    manifest = _dataset(tmp_path, pdf_bytes)
+    captured = {}
+
+    def fake_evaluate(path, *, enable_ocr=False):
+        captured.update({"path": path, "enable_ocr": enable_ocr})
+        return {
+            "manifest_version": 1,
+            "precision": None,
+            "recall": None,
+            "ocr_enabled": enable_ocr,
+        }
+
+    monkeypatch.setattr(module, "evaluate_labeled", fake_evaluate)
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--enable-ocr"]
+    )
+    assert module.main() == 0
+    assert captured == {"path": manifest, "enable_ocr": True}
+    assert json.loads(capsys.readouterr().out)["ocr_enabled"] is True
+
