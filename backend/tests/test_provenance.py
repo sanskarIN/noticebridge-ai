@@ -4,6 +4,7 @@ import pytest
 
 from noticebridge.compare import compare_documents
 from noticebridge.extract import extract_pdf
+from noticebridge.messages import SUMMARY_MESSAGES
 from noticebridge.provenance import InvalidReportProvenance, verify_report_provenance
 
 
@@ -57,6 +58,11 @@ def test_valid_native_comparison_preserves_source_integrity(source_report):
     ("missing_review_task", "checklist is missing"),
     ("fake_identical_confirmation", "identical source wording"),
     ("wrong_deterministic_category", "category contradicts"),
+    ("forged_summary_en", "Finding explanation"),
+    ("forged_summary_hi", "Finding explanation"),
+    ("forged_review_en", "review checklist text"),
+    ("forged_review_hi", "review checklist text"),
+    ("forged_similarity", "Reported text similarity"),
 ])
 def test_forged_report_fields_are_rejected(source_report, mutation, expected_error):
     original, revised, baseline = source_report
@@ -96,8 +102,10 @@ def test_forged_report_fields_are_rejected(source_report, mutation, expected_err
         report.checklist[0].requires_human_verification = False
     elif mutation == "fake_contradiction":
         finding.status = "contradiction"
+        finding.summary_en, finding.summary_hi = SUMMARY_MESSAGES["contradiction"]
     elif mutation == "fake_semantic_confirmation":
         finding.match_method = "semantic_proposal"
+        finding.summary_en, finding.summary_hi = SUMMARY_MESSAGES["semantic_proposal"]
     elif mutation == "duplicate_finding_id":
         report.findings.append(finding.model_copy(deep=True))
     elif mutation == "noncanonical_field_delta":
@@ -114,6 +122,16 @@ def test_forged_report_fields_are_rejected(source_report, mutation, expected_err
         finding.revised.text = finding.original.text
     elif mutation == "wrong_deterministic_category":
         finding.category = "fee"
+    elif mutation == "forged_summary_en":
+        finding.summary_en = "Official notice approved by the issuer"
+    elif mutation == "forged_summary_hi":
+        finding.summary_hi = "जारीकर्ता द्वारा सत्यापित आधिकारिक सूचना"
+    elif mutation == "forged_review_en":
+        report.checklist[0].description_en = "No further verification necessary"
+    elif mutation == "forged_review_hi":
+        report.checklist[0].description_hi = "आधिकारिक रूप से सत्यापित"
+    elif mutation == "forged_similarity":
+        finding.similarity = 0.25
 
     with pytest.raises(InvalidReportProvenance, match=expected_error):
         verify_report_provenance(
@@ -258,6 +276,9 @@ def test_evidence_cannot_refer_to_uncovered_page(pdf_bytes):
 def test_ocr_claim_must_match_reported_document_ocr_count(source_report):
     old_bytes, new_bytes, report = source_report
     report.findings[0].status = "possible_change"
+    report.findings[0].summary_en, report.findings[0].summary_hi = (
+        SUMMARY_MESSAGES["possible_change"]
+    )
     report.findings[0].original.extraction_method = "ocr"
     with pytest.raises(InvalidReportProvenance, match="document summary"):
         verify_report_provenance(
@@ -310,6 +331,7 @@ def test_ocr_source_cannot_claim_a_certain_structured_field_change(source_report
     old_bytes, new_bytes, report = source_report
     finding = report.findings[0]
     finding.status = "possible_change"
+    finding.summary_en, finding.summary_hi = SUMMARY_MESSAGES["possible_change"]
     finding.original.extraction_method = "ocr"
     report.documents[0].ocr_page_count = 1
     with pytest.raises(InvalidReportProvenance, match="Structured field claims"):
@@ -373,6 +395,46 @@ def test_forged_cross_page_contradiction_is_rejected(pdf_bytes):
     finding = next(f for f in report.findings if f.status == "contradiction")
     finding.supporting_evidence[1].page = 2
     with pytest.raises(InvalidReportProvenance, match="one PDF page"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+        )
+
+
+def test_ai_suggestion_cannot_claim_official_verification_in_explanation(ai_report):
+    old, new, report = ai_report
+    proposal = next(f for f in report.findings if f.match_method == "semantic_proposal")
+    proposal.summary_en = "This update has been officially confirmed."
+    with pytest.raises(InvalidReportProvenance, match="Finding explanation"):
+        verify_report_provenance(
+            report, original=old, revised=new,
+            old_name="old.pdf", new_name="new.pdf",
+            semantic_requested=True,
+        )
+
+
+def test_ai_suggestion_cannot_remove_bilingual_human_review_warning(ai_report):
+    old, new, report = ai_report
+    task = next(item for item in report.checklist if item.finding_id.startswith("ai"))
+    task.description_hi = "तिथि की जाँच करने की आवश्यकता नहीं है"
+    with pytest.raises(InvalidReportProvenance, match="review checklist text"):
+        verify_report_provenance(
+            report, original=old, revised=new,
+            old_name="old.pdf", new_name="new.pdf",
+            semantic_requested=True,
+        )
+
+
+def test_unmatched_statement_cannot_invent_similarity(pdf_bytes):
+    original = pdf_bytes([["Eligibility: Class 12"]])
+    revised = pdf_bytes([["Unrelated timetable announcement"]])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    finding = next(f for f in report.findings if f.status == "missing_information")
+    finding.similarity = 0.999
+    with pytest.raises(InvalidReportProvenance, match="fake similarity"):
         verify_report_provenance(
             report, original=original, revised=revised,
             old_name="old.pdf", new_name="new.pdf",
