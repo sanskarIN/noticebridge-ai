@@ -6,7 +6,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'rea
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
 
-type SourcePage = Pick<Evidence, 'document_id' | 'filename' | 'page'>;
+type SourcePage = Pick<Evidence, 'document_id' | 'filename' | 'page'> & { uncheckedImage?: boolean };
 type Preview = { url: string; file: File; source: SourcePage; evidence?: Evidence };
 type ComparisonSource = 'live_upload' | 'live_demo' | 'showcase';
 type CompareOptions = {
@@ -49,6 +49,9 @@ const t = {
   coverageInconclusive: 'One or both PDFs yielded no text. The comparison is inconclusive.',
   coveragePages: 'pages yielded text',
   uncovered: 'Open pages with no extracted text',
+  uncheckedImages: 'Review pages with large images',
+  uncheckedImageHelp: 'These pages contain some selectable text. The large images may contain more notice text.',
+  openOcrSettings: 'Open selected-page OCR settings',
   fuzzyLimited: 'The comparison skipped some candidate pairings because the matching limit was reached. Check the source before interpreting unmatched statements.',
   previewLoading: 'Preparing PDF viewer…',
   semantic: 'Suggest matches with local AI (experimental)',
@@ -97,6 +100,7 @@ export default function App() {
   const previewDialogRef = useRef<HTMLElement | null>(null);
   const previewReturnFocusRef = useRef<HTMLElement | null>(null);
   const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const ocrRecoveryRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     return () => { if (preview) URL.revokeObjectURL(preview.url); };
@@ -185,6 +189,13 @@ export default function App() {
       url: URL.createObjectURL(file), file, source,
       evidence: 'bbox' in source ? source : undefined,
     });
+  }
+
+  function openSelectedPageOcr(role: DocumentRole) {
+    const settings = ocrRecoveryRef.current;
+    if (!settings) return;
+    settings.open = true;
+    settings.querySelector<HTMLInputElement>(`#ocr-${role}-pages`)?.focus();
   }
 
   function setReviewed(id: string, selected: boolean) {
@@ -314,14 +325,14 @@ export default function App() {
               </label>)}
           </div>
           <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => { clearComparison(); setEnableOcr(e.target.checked); }} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
-          <details className="ocr-recovery">
+          <details className="ocr-recovery" ref={ocrRecoveryRef}>
             <summary>{t.ocrRecovery}</summary>
             <p id="ocr-recovery-help">{t.ocrRecoveryHelp}</p>
             <div className="ocr-recovery-fields">
               {([['original', t.ocrOriginalPages], ['revised', t.ocrRevisedPages]] as const).map(([role, label]) =>
                 <label key={role}>
                   {label}
-                  <input type="text" value={ocrPages[role]} maxLength={160}
+                  <input id={`ocr-${role}-pages`} type="text" value={ocrPages[role]} maxLength={160}
                     aria-describedby="ocr-recovery-help" autoComplete="off" spellCheck={false}
                     onChange={event => {
                       clearComparison();
@@ -371,6 +382,21 @@ export default function App() {
                 </button>)}
               </div>
             </details>}
+            {!!d.pages_with_unchecked_images?.length && <details>
+              <summary>{t.uncheckedImages} ({d.pages_with_unchecked_images.length})</summary>
+              <p>{t.uncheckedImageHelp}</p>
+              <div className="coverage-page-links">
+                {d.pages_with_unchecked_images.map(page => <button
+                  className="review-button" type="button" key={page}
+                  onClick={() => openSource({
+                    document_id: d.id, filename: d.filename, page, uncheckedImage: true,
+                  })}>
+                  {t.page} {page}
+                </button>)}
+                {!SHOWCASE_ONLY && <button className="review-button" type="button"
+                  onClick={() => openSelectedPageOcr(d.id)}>{t.openOcrSettings}</button>}
+              </div>
+            </details>}
           </li>)}</ul>
         </div>
         {report.fuzzy_matching_limited && <p className="coverage-report partial" role="status">{t.fuzzyLimited}</p>}
@@ -387,7 +413,8 @@ export default function App() {
       <section ref={previewDialogRef} className="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-heading">
         <div className="preview-top"><strong id="preview-heading">{preview.source.filename} · {t.page} {preview.source.page}</strong><button type="button" ref={closePreviewRef} onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
         <Suspense fallback={<p role="status">{t.previewLoading}</p>}>
-          <PdfEvidencePreview file={preview.file} pageNumber={preview.source.page} evidence={preview.evidence} />
+          <PdfEvidencePreview file={preview.file} pageNumber={preview.source.page}
+            evidence={preview.evidence} uncheckedImage={preview.source.uncheckedImage} />
         </Suspense>
         {preview.evidence && <p className="preview-quote">{preview.evidence.text}</p>}
         <a href={`${preview.url}#page=${preview.source.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>

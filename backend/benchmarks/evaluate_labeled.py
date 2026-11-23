@@ -203,6 +203,12 @@ def _score(
         "pages_without_text": sum(
             len(document.pages_without_text) for document in result.documents
         ),
+        "unchecked_image_pages": sum(
+            len(document.pages_with_unchecked_images) for document in result.documents
+        ),
+        "unchecked_image_page_numbers": {
+            document.id: document.pages_with_unchecked_images for document in result.documents
+        },
         "expected_pairs": sum(gold.values()),
         "predicted_pairs": sum(predicted.values()),
         "true_positive": sum((gold & predicted).values()),
@@ -264,6 +270,7 @@ def _cohort_summary(cases: list[dict]) -> dict:
         ),
         "ocr_page_count": sum(case["ocr_pages"] for case in cases),
         "pages_without_text_count": sum(case["pages_without_text"] for case in cases),
+        "unchecked_image_page_count": sum(case["unchecked_image_pages"] for case in cases),
         "processing_warning_count": sum(case["processing_warnings"] for case in cases),
     }
 
@@ -346,6 +353,7 @@ def evaluate_labeled(
         "pages_without_text_count": sum(
             case["pages_without_text"] for case in results
         ),
+        "unchecked_image_page_count": sum(case["unchecked_image_pages"] for case in results),
         "pair_counts": {
             "true_positive": tp,
             "false_positive": fp,

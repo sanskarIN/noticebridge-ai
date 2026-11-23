@@ -112,6 +112,13 @@ def verify_report_provenance(
             all(page in ocr_pages or page in empty_pages for page in selected),
             f"{role} selected OCR pages must contain OCR evidence or be uncovered",
         )
+        unchecked_images = document.pages_with_unchecked_images
+        _require(
+            unchecked_images == sorted(set(unchecked_images))
+            and all(1 <= page <= document.page_count for page in unchecked_images)
+            and set(unchecked_images).isdisjoint(ocr_pages.union(empty_pages)),
+            f"{role} unchecked image pages must have native text and valid page numbers",
+        )
         ocr_pages_by_role[role] = ocr_pages
         _require(
             document.pages_with_text + len(empty_pages) == document.page_count,

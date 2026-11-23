@@ -28,7 +28,8 @@ export default {
         "ocr_pages": [],
         "ocr_override_pages": [],
         "pages_with_text": 1,
-        "pages_without_text": []
+        "pages_without_text": [],
+        "pages_with_unchecked_images": []
       },
       {
         "id": "revised",
@@ -41,7 +42,8 @@ export default {
         "ocr_pages": [],
         "ocr_override_pages": [],
         "pages_with_text": 1,
-        "pages_without_text": []
+        "pages_without_text": [],
+        "pages_with_unchecked_images": []
       }
     ],
     "findings": [
