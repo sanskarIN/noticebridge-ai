@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import pymupdf as fitz
 
 from .models import DocumentSummary, Evidence, ExtractedLine
+from .table_rows import join_ruled_value_rows
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_PAGES = 80
@@ -142,6 +143,7 @@ def extract_pdf(
             )
         for index, page in enumerate(pdf):
             page_number = index + 1
+            page_start = len(lines)
             page_lines = 0
             skipped_boxes = 0
             rect = page.rect
@@ -220,6 +222,10 @@ def extract_pdf(
                     )
                     lines.append(ExtractedLine(text=text, evidence=evidence))
                     page_lines += 1
+            if method == "native" and not skipped_boxes and page_lines >= 2:
+                lines[page_start:] = join_ruled_value_rows(
+                    page, lines[page_start:], max_quote_length=MAX_LINE_CHARACTERS,
+                )
             if method == "ocr" and page_lines:
                 ocr_pages.append(page_number)
             if skipped_boxes:

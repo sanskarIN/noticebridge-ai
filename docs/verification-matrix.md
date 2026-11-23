@@ -4,7 +4,7 @@ This note documents the conservative behavior of the third engineering milestone
 
 ## Data integrity invariants
 
-1. The parser never invents a page number or bounding box. `Evidence` comes from a PDF text line or an explicitly labeled OCR-transcribed page, with original page dimensions and rotation.
+1. `Evidence` comes from native PDF text or an explicitly labeled OCR-transcribed page, with original page dimensions and rotation. In a supported ruled table, the quotation joins two native cell lines with a space and the source bounding box encloses both text boxes.
 2. Each matched finding carries the original and revised source passage, both of which can be inspected by page.
 3. Text equality is reconciled **before** variable masking. Reordering duplicate deadline statements therefore does not alone imply changed wording.
 4. A `confirmed_change` status establishes a textual difference between native passages with a unique identical context anchor, **not** that the updated document is authoritative.
@@ -54,7 +54,11 @@ findings. It still relies on a small English/Hindi keyword dictionary and can
 miss synonyms or contextual labels. Every important category should be manually
 checked against the quoted source.
 
-This is still **line-level**, not semantic paragraph/document understanding. Long paragraphs, table columns, hyphenated line breaks, mixed scripts, duplicate form fields, and scanned images can produce incomplete or misleading matches. Important cases require human review.
+## Ruled tables
+
+The extractor joins a label and a standalone date or INR amount when both fit entirely in separate cells of one native-text row. The ruling must form at least two adjacent rows with the same two columns. The original page, quote words, and source hash remain the evidence. Matching uses the same anchors and review rules as ordinary lines.
+
+Borderless tables, merged cells, three-column tables, wrapped cells, scanned tables, and pages beyond the layout work budget keep the original line-level extraction. Complex layouts can still produce incomplete matches. Inspect the PDF page when layout determines how a value applies.
 
 ## Security and privacy scope
 
@@ -68,6 +72,7 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 ## Automated regression suites
 
 - `backend/tests/test_extract.py`: source locations, SHA-256, malformed/scanned/password-protected/oversized-page PDFs, OCR gating/budgets/error paths, and English/Hindi OCR integration scans that skip if Tesseract language packs or fixture fonts are missing.
+- `backend/tests/test_table_rows.py`: native grid detection, rotated evidence, fallback for ambiguous layouts and budget limits, and actual deadline and fee changes through the comparison worker.
 - `backend/tests/test_compare.py`: changed/unchanged statements, reordered lines, duplicated deadline labels, same-page versus cross-page ambiguity handling, source location and lack of authority inference.
 - `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, date ambiguity, invalid calendar dates, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py` and `backend/tests/test_body_limit.py`: health, live multipart comparisons, multipart stream and header size enforcement, bad uploads, filename sanitization, response no-store headers.
