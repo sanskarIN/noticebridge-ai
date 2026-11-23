@@ -7,14 +7,14 @@ This note documents the conservative behavior of the third engineering milestone
 1. The parser never invents a page number or bounding box. `Evidence` comes from a PDF text line or an explicitly labeled OCR-transcribed page, with original page dimensions and rotation.
 2. Each matched finding carries the original and revised source passage, both of which can be inspected by page.
 3. Text equality is reconciled **before** variable masking. Reordering duplicate deadline statements therefore does not alone imply changed wording.
-4. A `confirmed_change` status establishes a textual difference in a strongly matched passage, **not** that the updated document is authoritative.
+4. A `confirmed_change` status establishes a textual difference between native passages with a unique identical context anchor, **not** that the updated document is authoritative.
 5. Duplicated labels with potentially multiple different events reduce matching confidence rather than asserting exact relationships.
-6. `field_changes[].outcome == "changed"` means two *syntactically parseable and unambiguous* field tokens differ. An uncertain numeric date is never converted to a definite calendar value.
+6. `field_changes[].outcome == "changed"` means two *syntactically parseable and unambiguous* field tokens differ within a confirmed text pairing. All values associated with possible pairings have an uncertain outcome. An uncertain numeric date is never converted to a definite calendar value.
 7. Contradictions are emitted only for distinct valid calendar dates under the same deadline label **on the same page of a single PDF**. The same generic label on different pages may refer to separate requirements; cross-page differences are review warnings, not certified contradictions. Neither upload order nor a cross-PDF difference proves authority.
 8. A checklist is an optional user-facing review aid, not an official validation stamp.
 9. Every document summary includes a SHA-256 of the submitted bytes, for reproducible source identification. No digital signature or issuer authenticity is inferred from the hash.
-10. OCR is opt-in and used only for native-text-empty pages, with bounded page count and estimated rendering pixels. Its output is labeled `ocr`; it cannot alone produce a `confirmed_change` or a contradiction.
-11. Browser PDF.js rendering uses a locally selected File and same-origin worker; highlights are omitted for rotated pages rather than guessed.
+10. Automatic OCR targets native-text-empty pages. Explicit page selections may also transcribe pages with an embedded text layer. Both paths are opt-in, share page and render limits, and label transcribed passages as `ocr`. Selected pages with failed OCR appear as uncovered. OCR does not establish confirmed changes or contradictions.
+11. Browser PDF.js rendering uses a locally selected File and same-origin worker. Rotated highlights are shown when page geometry can be reconciled.
 12. Experimental local semantic proposals may only pair genuine original-only and revised-only evidence IDs with the same category. They are **additive**: the original deterministic missing-information findings and their review checklist remain visible. The parent API checks each proposed source against those unmatched passages, rejecting invented or reused source evidence. Proposals are always `possible_change`, never verified facts or model-generated citations. No model request happens without explicit opt-in.
 13. Before returning a worker report, the API checks the actual uploaded SHA-256s, source roles, reported filenames, page counts, evidence locations, original verification policy and checklist references. Findings and review tasks must use fixed bilingual safety-preserving templates, match scores are recomputed from cited text, and warnings must match bounded, source-page-aware templates. The check rejects unsupported official-authority or AI-confirmed claims. It does **not** independently extract the PDF a second time.
 14. Per-page text coverage is visible. Pages without extractable text are never silently treated as proven unchanged, even when the comparison found changes on other pages. `all_pages_have_text` means only that each page yielded some text, not that extraction was exhaustive.
@@ -29,7 +29,7 @@ This note documents the conservative behavior of the third engineering milestone
 | `13/12/2026` | Unique day-month interpretation, `2026-12-13` |
 | `01/02/2026` | **Ambiguous** (1 Feb or 2 Jan), no canonical value |
 | `31 February 2026` | **Invalid** date, no canonical value |
-| `Rs. 1,000`, `₹1,000`, `₹10,00,000` | Valid INR amounts, decimal canonical values |
+| `Rs. 1,000`, `₹1,000`, `₹10,00,000`, `१,२५० रुपये` | Valid INR amounts, decimal canonical values |
 | `Rs. 1,2,3` | Invalid grouping, no canonical value |
 
 Unrecognized date and currency syntax is ignored rather than inferred. There is no automatic time-zone calculation or locale-specific deadline extension logic.
@@ -37,9 +37,14 @@ Unrecognized date and currency syntax is ignored rather than inferred. There is 
 ## Matching algorithm and uncertainty
 
 1. Exact normalized text matches are resolved across the entire document pair.
-2. Remaining lines are matched using category and masked date/amount/number anchors. Multiplicity marks these candidate pairings ambiguous.
-3. Remaining potential matches are globally ranked using bounded token-index retrieval and context similarity. Close competitors reduce confidence.
-4. Lines without defensible matches receive `missing_information` rather than claims of repeal or addition.
+2. Remaining lines are matched using category and masked value anchors. Deadlines mask date tokens and fees mask currency amounts. Other numbers, including phase and paper numbers, remain part of the context for both categories. Only unique native-text anchors support a matched text change.
+3. Remaining potential matches are globally ranked using token-index retrieval and context similarity. All fuzzy pairings stay possible. Fuzzy matching examines contexts up to 512 characters, at most 64 entries per token or source passage, and at most 20,000 pairs and 20 million character products per comparison. The API independently caps rescoring work.
+4. Lines without a matched counterpart in the extracted text receive `missing_information`. `fuzzy_matching_limited` exposes skipped candidate work independently of page text coverage. Exact text and exact context matching still run on all extracted lines.
+
+Native extraction skips copying image streams. Text boxes that collapse after
+coordinate rounding or lie wholly off-page are omitted with a page-specific
+warning. Cross-page deadline warnings list up to 20 label groups per PDF and
+report the count of additional groups.
 
 Category detection uses Unicode-aware token boundaries instead of arbitrary substring
 matches, so incidental words such as "coffee" and "repayment" do not create fee
@@ -73,7 +78,7 @@ Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tes
 
 ## Synthetic evaluation (not representative accuracy)
 
-`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks 12 fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
+`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks 14 fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
 
 ## Still not implemented
 

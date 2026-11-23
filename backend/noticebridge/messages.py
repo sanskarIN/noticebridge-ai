@@ -15,12 +15,12 @@ HINDI_CATEGORY = {
 
 SUMMARY_MESSAGES = {
     "missing_original": (
-        "Statement present only in original; removal is not verified.",
-        "यह कथन केवल मूल दस्तावेज़ में मिला; हटाया जाना प्रमाणित नहीं है।",
+        "Only the original text extraction yielded this passage. Check both source PDFs.",
+        "यह अंश केवल मूल सूचना से निकाले गए पाठ में मिला। दोनों PDF के मूल पृष्ठ जाँचें।",
     ),
     "missing_revised": (
-        "Statement present only in revised document; addition is not independently verified.",
-        "यह कथन केवल संशोधित दस्तावेज़ में मिला; जोड़ की स्वतंत्र पुष्टि नहीं है।",
+        "Only the updated text extraction yielded this passage. Check both source PDFs.",
+        "यह अंश केवल संशोधित सूचना से निकाले गए पाठ में मिला। दोनों PDF के मूल पृष्ठ जाँचें।",
     ),
     "confirmed_change": (
         "Document wording differs at matched source passages. Authority is not verified.",

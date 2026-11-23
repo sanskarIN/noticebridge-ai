@@ -8,7 +8,7 @@ source document summaries.
 
 import re
 
-from .extract import MAX_PAGES
+from .extract import MAX_EXTRACTED_LINES, MAX_OCR_PAGES, MAX_PAGES
 from .models import DocumentSummary
 
 COVERAGE_WARNINGS = {
@@ -23,10 +23,14 @@ AI_WARNINGS = {
     "AI-suggested pairings require direct review of both PDF passages",
 }
 OCR_NOT_SCANNED = {
-    "was not OCR-scanned: per-document OCR limit of 12 pages reached",
+    f"was not OCR-scanned: per-document OCR limit of {MAX_OCR_PAGES} pages reached",
     "was not OCR-scanned: page would exceed OCR pixel limit",
 }
+MAX_CROSS_PAGE_DETAILS = 20
 PAGE_RE = re.compile(r"^(original|revised): page ([1-9][0-9]{0,2}) (.+)$")
+OMITTED_BOXES_RE = re.compile(
+    r"^omitted ([1-9][0-9]{0,4}) text line\(s\) with invalid source coordinates$"
+)
 OCR_FAILURE_RE = re.compile(
     r"^OCR unavailable \(([A-Za-z][A-Za-z0-9_]{0,79})\); "
     r"install Tesseract eng\+hin language data$"
@@ -39,6 +43,9 @@ CROSS_PAGE_RE = re.compile(
     r"^(original|revised): differing dates under a repeated deadline label "
     r"on pages ((?:[1-9][0-9]{0,2})(?:, [1-9][0-9]{0,2})*); "
     r"verify whether they concern the same requirement$"
+)
+CROSS_PAGE_OVERFLOW_RE = re.compile(
+    r"^(original|revised): ([1-9][0-9]{0,4}) additional repeated deadline labels need review$"
 )
 
 
@@ -66,20 +73,27 @@ def warning_supported(
         role, raw_page, description = match.groups()
         summary = documents[role]
         page = int(raw_page)
+        omitted = OMITTED_BOXES_RE.fullmatch(description)
+        if omitted:
+            return 1 <= page <= summary.page_count and int(omitted[1]) <= MAX_EXTRACTED_LINES
         if page not in summary.pages_without_text:
             return False
+        page_ocr_requested = ocr_requested or page in summary.ocr_override_pages
         if description == "has no extractable text; OCR not enabled":
-            return not ocr_requested
+            return not page_ocr_requested
         if description == "has no extractable text; comparison may be incomplete":
-            return ocr_requested
-        return ocr_requested and (
+            return page_ocr_requested
+        return page_ocr_requested and (
             description in OCR_NOT_SCANNED
             or OCR_FAILURE_RE.fullmatch(description) is not None
         )
     match = OCR_TOTAL_RE.fullmatch(message)
     if match:
         role, count = match.groups()
-        return ocr_requested and int(count) == documents[role].ocr_page_count
+        return (
+            (ocr_requested or bool(documents[role].ocr_override_pages))
+            and int(count) == documents[role].ocr_page_count
+        )
     match = CROSS_PAGE_RE.fullmatch(message)
     if match:
         role, pages = match.groups()
@@ -89,4 +103,8 @@ def warning_supported(
             and numbers == sorted(set(numbers))
             and all(1 <= n <= documents[role].page_count <= MAX_PAGES for n in numbers)
         )
+    match = CROSS_PAGE_OVERFLOW_RE.fullmatch(message)
+    if match:
+        role, count = match.groups()
+        return documents[role].pages_with_text >= 2 and int(count) <= MAX_EXTRACTED_LINES // 2
     return False

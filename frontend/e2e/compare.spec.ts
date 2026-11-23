@@ -392,3 +392,253 @@ test('changing OCR or local AI options invalidates stale evidence and review exp
   await expect(page.locator('.finding')).toHaveCount(1);
 });
 
+function reviewFixture(pages: string[][]): Buffer {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Count ${pages.length} /Kids [${pages.map((_, i) => `${i * 2 + 4} 0 R`).join(' ')}] >>`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  for (const [index, lines] of pages.entries()) {
+    const stream = lines.map((line, row) =>
+      `BT /F1 12 Tf 40 ${754 - row * 23} Td (${line.replace(/[\\()]/g, '\\$&')}) Tj ET\n`
+    ).join('');
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${index * 2 + 5} 0 R >>`,
+      `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}endstream`,
+    );
+  }
+  let pdf = '%PDF-1.4\n';
+  const offsets = [];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) pdf += `${offset.toString().padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+
+async function compareReviewFixture(
+  page: import('@playwright/test').Page, original: string[][], revised: string[][],
+) {
+  await page.goto('/');
+  for (const [role, pages] of [['original', original], ['revised', revised]] as const) {
+    await page.locator(`#${role}`).setInputFiles({
+      name: `${role}-review.pdf`, mimeType: 'application/pdf', buffer: reviewFixture(pages),
+    });
+  }
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+}
+
+test('pages and filters a real comparison while exporting all findings and review selections', async ({ page }) => {
+  function rows(day: number, amount: number) {
+    return [
+      ...Array.from({ length: 22 }, (_, i) => `Track code T${i} deadline: ${day} December 2026`),
+      `Paper 1 fee: Rs. ${amount}`,
+    ];
+  }
+  await compareReviewFixture(page, [rows(13, 200)], [rows(14, 300)]);
+  const count = page.locator('.review-count');
+  const cards = page.locator('.finding');
+  await expect(cards).toHaveCount(20);
+  await expect(count).toHaveText('Showing 1–20 of 23 matching findings (23 total)');
+  await page.getByRole('button', { name: 'Next findings' }).click();
+  await expect(cards).toHaveCount(3);
+  await expect(count).toBeFocused();
+  await expect(count).toHaveText('Showing 21–23 of 23 matching findings (23 total)');
+
+  await page.getByLabel('Search source text').fill('  PAPER 1   FEE ');
+  await page.getByLabel('Category').selectOption('fee');
+  await page.getByLabel('Checklist status').selectOption('pending');
+  await expect(cards).toHaveCount(1);
+  await expect(cards.first()).toContainText('Paper 1 fee: Rs. 300');
+  await cards.getByRole('checkbox').click();
+  await expect(count).toBeFocused();
+  await expect(count).toHaveText('No findings match these filters.');
+  await page.getByLabel('Checklist status').selectOption('reviewed');
+  await page.getByLabel('Finding status').selectOption('confirmed_change');
+  await expect(cards.getByRole('checkbox')).toBeChecked();
+  await expect(page.locator('.review-progress')).toContainText('1/23 marked reviewed');
+
+  await page.getByRole('button', { name: 'हिंदी' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'hi');
+  await expect(page.getByLabel('मूल पाठ खोजें')).toHaveValue('  PAPER 1   FEE ');
+  await expect(cards.getByRole('checkbox')).toBeChecked();
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /प्रमाण रिपोर्ट डाउनलोड करें/ }).click();
+  const payload = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(payload.findings).toHaveLength(23);
+  expect(payload.review).toEqual([payload.findings.find((finding: { category: string }) =>
+    finding.category === 'fee').id]);
+  await page.getByRole('button', { name: 'फ़िल्टर हटाएँ' }).click();
+  await expect(cards).toHaveCount(20);
+});
+
+test('opens an uncovered PDF page for manual review without a fabricated highlight', async ({ page }) => {
+  await compareReviewFixture(
+    page, [['Application deadline: 13 December 2026'], []],
+    [['Application deadline: 14 December 2026']],
+  );
+  const coverage = page.locator('.coverage-report');
+  await expect(coverage).toContainText('1/2 pages yielded text');
+  await coverage.getByText('Open pages with no extracted text (1)').click();
+  const open = coverage.getByRole('button', { name: 'Page 2' });
+  await open.click();
+  const dialog = page.getByRole('dialog', { name: 'original-review.pdf · Page 2' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('No text was extracted from this page. Inspect the page directly.')).toBeVisible();
+  await expect(dialog.locator('canvas')).toBeVisible();
+  await expect(dialog.locator('.evidence-highlight')).toHaveCount(0);
+  await expect(dialog.getByRole('link', { name: /Open PDF in new tab/ })).toHaveAttribute('href', /#page=2$/);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(open).toBeFocused();
+});
+
+test('discloses a fuzzy-search limit separately from page text coverage and exports it', async ({ page }) => {
+  function denseNotice(code: string) {
+    return [0, 1, 2].map(batch => Array.from({ length: 23 }, (_, i) =>
+      `Track ${code}${batch * 23 + i} deadline: 13 December 2026`
+    ));
+  }
+  await compareReviewFixture(page, denseNotice('Alpha'), denseNotice('Bravo'));
+  await expect(page.getByText(/Every PDF page yielded some text/)).toBeVisible();
+  await expect(page.getByText(/matching limit was reached/)).toBeVisible();
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export review CSV/ }).click();
+  const csv = await readFile(await (await downloadReady).path(), 'utf8');
+  expect(csv.split('\r\n')[0]).toContain('"text_coverage","fuzzy_matching_limited"');
+  expect(csv.split('\r\n')[1]).toMatch(/"all_pages_have_text","yes"$/);
+});
+
+test('restores a local checklist after reload and checks both fingerprints and evidence', async ({ page }) => {
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const checkbox = page.locator('.checklist-item input');
+  await checkbox.check();
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const original = await readFile(await (await downloadReady).path());
+
+  // Re-run the comparison after reload. File bytes stay identical even
+  // when a user has renamed the source PDFs since exporting the report.
+  await page.reload();
+  for (const [id, buffer] of [['original', originalPdf], ['revised', revisedPdf]] as const) {
+    await page.locator(`#${id}`).setInputFiles({
+      name: `${id}-renamed.pdf`, mimeType: 'application/pdf', buffer,
+    });
+  }
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(checkbox).not.toBeChecked();
+  const input = page.locator('.review-restore input');
+  let apiRequests = 0;
+  page.on('request', request => { if (request.url().includes('/api/')) apiRequests += 1; });
+
+  const imported = JSON.parse(original.toString('utf8'));
+  imported.findings[0].original.text = 'Different text on the same PDF page';
+  await input.setInputFiles({
+    name: 'changed-evidence.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(imported)),
+  });
+  await expect(page.getByText(/produced different findings/)).toBeVisible();
+  await expect(checkbox).not.toBeChecked();
+
+  await input.setInputFiles({
+    name: 'noticebridge-evidence-report.json', mimeType: 'application/json', buffer: original,
+  });
+  await expect(page.getByText('Loaded 1 saved checklist selection.')).toBeVisible();
+  await expect(checkbox).toBeChecked();
+
+  const mismatched = JSON.parse(original.toString('utf8'));
+  mismatched.documents.reverse();
+  await input.setInputFiles({
+    name: 'reversed-sources.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(mismatched)),
+  });
+  await expect(page.getByText(/different PDF pair or upload order/)).toBeVisible();
+  await expect(checkbox).toBeChecked();
+  expect(apiRequests).toBe(0);
+});
+
+test('a saved checklist adds to current selections and stays bound to the active comparison', async ({ page }) => {
+  const old = [['Application deadline: 13 December 2026', 'Application fee: Rs. 200']];
+  const updated = [['Application deadline: 14 December 2026', 'Application fee: Rs. 300']];
+  await compareReviewFixture(page, old, updated);
+  const deadline = page.getByRole('checkbox', { name: /Verify the deadline/ });
+  const fee = page.getByRole('checkbox', { name: /Verify the fee/ });
+  await deadline.check();
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const buffer = await readFile(await (await downloadReady).path());
+  await deadline.uncheck();
+  await fee.check();
+
+  const input = page.locator('.review-restore input');
+  await input.setInputFiles({ name: 'review.json', mimeType: 'application/json', buffer });
+  await expect(page.getByText('Loaded 1 saved checklist selection.')).toBeVisible();
+  await expect(deadline).toBeChecked();
+  await expect(fee).toBeChecked();
+
+  // Pause the local read, replace the active report, then finish the read.
+  // The old import must be unable to select items on the newly mounted report.
+  await page.evaluate(() => {
+    const original = File.prototype.text;
+    File.prototype.text = function () {
+      if (this.name !== 'delayed-review.json') return original.call(this);
+      const file = this;
+      return new Promise<string>(resolve => {
+        document.addEventListener('finish-test-import', () => {
+          void original.call(file).then(text => {
+            resolve(text);
+            document.dispatchEvent(new Event('test-import-read-finished'));
+          });
+        }, { once: true });
+      });
+    };
+  });
+  await input.setInputFiles({ name: 'delayed-review.json', mimeType: 'application/json', buffer });
+  await expect(page.getByRole('button', { name: 'Checking saved report…' })).toBeDisabled();
+  await page.getByLabel(/Enable local OCR for scanned pages/).check();
+  await expect(page.locator('.results')).toHaveCount(0);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(deadline).not.toBeChecked();
+  await page.evaluate(() => new Promise<void>(resolve => {
+    document.addEventListener('test-import-read-finished', () => {
+      requestAnimationFrame(() => resolve());
+    }, { once: true });
+    document.dispatchEvent(new Event('finish-test-import'));
+  }));
+  await expect(deadline).not.toBeChecked();
+  await expect(fee).not.toBeChecked();
+});
+
+test('page-specific OCR reports a coverage gap when a selected page exceeds the render budget', async ({
+  page,
+}) => {
+  await addSources(page);
+  const original = page.locator('#original');
+  await original.setInputFiles({
+    name: 'wide-original.pdf', mimeType: 'application/pdf', buffer: widePagePdf(13),
+  });
+  await page.getByText('Recover text on selected pages with OCR', { exact: true }).click();
+  const pages = page.getByLabel('Original notice OCR pages');
+  const compare = page.getByRole('button', { name: /Compare documents/ });
+  await pages.fill('2');
+  await compare.click();
+  await expect(page.getByRole('alert')).toContainText('outside the original PDF');
+
+  await pages.fill('१');
+  await compare.click();
+  const coverage = page.locator('.coverage-report');
+  await expect(coverage).toContainText('Selected for OCR · 1');
+  await expect(coverage).toContainText('0/1 pages yielded text');
+  await expect(page.getByText(/page would exceed OCR pixel limit/)).toBeVisible();
+  await expect(page.locator('.finding')).toHaveCount(1);
+  await expect(page.locator('.finding')).not.toContainText('Deadline: 13 December 2026');
+  await page.getByRole('button', { name: 'हिंदी' }).click();
+  await expect(coverage).toContainText('OCR के लिए चुने गए पृष्ठ · 1');
+  await page.getByLabel('मूल सूचना के OCR पृष्ठ').fill('');
+  await expect(page.locator('.results')).toHaveCount(0);
+});

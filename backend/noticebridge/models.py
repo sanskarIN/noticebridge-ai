@@ -34,6 +34,8 @@ class DocumentSummary(BaseModel):
     has_extractable_text: bool
     sha256: str
     ocr_page_count: int = Field(default=0, ge=0)
+    ocr_pages: list[int] = Field(default_factory=list)
+    ocr_override_pages: list[int] = Field(default_factory=list)
     pages_with_text: int = Field(default=0, ge=0)
     pages_without_text: list[int] = Field(default_factory=list)
 
@@ -80,6 +82,7 @@ class ComparisonReport(BaseModel):
     checklist: list[ChecklistItem]
     warnings: list[str]
     text_coverage: Literal["all_pages_have_text", "partial", "inconclusive"] = "inconclusive"
+    fuzzy_matching_limited: bool = False
     semantic_assistance: Literal[
         "not_requested", "no_candidates", "unavailable", "no_verified_pairs",
         "proposals_added"

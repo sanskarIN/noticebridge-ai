@@ -5,7 +5,7 @@ locally curated PDF pairs. The dataset owner supplies ground-truth page numbers
 and exact source quotations. The benchmark does not decide whether an issuer,
 notice, deadline, or eligibility criterion is officially valid.
 
-This is **different** from the 12 fictional examples under
+This is **different** from the 14 fictional examples under
 `backend/benchmarks/cases.json`: those are code regression fixtures, not a
 representative real-world accuracy study.
 
@@ -103,7 +103,9 @@ calculated from your actual PDFs (the converter does that automatically):
 The empty `expected_pairs` array above is a **schema illustration**, not a
 gold-standard annotation. Fill it with independently reviewed source excerpts.
 The evaluator reports a canonical manifest SHA-256 (stable under JSON whitespace
-and key order changes) and source-kind/label-method case counts. It still does
+and key order changes) and source-kind/label-method case counts. It rejects
+duplicate JSON field names and labels that point outside their source PDF.
+The pinned-source option rejects legacy manifests before opening either PDF. It still does
 not prove that any source issuer or annotation is authentic. Blank scanned
 pages can legitimately have human visual labels; the evaluator must not
 require the same text extractor under test to confirm its own labels.
@@ -117,11 +119,12 @@ python -m pip install -e './backend[dev]'
 PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py demo-output/labels.json
 ```
 
-Optional CI gate on explicitly chosen precision and recall thresholds:
+Optional CI gates use raw precision and recall counts and a limit on
+unsupported confirmed pairings:
 
 ```sh
 PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py demo-output/labels.json \
-  --min-precision 0.90 --min-recall 0.90
+  --min-precision 0.90 --min-recall 0.90 --max-unsupported-confirmed 0
 ```
 
 The command is entirely local, calls the isolated PDF comparison worker, and
@@ -132,6 +135,14 @@ evaluation corpus, explicitly opt into local Tesseract English/Hindi OCR:
 PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
   demo-output/labels-pinned.json --require-pinned-sources --enable-ocr
 ```
+
+For a pinned recovery experiment, add `original_ocr_pages` and/or
+`revised_ocr_pages` as arrays of one-based page numbers inside a case, for
+example `"revised_ocr_pages": [2, 4]`. Running the same manifest with
+`--enable-ocr` applies those selections, while the default run measures
+native extraction. The case output reports the applied page selection and
+the pages that yielded OCR text. Both runs retain the same manifest and PDF
+fingerprints.
 
 Check that the backend host actually has Tesseract plus `eng` and `hin`
 language data. Results report `ocr_enabled`, the number of
@@ -156,11 +167,15 @@ labeled occurrences are counted with multiplicity.
 - **False negative (FN):** a labeled pair was not predicted.
 - **Precision:** TP / (TP + FP).
 - **Recall:** TP / (TP + FN).
-- **Unsupported confirmed changes:** unmatched predictions labeled
-  `confirmed_change`, which deserve high-priority manual review.
+- **Unsupported confirmed changes:** predicted pairs labeled
+  `confirmed_change` that are absent from the operator's labels.
+- **Confirmed-only precision and recall:** the same formulas after restricting
+  predictions to `confirmed_change`. Recall still uses every labeled pair as
+  its denominator.
 
 If a denominator is zero, the metric is **null**, not 100%. The output also
-counts cases with incomplete PDF text coverage. Missing-information statements,
+counts cases with incomplete PDF text coverage and cases with skipped fuzzy
+candidate work. Missing-information statements,
 intra-document contradictions, date/fee parser quality, OCR transcription
 accuracy, semantic equivalence, and official authority are **not** scored by
 these pair-level metrics.

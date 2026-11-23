@@ -57,6 +57,7 @@ def test_valid_native_comparison_preserves_source_integrity(source_report):
     ("forged_raw_date", "Structured field claims"),
     ("missing_review_task", "checklist is missing"),
     ("fake_identical_confirmation", "identical source wording"),
+    ("fake_context_confirmation", "matching source context"),
     ("wrong_deterministic_category", "category contradicts"),
     ("forged_summary_en", "Finding explanation"),
     ("forged_summary_hi", "Finding explanation"),
@@ -120,6 +121,8 @@ def test_forged_report_fields_are_rejected(source_report, mutation, expected_err
         report.checklist.clear()
     elif mutation == "fake_identical_confirmation":
         finding.revised.text = finding.original.text
+    elif mutation == "fake_context_confirmation":
+        finding.revised.text = "Renewal deadline: 14 December 2026"
     elif mutation == "wrong_deterministic_category":
         finding.category = "fee"
     elif mutation == "forged_summary_en":
@@ -288,6 +291,37 @@ def test_ocr_claim_must_match_reported_document_ocr_count(source_report):
         )
 
 
+def test_selected_ocr_page_must_be_transcribed_or_uncovered(source_report):
+    original, revised, report = source_report
+    verify_as_selected = dict(
+        original=original, revised=revised, old_name="old.pdf", new_name="new.pdf",
+        original_ocr_pages=(1,),
+    )
+    with pytest.raises(InvalidReportProvenance, match="differ from the request"):
+        verify_report_provenance(report, **verify_as_selected)
+
+    report.documents[0].ocr_override_pages = [1]
+    with pytest.raises(InvalidReportProvenance, match="must contain OCR evidence or be uncovered"):
+        verify_report_provenance(report, **verify_as_selected)
+
+    report.documents[0].ocr_pages = [1]
+    report.documents[0].ocr_page_count = 1
+    with pytest.raises(InvalidReportProvenance, match="Native evidence conflicts"):
+        verify_report_provenance(report, **verify_as_selected)
+
+
+def test_selected_ocr_consent_does_not_apply_to_the_other_document(source_report):
+    original, revised, report = source_report
+    report.documents[0].ocr_page_count = report.documents[1].ocr_page_count = 1
+    report.documents[0].ocr_pages = report.documents[1].ocr_pages = [1]
+    report.documents[0].ocr_override_pages = [1]
+    with pytest.raises(InvalidReportProvenance, match="OCR was used without opt-in"):
+        verify_report_provenance(
+            report, original=original, revised=revised, old_name="old.pdf", new_name="new.pdf",
+            original_ocr_pages=(1,),
+        )
+
+
 @pytest.mark.parametrize(("rotation", "unit"), [
     (0, 1),
     (90, 1),
@@ -334,6 +368,7 @@ def test_ocr_source_cannot_claim_a_certain_structured_field_change(source_report
     finding.summary_en, finding.summary_hi = SUMMARY_MESSAGES["possible_change"]
     finding.original.extraction_method = "ocr"
     report.documents[0].ocr_page_count = 1
+    report.documents[0].ocr_pages = [1]
     with pytest.raises(InvalidReportProvenance, match="Structured field claims"):
         verify_report_provenance(
             report, original=old_bytes, revised=new_bytes,
@@ -347,6 +382,68 @@ def test_ocr_source_cannot_claim_a_certain_structured_field_change(source_report
         old_name="old.pdf", new_name="new.pdf",
         ocr_requested=True,
     )
+
+
+def test_possible_native_pair_cannot_claim_a_certain_structured_field_change(pdf_bytes):
+    original = pdf_bytes([["Phase 1 deadline: 13 December 2026"]])
+    revised = pdf_bytes([["Phase 2 deadline: 14 December 2026"]])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    source = (original, revised, report)
+    verify(source)
+    finding = report.findings[0]
+    assert finding.status == "possible_change"
+    finding.field_changes[0].outcome = "changed"
+    with pytest.raises(InvalidReportProvenance, match="Structured field claims"):
+        verify(source)
+
+
+def test_parent_reserves_work_before_rescoring_fuzzy_report(pdf_bytes, monkeypatch):
+    from noticebridge import matching
+
+    original = pdf_bytes([["Phase 1 deadline: 13 December 2026"]])
+    revised = pdf_bytes([["Phase 2 deadline: 14 December 2026"]])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    source = (original, revised, report)
+    verify(source)
+    monkeypatch.setattr(matching, "MAX_FUZZY_WORK", 1)
+    with pytest.raises(InvalidReportProvenance, match="fuzzy verification budget"):
+        verify(source)
+
+
+def test_dense_cross_page_deadline_warnings_are_bounded_and_accepted(pdf_bytes):
+    from noticebridge.warning_policy import MAX_CROSS_PAGE_DETAILS
+
+    source = pdf_bytes([
+        [f"Track {i} deadline: {day} December 2026" for i in range(MAX_CROSS_PAGE_DETAILS + 2)]
+        for day in (13, 14)
+    ])
+    report = compare_documents(
+        extract_pdf(source, document_id="original", filename="old.pdf"),
+        extract_pdf(source, document_id="revised", filename="new.pdf"),
+    )
+    assert not report.findings
+    assert len(report.warnings) == 2 * (MAX_CROSS_PAGE_DETAILS + 1)
+    assert "original: 2 additional repeated deadline labels need review" in report.warnings
+    assert "revised: 2 additional repeated deadline labels need review" in report.warnings
+    verify((source, source, report))
+
+
+def test_geometry_warning_requires_a_valid_source_page(source_report):
+    _, _, report = source_report
+    report.warnings.append(
+        "original: page 1 omitted 1 text line(s) with invalid source coordinates"
+    )
+    verify(source_report)
+
+    report.warnings[-1] = report.warnings[-1].replace("page 1", "page 2")
+    with pytest.raises(InvalidReportProvenance, match="warning text"):
+        verify(source_report)
 
 
 @pytest.mark.parametrize("mutation", ["same_date", "different_label"])

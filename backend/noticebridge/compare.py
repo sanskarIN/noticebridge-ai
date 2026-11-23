@@ -3,12 +3,13 @@
 import re
 import unicodedata
 from collections import Counter, defaultdict, deque
-from difflib import SequenceMatcher
 
 from .extract import ExtractedDocument
-from .facts import AMOUNT_TOKEN, DATE_TOKEN, date_tokens, field_changes
+from .facts import AMOUNT_TOKEN, DATE_TOKEN, WORD_CHAR, date_tokens, field_changes
+from .matching import StatementKey, fuzzy_proposals
 from .messages import SUMMARY_MESSAGES, review_messages
 from .models import ChecklistItem, ComparisonReport, Evidence, Finding
+from .warning_policy import MAX_CROSS_PAGE_DETAILS
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
 SPACE = re.compile(r"\s+")
@@ -35,20 +36,17 @@ def normalize(value: str) -> str:
     return SPACE.sub(" ", unicodedata.normalize("NFKC", value).casefold()).strip()
 
 
-# Unicode-aware token boundaries: Python's plain \w excludes some Devanagari
-# combining marks, so include the entire Devanagari range. A raw substring
-# test would classify "coffee" as a fee or "repayment" as payment evidence.
-TOKEN_CHAR = r"[\w\u0900-\u097f]"
+# A raw substring test would classify "coffee" as a fee or "repayment" as payment evidence.
 CATEGORY_MATCHERS = tuple(
     (
         category,
         tuple(
             re.compile(
-                rf"(?<!{TOKEN_CHAR}){re.escape(term)}"
+                rf"(?<!{WORD_CHAR}){re.escape(term)}"
                 + (
-                    rf"{TOKEN_CHAR}*"
+                    rf"{WORD_CHAR}*"
                     if term in {"eligib", "ineligib"}
-                    else rf"(?!{TOKEN_CHAR})"
+                    else rf"(?!{WORD_CHAR})"
                 )
             )
             for term in terms
@@ -66,17 +64,23 @@ def category_for(text: str) -> str:
     return "general"
 
 
-def anchor(text: str) -> str:
-    """Suppress changed dates/amounts/numerals when comparing statement context."""
+def anchor(text: str, category: str) -> str:
+    """Mask the expected value while keeping numeric scope in deadlines and fees."""
     value = normalize(text)
-    value = DATE_TOKEN.sub(" [date] ", value)
-    value = AMOUNT_TOKEN.sub(" [amount] ", value)
-    value = NUMBER.sub(" [number] ", value)
+    if category == "deadline":
+        value = DATE_TOKEN.sub(" [date] ", value)
+    elif category == "fee":
+        value = AMOUNT_TOKEN.sub(" [amount] ", value)
+    else:
+        value = DATE_TOKEN.sub(" [date] ", value)
+        value = AMOUNT_TOKEN.sub(" [amount] ", value)
+        value = NUMBER.sub(" [number] ", value)
     return SPACE.sub(" ", value).strip()
 
 
-def _score(old: str, new: str) -> float:
-    return SequenceMatcher(None, anchor(old), anchor(new), autojunk=False).ratio()
+def _statement_key(text: str) -> StatementKey:
+    category = category_for(text)
+    return category, anchor(text, category)
 
 
 def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> ComparisonReport:
@@ -102,6 +106,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
     # producing spurious change reports.
     unmatched_old = set(range(len(old.lines)))
     unmatched_new = set(range(len(new.lines)))
+    # Each entry carries the revised index, similarity, and whether a unique
+    # exact context anchor supports the pairing.
     match_for_old: dict[int, tuple[int, float, bool]] = {}
     exact_text: dict[str, deque[int]] = defaultdict(deque)
     for ni, line in enumerate(new.lines):
@@ -117,8 +123,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
     # Pass two: use matching labels with masked values, but explicitly mark
     # duplicates as ambiguous. Repeated "Deadline" rows can mean different
     # events and their relationship is not inferable from their position.
-    old_keys = [(category_for(line.text), anchor(line.text)) for line in old.lines]
-    new_keys = [(category_for(line.text), anchor(line.text)) for line in new.lines]
+    old_keys = [_statement_key(line.text) for line in old.lines]
+    new_keys = [_statement_key(line.text) for line in new.lines]
     old_counts = Counter(old_keys)
     new_counts = Counter(new_keys)
     anchored: dict[tuple[str, str], deque[int]] = defaultdict(deque)
@@ -129,53 +135,32 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         if not anchored[key]:
             continue
         ni = anchored[key].popleft()
-        ambiguous = old_counts[key] > 1 or new_counts[key] > 1
-        match_for_old[oi] = (ni, 1.0, ambiguous)
+        unique_context = old_counts[key] == new_counts[key] == 1
+        match_for_old[oi] = (ni, 1.0, unique_context)
         unmatched_new.remove(ni)
     unmatched_old.difference_update(match_for_old)
 
     # Pass three: global best-first fuzzy assignment instead of greedy old-line
     # ordering. Token posting lists cap candidate work for large documents.
-    by_token: dict[tuple[str, str], list[int]] = defaultdict(list)
-    for ni in sorted(unmatched_new):
-        category, text = new_keys[ni]
-        for token in set(re.findall(r"[\w\u0900-\u097f]{4,}", text)):
-            by_token[(category, token)].append(ni)
-    proposals: list[tuple[float, int, int]] = []
-    scores_by_old: dict[int, list[float]] = defaultdict(list)
-    scores_by_new: dict[int, list[float]] = defaultdict(list)
-    for oi in sorted(unmatched_old):
-        category, text = old_keys[oi]
-        candidates: set[int] = set()
-        for token in sorted(set(re.findall(r"[\w\u0900-\u097f]{4,}", text))):
-            candidates.update(by_token.get((category, token), [])[:120])
-        for ni in sorted(candidates):
-            score = _score(old.lines[oi].text, new.lines[ni].text)
-            if score >= 0.66:
-                proposals.append((score, oi, ni))
-                scores_by_old[oi].append(score)
-                scores_by_new[ni].append(score)
+    proposals, fuzzy_matching_limited = fuzzy_proposals(
+        old_keys, new_keys, unmatched_old, unmatched_new,
+    )
     for score, oi, ni in sorted(proposals, key=lambda p: (-p[0], p[1], p[2])):
         if oi not in unmatched_old or ni not in unmatched_new:
             continue
-        scores_o = sorted(scores_by_old[oi], reverse=True)
-        scores_n = sorted(scores_by_new[ni], reverse=True)
-        ambiguous = (
-            (len(scores_o) > 1 and scores_o[0] - scores_o[1] < 0.05)
-            or (len(scores_n) > 1 and scores_n[0] - scores_n[1] < 0.05)
-        )
-        match_for_old[oi] = (ni, score, ambiguous)
+        match_for_old[oi] = (ni, score, False)
         unmatched_old.remove(oi)
         unmatched_new.remove(ni)
 
     for oi, original in enumerate(old.lines):
+        category = old_keys[oi][0]
         if oi not in match_for_old:
             # Missing line is not automatically a canceled requirement.
             findings.append(
                 Finding(
                     id=f"f{len(findings)+1}",
                     status="missing_information",
-                    category=category_for(original.text),
+                    category=category,
                     summary_en=SUMMARY_MESSAGES["missing_original"][0],
                     summary_hi=SUMMARY_MESSAGES["missing_original"][1],
                     original=original.evidence,
@@ -183,15 +168,14 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                 )
             )
             continue
-        ni, score, ambiguous = match_for_old[oi]
+        ni, score, unique_context = match_for_old[oi]
         revised = new.lines[ni]
         if normalize(original.text) == normalize(revised.text):
             continue
-        # OCR is machine transcription. Never mark OCR-related text as a
-        # confirmed change solely because the text matcher is confident.
+        # Similar wording can concern different requirements. Only native
+        # text with a unique exact context anchor can support confirmation.
         strong = (
-            score >= 0.85
-            and not ambiguous
+            unique_context
             and original.evidence.extraction_method == "native"
             and revised.evidence.extraction_method == "native"
         )
@@ -200,23 +184,15 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
             Finding(
                 id=f"f{len(findings)+1}",
                 status=status,
-                category=category_for(original.text),
+                category=category,
                 summary_en=SUMMARY_MESSAGES[status][0],
                 summary_hi=SUMMARY_MESSAGES[status][1],
                 original=original.evidence,
                 revised=revised.evidence,
                 similarity=round(score, 3),
-                field_changes=[
-                    delta.model_copy(update={"outcome": "uncertain"})
-                    if (
-                        original.evidence.extraction_method == "ocr"
-                        or revised.evidence.extraction_method == "ocr"
-                    )
-                    else delta
-                    for delta in field_changes(
-                        original.text, revised.text, category=category_for(original.text)
-                    )
-                ],
+                field_changes=field_changes(
+                    original.text, revised.text, category=category, pairing_confirmed=strong,
+                ),
             )
         )
 
@@ -226,7 +202,7 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
             Finding(
                 id=f"f{len(findings)+1}",
                 status="missing_information",
-                category=category_for(revised.text),
+                category=new_keys[ni][0],
                 summary_en=SUMMARY_MESSAGES["missing_revised"][0],
                 summary_hi=SUMMARY_MESSAGES["missing_revised"][1],
                 revised=revised.evidence,
@@ -238,17 +214,18 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
     # different pages (e.g., application and late-fee phases). Only same-page
     # duplicate labels with conflicting unambiguous calendar dates are marked
     # contradictions. Cross-page differences remain explicit review warnings.
-    for document in (old, new):
+    for document, keys in ((old, old_keys), (new, new_keys)):
         grouped: dict[str, list[tuple[str, Evidence]]] = defaultdict(list)
-        for line in document.lines:
+        cross_page_warnings = 0
+        for line, (category, context) in zip(document.lines, keys, strict=True):
             if (
-                category_for(line.text) != "deadline"
+                category != "deadline"
                 or line.evidence.extraction_method != "native"
             ):
                 continue
             dates = date_tokens(line.text)
             if len(dates) == 1 and dates[0].canonical is not None:
-                grouped[anchor(line.text)].append((dates[0].canonical, line.evidence))
+                grouped[context].append((dates[0].canonical, line.evidence))
         for records in grouped.values():
             if len({value for value, _ in records}) < 2:
                 continue
@@ -276,12 +253,19 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                     similarity=1.0,
                 ))
             if len(by_page) > 1 and not has_same_page_conflict:
-                page_list = ", ".join(str(page) for page in sorted(by_page))
-                warnings.append(
-                    f"{document.summary.id}: differing dates under a repeated deadline "
-                    f"label on pages {page_list}; verify whether they concern the "
-                    "same requirement"
-                )
+                cross_page_warnings += 1
+                if cross_page_warnings <= MAX_CROSS_PAGE_DETAILS:
+                    page_list = ", ".join(str(page) for page in sorted(by_page))
+                    warnings.append(
+                        f"{document.summary.id}: differing dates under a repeated deadline "
+                        f"label on pages {page_list}; verify whether they concern the "
+                        "same requirement"
+                    )
+        if cross_page_warnings > MAX_CROSS_PAGE_DETAILS:
+            warnings.append(
+                f"{document.summary.id}: {cross_page_warnings - MAX_CROSS_PAGE_DETAILS} "
+                "additional repeated deadline labels need review"
+            )
 
     for finding in findings:
         if finding.category in {"deadline", "eligibility", "fee", "time", "instruction"}:
@@ -298,4 +282,5 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         checklist=checklist,
         warnings=warnings,
         text_coverage=coverage,
+        fuzzy_matching_limited=fuzzy_matching_limited,
     )

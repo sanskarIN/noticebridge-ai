@@ -28,14 +28,23 @@ MONTHS = {
 }
 
 MONTH_WORDS = "|".join(re.escape(k) for k in sorted(MONTHS, key=len, reverse=True))
+# Python's \w covers letters and numbers but omits Devanagari combining marks.
+# Include the marks without treating the danda or double danda as word characters.
+WORD_CHAR = r"[\w\u0900-\u0903\u093a-\u094f\u0951-\u0957\u0962-\u0963]"
+ISO_DATE = re.compile(r"\d{4}-\d{1,2}-\d{1,2}")
+NUMERIC_DATE = re.compile(r"(\d{1,2})([/.-])(\d{1,2})\2(\d{4})")
 DATE_TOKEN = re.compile(
-    rf"(?<!\w)(?:\d{{4}}-\d{{1,2}}-\d{{1,2}}|"
+    rf"(?<!{WORD_CHAR})(?<!\d[/.-])(?:{ISO_DATE.pattern}|"
     rf"\d{{1,2}}[/.-]\d{{1,2}}[/.-]\d{{4}}|"
-    rf"\d{{1,2}}\s+(?:{MONTH_WORDS})\s+\d{{4}})(?!\w)",
+    rf"\d{{1,2}}\s+(?:{MONTH_WORDS})\s+\d{{4}})(?!{WORD_CHAR}|[/.-]\d)",
     re.IGNORECASE,
 )
+AMOUNT_DIGITS = r"\d+(?:,\d+)*(?:\.\d{1,2})?"
 AMOUNT_TOKEN = re.compile(
-    r"(?<!\w)(?:₹\s*|Rs\.?\s*|INR\s+)(\d[\d,]*(?:\.\d{1,2})?)(?![\w.,])",
+    rf"(?<!{WORD_CHAR}|[+\-−])(?<!\d[.,/])(?:"
+    rf"(?:₹\s*|Rs\.?\s*|INR\s+)(?P<prefixed>{AMOUNT_DIGITS})|"
+    rf"(?P<suffixed>{AMOUNT_DIGITS})\s+(?:रुपये|रुपए|रुपया)"
+    rf")(?!{WORD_CHAR}|[.,/]\d)",
     re.IGNORECASE,
 )
 
@@ -68,25 +77,22 @@ def parse_date(token: str) -> ParsedValue:
             canonical = None
         return ParsedValue(kind="date", raw=raw, canonical=canonical,
                            confidence="parsed" if canonical else "invalid")
-    if re.fullmatch(r"\d{4}-\d{1,2}-\d{1,2}", cleaned):
+    if ISO_DATE.fullmatch(cleaned):
         year, month, day = map(int, cleaned.split("-"))
         canonical = _valid_date(year, month, day)
         return ParsedValue(kind="date", raw=raw, canonical=canonical,
                            confidence="parsed" if canonical else "invalid")
-    pieces = re.split(r"[/.-]", cleaned)
-    if len(pieces) != 3:
+    numeric = NUMERIC_DATE.fullmatch(cleaned)
+    if numeric is None:
         return ParsedValue(kind="date", raw=raw, confidence="invalid")
-    a, b, year = map(int, pieces)
-    if 1 <= a <= 12 and 1 <= b <= 12 and a != b:
+    a, b, year = map(int, (numeric[1], numeric[3], numeric[4]))
+    day_first = _valid_date(year, b, a)
+    month_first = _valid_date(year, a, b)
+    if month_first and month_first != day_first:
+        # This prototype does not infer US ordering from the source locale.
         return ParsedValue(kind="date", raw=raw, confidence="ambiguous")
-    # Unique interpretation for day > 12 or day == month. If b >12,
-    # MM/DD ordering would be the only valid interpretation, but that format
-    # is not assumed for official notices in this iteration.
-    if b > 12:
-        return ParsedValue(kind="date", raw=raw, confidence="ambiguous")
-    canonical = _valid_date(year, b, a)
-    return ParsedValue(kind="date", raw=raw, canonical=canonical,
-                       confidence="parsed" if canonical else "invalid")
+    return ParsedValue(kind="date", raw=raw, canonical=day_first,
+                       confidence="parsed" if day_first else "invalid")
 
 
 def date_tokens(text: str) -> list[ParsedValue]:
@@ -97,7 +103,7 @@ def amount_tokens(text: str) -> list[ParsedValue]:
     values: list[ParsedValue] = []
     for match in AMOUNT_TOKEN.finditer(text):
         token = match.group(0)
-        digits = match.group(1)
+        digits = ascii_digits(match["prefixed"] or match["suffixed"])
         whole = digits.split(".", 1)[0]
         groups = whole.split(",")
         valid_grouping = (
@@ -124,7 +130,9 @@ def amount_tokens(text: str) -> list[ParsedValue]:
     return values
 
 
-def field_changes(original: str, revised: str, *, category: str) -> list[ValueChange]:
+def field_changes(
+    original: str, revised: str, *, category: str, pairing_confirmed: bool = True,
+) -> list[ValueChange]:
     """Return auditable field deltas, not semantic or authority conclusions."""
     token_sets: list[tuple[str, list[ParsedValue], list[ParsedValue]]] = []
     if category == "deadline":
@@ -137,7 +145,7 @@ def field_changes(original: str, revised: str, *, category: str) -> list[ValueCh
         if len(old) != 1 or len(new) != 1:
             continue
         a, b = old[0], new[0]
-        if a.canonical is not None and b.canonical is not None:
+        if pairing_confirmed and a.canonical is not None and b.canonical is not None:
             outcome = "changed" if a.canonical != b.canonical else "same_value"
         else:
             outcome = "uncertain"

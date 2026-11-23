@@ -1,27 +1,13 @@
-import PdfEvidencePreview from './PdfEvidencePreview';
+import ReviewFindings from './ReviewFindings';
+import ReviewRestore from './ReviewRestore';
+import type { DocumentRole, Evidence, Language, Report } from './comparison';
 import { serializeReviewCsv } from './exportCsv';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 
-type Language = 'en' | 'hi';
-type DocumentRole = 'original' | 'revised';
-type Evidence = { document_id: DocumentRole; filename: string; page: number; text: string; bbox: [number, number, number, number]; extraction_method: 'native' | 'ocr'; page_width: number; page_height: number; page_rotation: 0 | 90 | 180 | 270 };
-type ParsedValue = { kind: 'date' | 'amount'; raw: string; canonical: string | null; confidence: 'parsed' | 'ambiguous' | 'invalid' };
-type ValueChange = { kind: 'date' | 'amount'; original: ParsedValue; revised: ParsedValue; outcome: 'changed' | 'same_value' | 'uncertain' };
-type Finding = {
-  id: string; status: 'confirmed_change' | 'possible_change' | 'contradiction' | 'missing_information';
-  category: string; summary_en: string; summary_hi: string;
-  original: Evidence | null; revised: Evidence | null; supporting_evidence: Evidence[];
-  similarity: number; match_method: 'deterministic' | 'semantic_proposal';
-  authority_verified: boolean; field_changes: ValueChange[];
-};
-type Checklist = { description_en: string; description_hi: string; finding_id: string; requires_human_verification: boolean };
-type Report = {
-  documents: { id: string; filename: string; page_count: number; line_count: number; has_extractable_text: boolean; sha256: string; ocr_page_count: number; pages_with_text: number; pages_without_text: number[] }[];
-  findings: Finding[]; checklist: Checklist[]; warnings: string[]; verification_policy: string;
-  text_coverage: 'all_pages_have_text' | 'partial' | 'inconclusive';
-  semantic_assistance: 'not_requested' | 'no_candidates' | 'unavailable' | 'no_verified_pairs' | 'proposals_added';
-};
-type Preview = { url: string; file: File; evidence: Evidence };
+const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
+
+type SourcePage = Pick<Evidence, 'document_id' | 'filename' | 'page'>;
+type Preview = { url: string; file: File; source: SourcePage; evidence?: Evidence };
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const translations = {
@@ -34,31 +20,35 @@ const translations = {
     button: 'Compare documents', comparing: 'Comparing source passages…',
     note: 'Your PDFs are sent to this backend. Uploads may use temporary OS storage while processing; the app does not intentionally retain them permanently.',
     findings: 'Findings', confirmed: 'Matched text changes', possible: 'Possible changes',
-    checklist: 'Review checklist', source: 'Source evidence', noFindings: 'No wording differences were identified in extractable text. This does not prove that the PDFs are equivalent.',
+    noFindings: 'No wording differences were identified in extractable text. This does not prove that the PDFs are equivalent.',
     insufficient: 'Comparison is inconclusive because one or both PDFs have no extractable text. Enable OCR for scanned pages or supply text-based PDFs.',
     page: 'Page', verify: 'Verify against the issuing organization before acting on a deadline or eligibility change.',
     authority: 'Authority not verified', warnings: 'Processing warnings',
-    openPage: 'Open PDF page', closePreview: 'Close preview', newTab: 'Open PDF in new tab',
-    previewNote: 'The PDF preview highlights source evidence when page geometry can be verified. If no highlight appears, inspect the original page manually.',
-    export: 'Export evidence report (JSON)', exportCsv: 'Export review CSV', progress: 'Reviewed',
-    values: 'Extracted values (syntactic check only)', uncertain: 'Uncertain',
+    closePreview: 'Close preview', newTab: 'Open PDF in new tab',
+    export: 'Export evidence report (JSON)', exportCsv: 'Export review CSV',
     invalidFile: 'Select a PDF no larger than 10 MiB.',
     ocr: 'Enable local OCR for scanned pages (English + Hindi)',
     ocrNote: 'Optional. Tesseract and the eng/hin language packs must be installed on the server. OCR text can be wrong; it never establishes an authoritative change. Up to 12 scanned pages per PDF.',
-    ocrSource: 'Machine OCR — verify transcription',
+    ocrRecovery: 'Recover text on selected pages with OCR',
+    ocrRecoveryHelp: 'Use PDF page numbers such as 1, 3–5 when the embedded text is garbled or incomplete. Selected pages use OCR only and take priority within the 12-page limit per PDF.',
+    ocrOriginalPages: 'Original notice OCR pages',
+    ocrRevisedPages: 'Updated notice OCR pages',
+    ocrSelected: 'Selected for OCR',
+    ocrRecovered: 'Text extracted by OCR',
     coverageTitle: 'Text extraction coverage',
     coverageFull: 'Every PDF page yielded some text, but this does not prove every statement was captured.',
     coveragePartial: 'Some PDF pages yielded no text. Changes on those pages may be missed.',
     coverageInconclusive: 'One or both PDFs yielded no text. The comparison is inconclusive.',
     coveragePages: 'pages yielded text',
+    uncovered: 'Open pages with no extracted text',
+    fuzzyLimited: 'The comparison skipped some candidate pairings because the matching limit was reached. Check the source before interpreting unmatched statements.',
+    previewLoading: 'Preparing PDF viewer…',
     semantic: 'Suggest matches with local AI (experimental)',
     semanticNote: 'Optional: sends selected unmatched text excerpts to Ollama running on the backend computer (127.0.0.1:11434). This feature does not call cloud APIs. Suggestions are unverified.',
-    semanticSuggested: 'Local AI suggestion — verify PDF source',
     semanticAdded: 'Local AI suggested possible passage pairings. None are verified.',
     semanticNoCandidates: 'No unmatched category-labeled passages were eligible for local AI review.',
     semanticUnavailable: 'Local AI was unavailable; deterministic findings remain available.',
     semanticRejected: 'No local AI suggestions passed source verification.',
-    similarityLabel: 'text similarity (not confidence)',
   },
   hi: {
     eyebrow: 'स्रोत-आधारित दस्तावेज़ विश्लेषण',
@@ -69,76 +59,37 @@ const translations = {
     button: 'दस्तावेज़ों की तुलना करें', comparing: 'स्रोत अंशों की तुलना जारी…',
     note: 'PDF इस बैकएंड पर भेजी जाती हैं। प्रोसेसिंग के दौरान अस्थायी सिस्टम स्टोरेज उपयोग हो सकता है; ऐप इन्हें स्थायी रूप से रखने का उद्देश्य नहीं रखता।',
     findings: 'निष्कर्ष', confirmed: 'मिलते अंशों में बदलाव', possible: 'संभावित बदलाव',
-    checklist: 'सत्यापन सूची', source: 'मूल प्रमाण', noFindings: 'निकाले जा सकने वाले पाठ में अंतर नहीं मिला। इससे दोनों PDF एक जैसी सिद्ध नहीं होतीं।',
+    noFindings: 'निकाले जा सकने वाले पाठ में अंतर नहीं मिला। इससे दोनों PDF एक जैसी सिद्ध नहीं होतीं।',
     insufficient: 'तुलना अधूरी है क्योंकि किसी एक या दोनों PDF से पाठ नहीं मिला। स्कैन किए पन्नों के लिए OCR चालू करें या पाठ वाली PDF चुनें।',
     page: 'पृष्ठ', verify: 'तिथि या पात्रता में बदलाव के आधार पर कदम उठाने से पहले जारीकर्ता से पुष्टि करें।',
     authority: 'आधिकारिक प्राथमिकता अप्रमाणित', warnings: 'प्रोसेसिंग चेतावनियाँ',
-    openPage: 'PDF पृष्ठ खोलें', closePreview: 'पूर्वावलोकन बंद करें', newTab: 'नए टैब में PDF खोलें',
-    previewNote: 'जिन PDF पृष्ठों की ज्यामिति सत्यापित हो सकती है, उन पर स्रोत अंश हाइलाइट होता है। हाइलाइट न दिखे तो मूल पृष्ठ स्वयं जाँचें।',
-    export: 'प्रमाण रिपोर्ट डाउनलोड करें (JSON)', exportCsv: 'समीक्षा CSV डाउनलोड करें', progress: 'समीक्षा पूरी',
-    values: 'निकाले गए मान (केवल प्रारूप की जाँच)', uncertain: 'अनिश्चित',
+    closePreview: 'पूर्वावलोकन बंद करें', newTab: 'नए टैब में PDF खोलें',
+    export: 'प्रमाण रिपोर्ट डाउनलोड करें (JSON)', exportCsv: 'समीक्षा CSV डाउनलोड करें',
     invalidFile: 'केवल 10 MiB तक की PDF चुनें।',
     ocr: 'स्कैन किए गए पन्नों के लिए स्थानीय OCR चालू करें (हिंदी + अंग्रेज़ी)',
     ocrNote: 'वैकल्पिक। सर्वर पर Tesseract और eng/hin भाषा डेटा आवश्यक है। OCR में गलतियाँ हो सकती हैं। प्रत्येक PDF के अधिकतम 12 पन्ने।',
-    ocrSource: 'मशीन OCR — पाठ की जाँच करें',
+    ocrRecovery: 'चुने हुए पृष्ठों का पाठ OCR से निकालें',
+    ocrRecoveryHelp: 'PDF का पाठ बिगड़ा या अधूरा हो तो १, ३–५ जैसे PDF पृष्ठ नंबर दें। चुने हुए पृष्ठों पर केवल OCR चलेगा। हर PDF की 12 पृष्ठों की सीमा में इन्हें प्राथमिकता मिलेगी।',
+    ocrOriginalPages: 'मूल सूचना के OCR पृष्ठ',
+    ocrRevisedPages: 'संशोधित सूचना के OCR पृष्ठ',
+    ocrSelected: 'OCR के लिए चुने गए पृष्ठ',
+    ocrRecovered: 'OCR से पाठ मिले पृष्ठ',
     coverageTitle: 'पाठ निष्कर्षण की स्थिति',
     coverageFull: 'हर PDF पृष्ठ से कुछ पाठ मिला, लेकिन इससे सभी कथन निकलने की पुष्टि नहीं होती।',
     coveragePartial: 'कुछ PDF पृष्ठों से पाठ नहीं मिला। उन पृष्ठों के बदलाव छूट सकते हैं।',
     coverageInconclusive: 'एक या दोनों PDF से कोई पाठ नहीं मिला। तुलना अनिर्णायक है।',
     coveragePages: 'पृष्ठों से पाठ मिला',
+    uncovered: 'बिना निकाले गए पाठ वाले पृष्ठ खोलें',
+    fuzzyLimited: 'मिलान की सीमा पूरी होने पर कुछ संभावित मिलान छूट गए। बेमेल कथनों की व्याख्या करने से पहले मूल स्रोत जाँचें।',
+    previewLoading: 'PDF व्यूअर तैयार हो रहा है…',
     semantic: 'स्थानीय AI से संभावित मिलान सुझाएँ (प्रयोगात्मक)',
     semanticNote: 'वैकल्पिक: कुछ बेमेल पाठ अंश बैकएंड पर चल रहे Ollama (127.0.0.1:11434) को भेजे जाएँगे। यह सुविधा क्लाउड API का उपयोग नहीं करती। सुझाव अप्रमाणित हैं।',
-    semanticSuggested: 'स्थानीय AI का सुझाव — PDF स्रोत जाँचें',
     semanticAdded: 'स्थानीय AI ने संभावित अंश मिलान सुझाए हैं। कोई भी सत्यापित नहीं है।',
     semanticNoCandidates: 'स्थानीय AI समीक्षा के लिए उपयुक्त बेमेल अंश नहीं मिले।',
     semanticUnavailable: 'स्थानीय AI उपलब्ध नहीं था; नियम-आधारित निष्कर्ष उपलब्ध हैं।',
     semanticRejected: 'स्थानीय AI का कोई सुझाव स्रोत जाँच में सफल नहीं हुआ।',
-    similarityLabel: 'पाठ समानता (सटीकता की पुष्टि नहीं)',
   },
 };
-
-const statusLabels: Record<Language, Record<Finding['status'], string>> = {
-  en: {
-    confirmed_change: 'Matched text change', possible_change: 'Possible change',
-    contradiction: 'Conflicting dates', missing_information: 'Unmatched statement',
-  },
-  hi: {
-    confirmed_change: 'पाठ में बदलाव', possible_change: 'संभावित बदलाव',
-    contradiction: 'विरोधी तिथियाँ', missing_information: 'बेमेल कथन',
-  },
-};
-const categoryLabels: Record<Language, Record<string, string>> = {
-  en: {
-    deadline: 'Deadline', eligibility: 'Eligibility', fee: 'Fee',
-    time: 'Time', instruction: 'Instruction', general: 'General',
-  },
-  hi: {
-    deadline: 'अंतिम तिथि', eligibility: 'पात्रता', fee: 'शुल्क',
-    time: 'समय', instruction: 'निर्देश', general: 'सामान्य',
-  },
-};
-const valueKindLabels: Record<Language, Record<ValueChange['kind'], string>> = {
-  en: { date: 'Date', amount: 'Amount' },
-  hi: { date: 'तिथि', amount: 'राशि' },
-};
-const valueOutcomeLabels: Record<Language, Record<ValueChange['outcome'], string>> = {
-  en: { changed: 'Changed', same_value: 'Same value', uncertain: 'Uncertain' },
-  hi: { changed: 'बदला', same_value: 'समान मान', uncertain: 'अनिश्चित' },
-};
-
-function EvidenceCard({ evidence, label, page, openPage, ocrSource, onOpen }: {
-  evidence: Evidence | null; label: string; page: string; openPage: string; ocrSource: string; onOpen: (e: Evidence) => void;
-}) {
-  return <div className="evidence-card">
-    <div className="evidence-label">{label}</div>
-    {evidence ? <>
-      <div className="page-ref">{evidence.filename} · {page} {evidence.page}</div>
-      {evidence.extraction_method === 'ocr' && <p className="ocr-source">{ocrSource}</p>}
-      <blockquote>{evidence.text}</blockquote>
-      <button type="button" className="source-button" onClick={() => onOpen(evidence)}>{openPage} ↗</button>
-    </> : <p className="muted">—</p>}
-  </div>;
-}
 
 export default function App() {
   const [language, setLanguage] = useState<Language>('en');
@@ -147,9 +98,12 @@ export default function App() {
   const [report, setReport] = useState<Report | null>(null);
   const [pending, setPending] = useState(false);
   const [enableOcr, setEnableOcr] = useState(false);
+  const [ocrPages, setOcrPages] = useState<Record<DocumentRole, string>>({
+    original: '', revised: '',
+  });
   const [enableSemantic, setEnableSemantic] = useState(false);
   const [error, setError] = useState('');
-  const [checked, setChecked] = useState<string[]>([]);
+  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   const [preview, setPreview] = useState<Preview | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const closePreviewRef = useRef<HTMLButtonElement | null>(null);
@@ -161,6 +115,7 @@ export default function App() {
     return () => { if (preview) URL.revokeObjectURL(preview.url); };
   }, [preview]);
   useEffect(() => () => controllerRef.current?.abort(), []);
+  useEffect(() => { document.documentElement.lang = language; }, [language]);
 
   useEffect(() => {
     if (!preview) return;
@@ -216,13 +171,14 @@ export default function App() {
     controllerRef.current = null;
     setPending(false);
     setReport(null);
-    setChecked([]);
+    setChecked(new Set());
     setPreview(null);
     setError('');
   }
 
   function setSource(role: DocumentRole, file: File | null) {
     clearComparison();
+    setOcrPages(pages => ({ ...pages, [role]: '' }));
     if (file && (!file.name.toLowerCase().endsWith('.pdf') || file.size > MAX_FILE_BYTES)) {
       setError(t.invalidFile);
       if (role === 'original') setOriginal(null); else setRevised(null);
@@ -231,13 +187,23 @@ export default function App() {
     if (role === 'original') setOriginal(file); else setRevised(file);
   }
 
-  function openEvidence(evidence: Evidence) {
-    const file = evidence.document_id === 'original' ? original : revised;
+  function openSource(source: SourcePage | Evidence) {
+    const file = source.document_id === 'original' ? original : revised;
     if (!file) return;
     previewReturnFocusRef.current = document.activeElement instanceof HTMLElement ?
       document.activeElement : null;
     setPreview({
-      url: URL.createObjectURL(file), file, evidence,
+      url: URL.createObjectURL(file), file, source,
+      evidence: 'bbox' in source ? source : undefined,
+    });
+  }
+
+  function setReviewed(id: string, selected: boolean) {
+    setChecked(previous => {
+      const next = new Set(previous);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
     });
   }
 
@@ -252,7 +218,7 @@ export default function App() {
 
   function exportReport() {
     if (!report) return;
-    const payload = { ...report, review: checked, exported_at: new Date().toISOString() };
+    const payload = { ...report, review: [...checked], exported_at: new Date().toISOString() };
     downloadLocal(
       'noticebridge-evidence-report.json', 'application/json',
       JSON.stringify(payload, null, 2),
@@ -273,11 +239,13 @@ export default function App() {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    setPending(true); setError(''); setReport(null); setChecked([]); setPreview(null);
+    setPending(true); setError(''); setReport(null); setChecked(new Set()); setPreview(null);
     try {
       const body = new FormData();
       body.append('original', original); body.append('revised', revised);
       body.append('enable_ocr', String(enableOcr));
+      body.append('original_ocr_pages', ocrPages.original);
+      body.append('revised_ocr_pages', ocrPages.revised);
       body.append('enable_semantic', String(enableSemantic));
       const response = await fetch('/api/compare', { method: 'POST', body, signal: controller.signal });
       if (!response.ok) {
@@ -304,8 +272,8 @@ export default function App() {
       <div className="top-actions">
         <span className="privacy-tag">● Local development MVP</span>
         <div className="language-switch" role="group" aria-label={language === 'hi' ? 'व्याख्या की भाषा' : 'Explanation language'}>
-          <button aria-pressed={language === 'en'} className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')} type="button">EN</button>
-          <button aria-pressed={language === 'hi'} className={language === 'hi' ? 'active' : ''} onClick={() => setLanguage('hi')} type="button">हिंदी</button>
+          <button lang="en" aria-pressed={language === 'en'} className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')} type="button">EN</button>
+          <button lang="hi" aria-pressed={language === 'hi'} className={language === 'hi' ? 'active' : ''} onClick={() => setLanguage('hi')} type="button">हिंदी</button>
         </div>
       </div>
     </header>
@@ -329,13 +297,29 @@ export default function App() {
               </label>)}
           </div>
           <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => { clearComparison(); setEnableOcr(e.target.checked); }} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
+          <details className="ocr-recovery">
+            <summary>{t.ocrRecovery}</summary>
+            <p id="ocr-recovery-help">{t.ocrRecoveryHelp}</p>
+            <div className="ocr-recovery-fields">
+              {([['original', t.ocrOriginalPages], ['revised', t.ocrRevisedPages]] as const).map(([role, label]) =>
+                <label key={role}>
+                  {label}
+                  <input type="text" value={ocrPages[role]} maxLength={160}
+                    aria-describedby="ocr-recovery-help" autoComplete="off" spellCheck={false}
+                    onChange={event => {
+                      clearComparison();
+                      setOcrPages({ ...ocrPages, [role]: event.target.value });
+                    }} />
+                </label>)}
+            </div>
+          </details>
           <label className="ocr-option"><input type="checkbox" checked={enableSemantic} onChange={(e) => { clearComparison(); setEnableSemantic(e.target.checked); }} /><span><strong>{t.semantic}</strong><small>{t.semanticNote}</small></span></label>
           <div className="upload-footer"><p>{t.note}</p><button type="submit" disabled={!original || !revised || pending} className="primary-button">{pending ? t.comparing : t.button}<span>→</span></button></div>
           {error && <p role="alert" className="error-banner">{error}</p>}
         </form>
       </section>
-      {report && <section className="results" aria-live="polite">
-        <div className="section-heading"><div><span className="section-number">{language === 'hi' ? '०२ / समीक्षा' : '02 / REVIEW'}</span><h2>{t.findings}</h2></div><div className="export-actions"><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button><button type="button" className="export-button" onClick={exportReviewCsv}>{t.exportCsv} ↓</button></div></div>
+      {report && <section className="results" aria-labelledby="results-heading">
+        <div className="section-heading"><div><span className="section-number">{language === 'hi' ? '०२ / समीक्षा' : '02 / REVIEW'}</span><h2 id="results-heading">{t.findings}</h2></div><div className="export-actions"><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button><button type="button" className="export-button" onClick={exportReviewCsv}>{t.exportCsv} ↓</button></div></div>
         <div className="metrics">
           <div><b>{report.findings.length}</b><span>{t.findings}</span></div>
           <div><b>{report.findings.filter(f => f.status === 'confirmed_change').length}</b><span>{t.confirmed}</span></div>
@@ -352,29 +336,39 @@ export default function App() {
           <strong>{t.coverageTitle}</strong>
           <p>{report.text_coverage === 'all_pages_have_text' ? t.coverageFull :
             report.text_coverage === 'partial' ? t.coveragePartial : t.coverageInconclusive}</p>
-          <p>{report.documents.map(d =>
-            `${d.filename}: ${d.pages_with_text}/${d.page_count} ${t.coveragePages}`
-          ).join(' · ')}</p>
+          <ul className="coverage-documents">{report.documents.map(d => <li key={d.id}>
+            <span>{t[d.id]} · {d.filename} · {d.pages_with_text}/{d.page_count} {t.coveragePages}</span>
+            {!!d.ocr_override_pages?.length && <p>{t.ocrSelected} · {d.ocr_override_pages.join(', ')}</p>}
+            {!!d.ocr_pages?.length && <p>{t.ocrRecovered} · {d.ocr_pages.join(', ')}</p>}
+            {d.pages_without_text.length > 0 && <details>
+              <summary>{t.uncovered} ({d.pages_without_text.length})</summary>
+              <div className="coverage-page-links">
+                {d.pages_without_text.map(page => <button className="review-button" type="button" key={page}
+                  onClick={() => openSource({ document_id: d.id, filename: d.filename, page })}>
+                  {t.page} {page}
+                </button>)}
+              </div>
+            </details>}
+          </li>)}</ul>
         </div>
+        {report.fuzzy_matching_limited && <p className="coverage-report partial" role="status">{t.fuzzyLimited}</p>}
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
-        <div className="findings-list">{report.findings.map(f => <article className="finding" key={f.id}>
-          <div className="finding-header"><div><span className={`status ${f.status}`}>{statusLabels[language][f.status]}</span><span className="category">{categoryLabels[language][f.category] ?? f.category}</span></div><span className="match-score">{f.match_method === 'semantic_proposal' ?
-            t.semanticSuggested : `${Math.round(f.similarity * 100)}% ${t.similarityLabel}`}</span></div>
-          <p className="finding-summary">{language === 'hi' ? f.summary_hi : f.summary_en}</p>
-          {f.field_changes.length > 0 && <div className="value-changes"><b>{t.values}</b>{f.field_changes.map((delta, i) => <p key={i}><span className="value-outcome">{valueKindLabels[language][delta.kind]}: {valueOutcomeLabels[language][delta.outcome]}</span> {delta.original.raw} → {delta.revised.raw} {delta.outcome === 'uncertain' ? `(${t.uncertain})` : `(${delta.original.canonical} → ${delta.revised.canonical})`}</p>)}</div>}
-          <div className="evidence-grid"><EvidenceCard evidence={f.original} label={t.original} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /><EvidenceCard evidence={f.revised} label={t.revised} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} /></div>
-          {f.supporting_evidence.length > 0 && <div className="evidence-grid">{f.supporting_evidence.map((e, i) => <EvidenceCard key={`${e.document_id}-${e.page}-${i}`} evidence={e} label={`${t.source} ${i + 1}`} page={t.page} openPage={t.openPage} ocrSource={t.ocrSource} onOpen={openEvidence} />)}</div>}
-        </article>)}</div>
-        {report.checklist.length > 0 && <div className="checklist"><h3>{t.checklist} · {checked.length}/{report.checklist.length} {t.progress}</h3>{report.checklist.map(item => <label key={item.finding_id} className="checklist-item"><input type="checkbox" checked={checked.includes(item.finding_id)} onChange={(e) => setChecked(old => e.target.checked ? [...old, item.finding_id] : old.filter(x => x !== item.finding_id))} /><span>{language === 'hi' ? item.description_hi : item.description_en}</span></label>)}</div>}
+        {report.checklist.length > 0 && <ReviewRestore report={report} language={language}
+          onRestore={ids => setChecked(previous => new Set([...previous, ...ids]))} />}
+        {report.findings.length > 0 && <ReviewFindings
+          report={report} checked={checked} language={language} onCheck={setReviewed} onOpen={openSource}
+        />}
         {report.warnings.length > 0 && <aside className="warnings"><h3>{t.warnings}</h3>{report.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</aside>}
       </section>}
     </main>
     {preview && <div className="preview-backdrop" role="presentation">
-      <section ref={previewDialogRef} className="preview-dialog" role="dialog" aria-modal="true" aria-label={`${preview.evidence.filename} · ${t.page} ${preview.evidence.page}`}>
-        <div className="preview-top"><strong>{preview.evidence.filename} · {t.page} {preview.evidence.page}</strong><button type="button" ref={closePreviewRef} onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
-        <PdfEvidencePreview file={preview.file} evidence={preview.evidence} language={language} />
-        <p className="preview-quote">{preview.evidence.text}</p>
-        <a href={`${preview.url}#page=${preview.evidence.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>
+      <section ref={previewDialogRef} className="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-heading">
+        <div className="preview-top"><strong id="preview-heading">{preview.source.filename} · {t.page} {preview.source.page}</strong><button type="button" ref={closePreviewRef} onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
+        <Suspense fallback={<p role="status">{t.previewLoading}</p>}>
+          <PdfEvidencePreview file={preview.file} pageNumber={preview.source.page} evidence={preview.evidence} language={language} />
+        </Suspense>
+        {preview.evidence && <p className="preview-quote">{preview.evidence.text}</p>}
+        <a href={`${preview.url}#page=${preview.source.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>
       </section>
     </div>}
     <footer inert={Boolean(preview)}><span>NoticeBridge AI · Open-source / Apache-2.0</span><span>Understand change. Verify evidence.</span></footer>
