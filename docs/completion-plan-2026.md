@@ -16,7 +16,7 @@
 - FastAPI comparison, document byte hashes, page-linked PDF evidence, English/Hindi interface.
 - Conservative structured deadline and fee extraction; ambiguous values stay uncertain.
 - Opt-in English/Hindi OCR with provenance, page/pixel budgets and warnings.
-- PDF.js source inspection and limited highlight overlay, review checklist, JSON export.
+- PDF.js source inspection with rotation/crop-aware highlights, review checklist, and local JSON/CSV review exports.
 - Disposable worker process with timeout, restricted environment and best-effort
   POSIX resource ceilings; these are **not** a complete hostile-input sandbox.
 - Page-by-page visibility of gaps in extractable text.
@@ -65,7 +65,8 @@ claims. If the independent set is insufficient, publish the limitation prominent
 - [ ] Remediate public-hosting P0 threats and test Windows process-tree termination and temp-file cleanup.
 - [ ] Implement or document production deployment isolation, rate limiting,
   resource budgets and authentication; no unaudited public hostile upload service.
-- [ ] Check dependencies and security advisories; pin reproducible builds.
+- [x] Commit npm-generated frontend lockfile and use `npm ci` for frontend and browser jobs.
+- [ ] Audit frontend/Python security advisories, establish Python lock/constraints and review CI Action versions.
 
 **Gate:** No hidden external LLM calls; opt-in text transfer and data retention must
 be accurately documented and apparent in the UI.
