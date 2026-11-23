@@ -65,6 +65,7 @@ def test_worker_process_timeout_is_bounded(monkeypatch, pdf_bytes):
     process = HungProcess()
     monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: process)
     monkeypatch.setattr(module, "_kill_worker", lambda p: None)
+    monkeypatch.setattr(module, "_attach_windows_job", lambda p: None)
     good = pdf_bytes([["Text"]])
     with pytest.raises(ProcessingTimedOut):
         _run(good, good)
@@ -91,6 +92,7 @@ def test_worker_crash_or_untrusted_output_is_rejected(monkeypatch, pdf_bytes, re
     monkeypatch.setattr(
         module.subprocess, "Popen", lambda *a, **kw: Process(kw["stdout"])
     )
+    monkeypatch.setattr(module, "_attach_windows_job", lambda p: None)
     good = pdf_bytes([["Text"]])
     with pytest.raises(ProcessingFailed):
         _run(good, good)
@@ -136,6 +138,7 @@ def test_worker_failure_response_is_validated(monkeypatch, pdf_bytes):
     monkeypatch.setattr(
         module.subprocess, "Popen", lambda *a, **kw: Process(kw["stdout"])
     )
+    monkeypatch.setattr(module, "_attach_windows_job", lambda p: None)
     good = pdf_bytes([["Text"]])
     with pytest.raises(InvalidDocument, match="Malformed"):
         _run(good, good)
@@ -176,6 +179,7 @@ def test_subprocess_bootstrap_receives_ocr_budget(monkeypatch, pdf_bytes):
         return Process(kwargs["stdout"])
 
     monkeypatch.setattr(module.subprocess, "Popen", start)
+    monkeypatch.setattr(module, "_attach_windows_job", lambda p: None)
     pdf = pdf_bytes([["Hello"]])
     with pytest.raises(InvalidDocument):
         run_isolated_comparison(
@@ -211,6 +215,7 @@ def test_worker_output_is_read_only_up_to_limit_plus_one(monkeypatch, pdf_bytes)
         module.subprocess, "Popen",
         lambda *args, **kwargs: NoisyProcess(kwargs["stdout"]),
     )
+    monkeypatch.setattr(module, "_attach_windows_job", lambda p: None)
     pdf = pdf_bytes([["One line"]])
     with pytest.raises(ProcessingFailed, match="result exceeded the safety limit"):
         _run(pdf, pdf)
