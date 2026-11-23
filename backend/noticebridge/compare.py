@@ -7,15 +7,8 @@ from difflib import SequenceMatcher
 
 from .extract import ExtractedDocument
 from .facts import AMOUNT_TOKEN, DATE_TOKEN, date_tokens, field_changes
+from .messages import SUMMARY_MESSAGES, review_messages
 from .models import ChecklistItem, ComparisonReport, Evidence, Finding
-
-HINDI_CATEGORY = {
-    "deadline": "अंतिम तिथि",
-    "eligibility": "पात्रता",
-    "fee": "शुल्क",
-    "time": "समय",
-    "instruction": "निर्देश",
-}
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
 SPACE = re.compile(r"\s+")
@@ -183,8 +176,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                     id=f"f{len(findings)+1}",
                     status="missing_information",
                     category=category_for(original.text),
-                    summary_en="Statement present only in original; removal is not verified.",
-                    summary_hi="यह कथन केवल मूल दस्तावेज़ में मिला; हटाया जाना प्रमाणित नहीं है।",
+                    summary_en=SUMMARY_MESSAGES["missing_original"][0],
+                    summary_hi=SUMMARY_MESSAGES["missing_original"][1],
                     original=original.evidence,
                     similarity=0,
                 )
@@ -208,15 +201,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                 id=f"f{len(findings)+1}",
                 status=status,
                 category=category_for(original.text),
-                summary_en=(
-                    "Document wording differs at matched source passages. "
-                    "Authority is not verified."
-                    if strong else "Possibly related passages differ; check the source context."
-                ),
-                summary_hi=(
-                    "संबंधित स्रोत अंशों के शब्द अलग हैं; आधिकारिक प्राथमिकता सत्यापित नहीं है।"
-                    if strong else "संभवतः संबंधित अंश अलग हैं; स्रोत का संदर्भ जाँचें।"
-                ),
+                summary_en=SUMMARY_MESSAGES[status][0],
+                summary_hi=SUMMARY_MESSAGES[status][1],
                 original=original.evidence,
                 revised=revised.evidence,
                 similarity=round(score, 3),
@@ -241,14 +227,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                 id=f"f{len(findings)+1}",
                 status="missing_information",
                 category=category_for(revised.text),
-                summary_en=(
-                    "Statement present only in revised document; "
-                    "addition is not independently verified."
-                ),
-                summary_hi=(
-                    "यह कथन केवल संशोधित दस्तावेज़ में मिला; "
-                    "जोड़ की स्वतंत्र पुष्टि नहीं है।"
-                ),
+                summary_en=SUMMARY_MESSAGES["missing_revised"][0],
+                summary_hi=SUMMARY_MESSAGES["missing_revised"][1],
                 revised=revised.evidence,
                 similarity=0,
             )
@@ -290,11 +270,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                     id=f"f{len(findings)+1}",
                     status="contradiction",
                     category="deadline",
-                    summary_en=(
-                        "Conflicting calendar dates appear under one label "
-                        "on the same PDF page."
-                    ),
-                    summary_hi="PDF के एक पृष्ठ पर समान शीर्षक के अंतर्गत अलग तिथियाँ मिली हैं।",
+                    summary_en=SUMMARY_MESSAGES["contradiction"][0],
+                    summary_hi=SUMMARY_MESSAGES["contradiction"][1],
                     supporting_evidence=[first_evidence, different],
                     similarity=1.0,
                 ))
@@ -310,13 +287,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         if finding.category in {"deadline", "eligibility", "fee", "time", "instruction"}:
             checklist.append(
                 ChecklistItem(
-                    description_en=(
-                        f"Verify the {finding.category} statement with the official issuer."
-                    ),
-                    description_hi=(
-                        "जारीकर्ता के आधिकारिक स्रोत से "
-                        f"{HINDI_CATEGORY[finding.category]} संबंधी कथन की पुष्टि करें।"
-                    ),
+                    description_en=review_messages(finding.category)[0],
+                    description_hi=review_messages(finding.category)[1],
                     finding_id=finding.id,
                 )
             )

@@ -10,6 +10,7 @@ import re
 
 import httpx
 
+from .messages import SUMMARY_MESSAGES, review_messages
 from .models import ChecklistItem, ComparisonReport, Finding
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
@@ -134,14 +135,8 @@ def propose_semantic_matches(report: ComparisonReport) -> ComparisonReport:
             id=new_finding_id,
             status="possible_change",
             category=original.category,
-            summary_en=(
-                "Local AI proposes that these passages may be related. "
-                "Neither the pairing nor the official authority is verified."
-            ),
-            summary_hi=(
-                "स्थानीय AI ने इन अंशों का संभावित संबंध सुझाया है। "
-                "यह मिलान और आधिकारिकता सत्यापित नहीं हैं।"
-            ),
+            summary_en=SUMMARY_MESSAGES["semantic_proposal"][0],
+            summary_hi=SUMMARY_MESSAGES["semantic_proposal"][1],
             # Make separate evidence objects: mutation of an AI suggestion
             # must never mutate the deterministic source it references.
             original=original.original.model_copy(deep=True),
@@ -151,13 +146,8 @@ def propose_semantic_matches(report: ComparisonReport) -> ComparisonReport:
         ))
         checklists.append(ChecklistItem(
             finding_id=new_finding_id,
-            description_en=(
-                f"Verify the AI-suggested {original.category} match against "
-                "both official source passages."
-            ),
-            description_hi=(
-                f"AI के सुझाए गए {original.category} मिलान के दोनों मूल अंश जाँचें।"
-            ),
+            description_en=review_messages(original.category, semantic=True)[0],
+            description_hi=review_messages(original.category, semantic=True)[1],
         ))
     if not suggestions:
         result.semantic_assistance = "no_verified_pairs"
