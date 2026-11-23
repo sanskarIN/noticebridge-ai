@@ -122,6 +122,7 @@ export default function App() {
   const controllerRef = useRef<AbortController | null>(null);
   const closePreviewRef = useRef<HTMLButtonElement | null>(null);
   const previewDialogRef = useRef<HTMLElement | null>(null);
+  const previewReturnFocusRef = useRef<HTMLElement | null>(null);
   const t = translations[language];
 
   useEffect(() => {
@@ -131,8 +132,9 @@ export default function App() {
 
   useEffect(() => {
     if (!preview) return;
-    const previousFocus = document.activeElement instanceof HTMLElement ?
-      document.activeElement : null;
+    // Opening the dialog makes its opener inert before this effect runs.
+    // Capture that element at click time, not after React updates the DOM.
+    const previousFocus = previewReturnFocusRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     closePreviewRef.current?.focus();
@@ -189,6 +191,8 @@ export default function App() {
   function openEvidence(evidence: Evidence) {
     const file = evidence.document_id === 'original' ? original : revised;
     if (!file) return;
+    previewReturnFocusRef.current = document.activeElement instanceof HTMLElement ?
+      document.activeElement : null;
     setPreview({
       url: URL.createObjectURL(file), file, evidence,
     });
