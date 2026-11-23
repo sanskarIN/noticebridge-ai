@@ -412,15 +412,34 @@ def main() -> int:
     parser.add_argument("--min-precision", type=float, default=None)
     parser.add_argument("--min-recall", type=float, default=None)
     parser.add_argument(
+        "--min-independent-precision", type=float,
+        help="Minimum exact-pair precision in the declared independent non-fictional cohort",
+    )
+    parser.add_argument(
+        "--min-independent-recall", type=float,
+        help="Minimum exact-pair recall in the declared independent non-fictional cohort",
+    )
+    parser.add_argument(
+        "--max-independent-unsupported-confirmed", type=int,
+        help="Maximum unsupported confirmed pairings in the declared independent cohort",
+    )
+    parser.add_argument(
         "--max-unsupported-confirmed", type=int,
         help="Fail when unsupported confirmed pairings exceed this count",
     )
     args = parser.parse_args()
-    for threshold in (args.min_precision, args.min_recall):
+    for threshold in (
+        args.min_precision, args.min_recall,
+        args.min_independent_precision, args.min_independent_recall,
+    ):
         if threshold is not None and not 0 <= threshold <= 1:
             parser.error("Thresholds must be between 0 and 1")
-    if args.max_unsupported_confirmed is not None and args.max_unsupported_confirmed < 0:
-        parser.error("Maximum unsupported confirmed changes must be nonnegative")
+    for maximum in (
+        args.max_unsupported_confirmed,
+        args.max_independent_unsupported_confirmed,
+    ):
+        if maximum is not None and maximum < 0:
+            parser.error("Maximum unsupported confirmed changes must be nonnegative")
     if args.min_independent_cases is not None and args.min_independent_cases < 1:
         parser.error("Minimum independent case count must be positive")
     if (
@@ -460,6 +479,33 @@ def main() -> int:
     if (
         args.max_unsupported_confirmed is not None
         and counts["unsupported_confirmed_changes"] > args.max_unsupported_confirmed
+    ):
+        return 1
+
+    # Aggregate scores may be dominated by fictional or duplicated easy cases.
+    # Always enforce independent-cohort gates on their own *raw* pair counts,
+    # including when the caller intentionally evaluates a mixed manifest.
+    independent_counts = result["cohorts"]["declared_independent_nonfictional"]["pair_counts"]
+    independent_tp = independent_counts["true_positive"]
+    for denominator, threshold in (
+        (
+            independent_tp + independent_counts["false_positive"],
+            args.min_independent_precision,
+        ),
+        (
+            independent_tp + independent_counts["false_negative"],
+            args.min_independent_recall,
+        ),
+    ):
+        # An undefined ratio is not a passing metric, even at threshold 0.
+        if threshold is not None and (
+            not denominator or independent_tp / denominator < threshold
+        ):
+            return 1
+    if (
+        args.max_independent_unsupported_confirmed is not None
+        and independent_counts["unsupported_confirmed_changes"]
+        > args.max_independent_unsupported_confirmed
     ):
         return 1
     return 0
