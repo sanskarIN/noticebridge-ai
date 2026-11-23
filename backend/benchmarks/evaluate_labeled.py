@@ -66,7 +66,7 @@ def _pdf(root: Path, relative: object) -> bytes:
     posix = PurePosixPath(relative)
     windows = PureWindowsPath(relative)
     if (
-        "\\\\" in relative
+        "\\" in relative
         or posix.is_absolute()
         or windows.root
         or windows.drive
