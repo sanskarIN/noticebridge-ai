@@ -58,7 +58,12 @@ def run_isolated_comparison(
     The OS process is disposable and never receives server credentials through
     arguments. A timed-out worker cannot keep the request waiting indefinitely.
     """
-    if not original or not revised or len(original) > MAX_UPLOAD_BYTES or len(revised) > MAX_UPLOAD_BYTES:
+    if (
+        not original
+        or not revised
+        or len(original) > MAX_UPLOAD_BYTES
+        or len(revised) > MAX_UPLOAD_BYTES
+    ):
         raise InvalidDocument("Each PDF must be nonempty and at most 10 MiB")
     payload = json.dumps(
         {
