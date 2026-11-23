@@ -38,7 +38,9 @@ def test_closing_job_terminates_worker_descendants():
         "import subprocess,sys;"
         "sys.stdin.buffer.read(1);"
         "child=subprocess.Popen([sys.executable,'-c',"
-        "'import time;time.sleep(30)']);"
+        "'import time;time.sleep(30)'],"
+        "stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,"
+        "stderr=subprocess.DEVNULL);"
         "print(child.pid,flush=True)"
     )
     process = subprocess.Popen(
