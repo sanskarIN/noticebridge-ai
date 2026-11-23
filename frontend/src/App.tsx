@@ -208,10 +208,21 @@ export default function App() {
     };
   }, [preview]);
 
-  function setSource(role: DocumentRole, file: File | null) {
+  function clearComparison() {
+    // Reports are valid only for the exact pair of files AND the options used
+    // at submission. Prevent stale OCR/AI findings from being re-exported
+    // after the user changes any comparison input.
     controllerRef.current?.abort();
     controllerRef.current = null;
-    setPending(false); setReport(null); setChecked([]); setPreview(null); setError('');
+    setPending(false);
+    setReport(null);
+    setChecked([]);
+    setPreview(null);
+    setError('');
+  }
+
+  function setSource(role: DocumentRole, file: File | null) {
+    clearComparison();
     if (file && (!file.name.toLowerCase().endsWith('.pdf') || file.size > MAX_FILE_BYTES)) {
       setError(t.invalidFile);
       if (role === 'original') setOriginal(null); else setRevised(null);
@@ -317,8 +328,8 @@ export default function App() {
                 <input id={id} type="file" accept=".pdf,application/pdf" onChange={(e) => setSource(id, e.target.files?.[0] ?? null)} />
               </label>)}
           </div>
-          <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => setEnableOcr(e.target.checked)} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
-          <label className="ocr-option"><input type="checkbox" checked={enableSemantic} onChange={(e) => setEnableSemantic(e.target.checked)} /><span><strong>{t.semantic}</strong><small>{t.semanticNote}</small></span></label>
+          <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => { clearComparison(); setEnableOcr(e.target.checked); }} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
+          <label className="ocr-option"><input type="checkbox" checked={enableSemantic} onChange={(e) => { clearComparison(); setEnableSemantic(e.target.checked); }} /><span><strong>{t.semantic}</strong><small>{t.semanticNote}</small></span></label>
           <div className="upload-footer"><p>{t.note}</p><button type="submit" disabled={!original || !revised || pending} className="primary-button">{pending ? t.comparing : t.button}<span>→</span></button></div>
           {error && <p role="alert" className="error-banner">{error}</p>}
         </form>

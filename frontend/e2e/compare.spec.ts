@@ -366,3 +366,29 @@ test('Hindi review CSV is downloadable without a mobile horizontal overflow', as
   }
 });
 
+
+test('changing OCR or local AI options invalidates stale evidence and review exports', async ({ page }) => {
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(page.locator('.finding')).toHaveCount(1);
+  await page.locator('.checklist-item input').first().check();
+  await expect(page.getByRole('button', { name: /Export review CSV/ })).toBeVisible();
+
+  const ocr = page.getByLabel(/Enable local OCR for scanned pages/);
+  await ocr.check();
+  await expect(page.locator('.results')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Export review CSV/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Compare documents/ })).toBeEnabled();
+
+  await ocr.uncheck();
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(page.locator('.finding')).toHaveCount(1);
+
+  const ai = page.getByLabel(/Suggest matches with local AI/);
+  await ai.check();
+  await expect(page.locator('.results')).toHaveCount(0);
+  await ai.uncheck();
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(page.locator('.finding')).toHaveCount(1);
+});
+
