@@ -428,6 +428,14 @@ def main() -> int:
         help="Maximum unsupported confirmed pairings in the declared independent cohort",
     )
     parser.add_argument(
+        "--max-independent-incomplete-cases", type=int,
+        help="Maximum independent cases missing usable text on one or more PDF pages",
+    )
+    parser.add_argument(
+        "--max-independent-limited-matching-cases", type=int,
+        help="Maximum independent cases where fuzzy candidate matching hit its limit",
+    )
+    parser.add_argument(
         "--max-unsupported-confirmed", type=int,
         help="Fail when unsupported confirmed pairings exceed this count",
     )
@@ -441,9 +449,11 @@ def main() -> int:
     for maximum in (
         args.max_unsupported_confirmed,
         args.max_independent_unsupported_confirmed,
+        args.max_independent_incomplete_cases,
+        args.max_independent_limited_matching_cases,
     ):
         if maximum is not None and maximum < 0:
-            parser.error("Maximum unsupported confirmed changes must be nonnegative")
+            parser.error("Maximum error or incomplete-case limits must be nonnegative")
     if args.min_independent_cases is not None and args.min_independent_cases < 1:
         parser.error("Minimum independent case count must be positive")
     if (
@@ -498,6 +508,8 @@ def main() -> int:
         args.min_independent_precision,
         args.min_independent_recall,
         args.max_independent_unsupported_confirmed,
+        args.max_independent_incomplete_cases,
+        args.max_independent_limited_matching_cases,
     ))
     # A zero-error check over zero independent cases is not evidence of safety.
     if independent_gate_requested and independent["case_count"] == 0:
@@ -525,6 +537,17 @@ def main() -> int:
         > args.max_independent_unsupported_confirmed
     ):
         return 1
+    # Exact-pair scores can appear reassuring when extraction or candidate
+    # matching silently fails elsewhere in the same documents.
+    for observed, maximum in (
+        (independent["incomplete_case_count"], args.max_independent_incomplete_cases),
+        (
+            independent["fuzzy_matching_limited_case_count"],
+            args.max_independent_limited_matching_cases,
+        ),
+    ):
+        if maximum is not None and observed > maximum:
+            return 1
     return 0
 
 
