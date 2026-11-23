@@ -8,9 +8,10 @@ reject contradictory, fabricated-role or self-certified evidence structures.
 import hashlib
 import math
 
-from .compare import anchor, category_for, normalize
+from .compare import _score, anchor, category_for, normalize
 from .extract import MAX_EXTRACTED_LINES, MAX_LINE_CHARACTERS, MAX_OCR_PAGES, MAX_PAGES
 from .facts import date_tokens, field_changes
+from .messages import SUMMARY_MESSAGES, review_messages
 from .models import ComparisonReport, Evidence
 
 EXPECTED_POLICY = ComparisonReport.model_fields["verification_policy"].default
@@ -167,6 +168,16 @@ def verify_report_provenance(
         _require(finding.id not in finding_ids, "Finding IDs must be unique")
         finding_ids.add(finding.id)
         _require(not finding.authority_verified, "Worker claimed unverified official authority")
+        if finding.match_method == "semantic_proposal":
+            message_key = "semantic_proposal"
+        elif finding.status == "missing_information":
+            message_key = "missing_original" if finding.original else "missing_revised"
+        else:
+            message_key = finding.status
+        _require(
+            (finding.summary_en, finding.summary_hi) == SUMMARY_MESSAGES[message_key],
+            "Finding explanation must use a verified safety-preserving template",
+        )
         if finding.original:
             check_evidence(finding.original, "original")
         if finding.revised:
@@ -218,7 +229,24 @@ def verify_report_provenance(
                 "Related passages must include both PDF sources",
             )
 
+        if finding.status == "missing_information":
+            _require(finding.similarity == 0, "Unmatched statement has fake similarity")
+        elif finding.status == "contradiction":
+            _require(finding.similarity == 1, "Contradiction has fake similarity")
+        elif finding.match_method == "deterministic":
+            expected_similarity = round(
+                _score(finding.original.text, finding.revised.text), 3
+            )
+            _require(
+                abs(finding.similarity - expected_similarity) <= 0.001,
+                "Reported text similarity does not match its quotations",
+            )
+
         if finding.status == "confirmed_change":
+            _require(
+                _score(finding.original.text, finding.revised.text) >= 0.85,
+                "Confirmed wording change has insufficient text evidence",
+            )
             _require(
                 finding.match_method == "deterministic"
                 and finding.original is not None
@@ -302,6 +330,17 @@ def verify_report_provenance(
         _require(item.finding_id not in checklist_ids, "Duplicate review checklist entry")
         checklist_ids.add(item.finding_id)
         _require(item.requires_human_verification, "Human review was disabled")
+        referenced = next(
+            finding for finding in report.findings if finding.id == item.finding_id
+        )
+        expected_review = review_messages(
+            referenced.category,
+            semantic=referenced.match_method == "semantic_proposal",
+        )
+        _require(
+            (item.description_en, item.description_hi) == expected_review,
+            "Human review checklist text was altered",
+        )
 
     required_review_ids = {
         finding.id for finding in report.findings
