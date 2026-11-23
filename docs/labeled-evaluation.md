@@ -218,9 +218,35 @@ that; reversed upload order counts as the same source pair for diversity.
 The sample count and thresholds above are **operator-configured targets**,
 not statistically validated guarantees. The gate exits nonzero if any case
 lacks the declared eligible provenance, the minimum count is unmet, or
-the requested score thresholds fail. The minimum-case flag can also
-be used on a mixed manifest, but it does **not** isolate aggregate
-precision/recall gates; combine it with the require-independent flag.
+the requested score thresholds fail.
+
+For a **mixed** manifest, use explicit independent-cohort accuracy gates.
+An overall score can pass even while its smaller independent cohort fails:
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
+  evaluation/mixed-pinned.json --require-pinned-sources \
+  --min-independent-cases 20 --min-independent-distinct-pairs 20 \
+  --min-independent-precision 0.90 --min-independent-recall 0.90 \
+  --max-independent-unsupported-confirmed 0
+~~~
+
+These flags evaluate **only** the declared independent non-fictional
+cohort, using raw exact evidence-pair counts before rounding. Their
+thresholds cannot be met by adding high-scoring fictional examples.
+An empty independent cohort fails any requested independent accuracy gate,
+including an unsupported-confirmed maximum of zero. Undefined precision
+or recall also fails a corresponding minimum gate, even if that minimum
+is zero. These independent flags can be combined with aggregate gates
+to require good performance in both populations.
+
+The older `--min-precision`, `--min-recall`, and
+`--max-unsupported-confirmed` flags still evaluate **all cases**. The
+minimum-independent-count and distinct-pair gates alone do not alter
+those aggregate metrics or de-duplicate repetitions when computing
+accuracy. Use the isolated accuracy gates when evaluating mixed data;
+for a fully independent dataset, `--require-independent-corpus`
+makes the overall and independent populations equivalent.
 
 **Critical limitation:** NoticeBridge does not authenticate source-kind or
 label-method metadata. Someone could label fictional or AI-generated examples
