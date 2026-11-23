@@ -141,3 +141,20 @@ def test_body_limit_error_exposes_cors_to_permitted_origin():
     assert response.status_code == 413
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
 
+
+def test_real_api_stream_without_content_length_is_limited(monkeypatch):
+    # httpx sends iterator bodies with transfer-encoding: chunked. The API
+    # must not depend on a declared length to protect temporary disk storage.
+    monkeypatch.setattr(body_limit, "MAX_COMPARE_BODY_BYTES", 100)
+    pieces = iter([
+        b'--x\r\nContent-Disposition: form-data; name="original"; filename="x.pdf"\r\n\r\n',
+        b"%PDF-" + b"A" * 150,
+    ])
+    response = TestClient(app).post(
+        "/api/compare",
+        content=pieces,
+        headers={"Content-Type": "multipart/form-data; boundary=x"},
+    )
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Comparison upload is too large"
+
