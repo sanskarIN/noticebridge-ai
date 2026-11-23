@@ -222,3 +222,60 @@ def test_legacy_v1_still_available_but_unpinned(tmp_path, pdf_bytes):
     assert report["source_kind_case_counts"] == {"unrecorded": 1}
     assert report["label_method_case_counts"] == {"unrecorded": 1}
 
+
+def test_pin_tool_preserves_independent_labels_and_detects_mutations(tmp_path, pdf_bytes):
+    from pin_labeled_dataset import pin_dataset
+
+    source = _dataset(tmp_path, pdf_bytes)
+    original_labels = json.loads(source.read_text())["cases"][0]["expected_pairs"]
+    output = tmp_path / "labels-pinned.json"
+    result = pin_dataset(
+        source, output=output, source_kind="fictional",
+        label_method="author_reviewed",
+    )
+    assert result == output.resolve()
+    pinned = json.loads(output.read_text())
+    assert pinned["cases"][0]["expected_pairs"] == original_labels
+    assert evaluate_labeled(output)["precision"] == 1
+
+    (tmp_path / "revised.pdf").write_bytes(
+        pdf_bytes([["Deadline: 16 December 2026"]])
+    )
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        evaluate_labeled(output)
+
+
+def test_pin_tool_rejects_existing_output_and_invalid_metadata(tmp_path, pdf_bytes):
+    from pin_labeled_dataset import pin_dataset
+
+    source = _dataset(tmp_path, pdf_bytes)
+    output = tmp_path / "labels-pinned.json"
+    options = {"source_kind": "fictional", "label_method": "synthetic"}
+    pin_dataset(source, output=output, **options)
+    with pytest.raises(FileExistsError):
+        pin_dataset(source, output=output, **options)
+    with pytest.raises(ValueError, match="explicitly declared"):
+        pin_dataset(
+            source, output=tmp_path / "new.json",
+            source_kind="invalid", label_method="synthetic",
+        )
+    with pytest.raises(ValueError, match="manifest folder"):
+        pin_dataset(
+            source, output=tmp_path.parent / "outside.json", **options
+        )
+
+
+def test_pin_tool_refuses_source_file_with_parent_traversal(tmp_path, pdf_bytes):
+    from pin_labeled_dataset import pin_dataset
+
+    source = _dataset(tmp_path, pdf_bytes)
+    data = json.loads(source.read_text())
+    data["cases"][0]["original"] = "../secret.pdf"
+    source.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="relative .pdf"):
+        pin_dataset(
+            source, output=tmp_path / "pinned.json",
+            source_kind="fictional", label_method="synthetic",
+        )
+    assert not (tmp_path / "pinned.json").exists()
+
