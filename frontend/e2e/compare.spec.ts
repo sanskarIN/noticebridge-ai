@@ -716,6 +716,19 @@ test('prioritizes same-date cutoff changes and displays their quoted times', asy
   expect(report.findings[0].authority_verified).toBe(false);
 });
 
+test('shows both cutoff values when the revision crosses midnight', async ({ page }) => {
+  await compareReviewFixture(
+    page, [['Application deadline: 13 December 2026 at 23:59 IST']],
+    [['Application deadline: 14 December 2026 at 00:01 IST']],
+  );
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText('Deadline date and time changed');
+  await expect(first).toContainText('13 December 2026 at 23:59 → 14 December 2026 at 00:01');
+  await expect(page.locator('.finding mark')).toHaveText([
+    '13 December 2026', '23:59', '14 December 2026', '00:01',
+  ]);
+});
+
 test('links a separate amendment to the quoted original without accepting its authority', async ({ page }) => {
   await compareReviewFixture(
     page, [['Application deadline: 19 December 2026', 'Application fee: Rs. 500']],

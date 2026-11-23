@@ -58,9 +58,15 @@ function describeClockFinding(finding: Finding): ReviewPriority | undefined {
   const clock = values.find(change => change.kind === 'time');
   if (!clock || clock.outcome === 'same_value') return undefined;
 
-  // Keep calendar-date moves at their existing priority and show both values in the finding.
   const calendar = values.find(change => change.kind === 'date');
-  if (calendar?.outcome === 'changed') return undefined;
+  if (calendar?.outcome === 'changed' && clock.outcome === 'changed') {
+    // Crossing a calendar date can move a cutoff by only a few minutes.
+    return {
+      id, rank: 1, title: 'Deadline date and time changed',
+      detail: `${calendar.original.raw} at ${clock.original.raw} → ` +
+        `${calendar.revised.raw} at ${clock.revised.raw}`,
+    };
+  }
 
   const isDeadline = category === 'deadline';
   if (clock.outcome === 'changed' && calendar?.outcome !== 'uncertain') {

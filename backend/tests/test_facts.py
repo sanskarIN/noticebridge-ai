@@ -172,7 +172,7 @@ def test_ambiguous_or_invalid_clocks_stay_uncertain(clock, confidence):
 @pytest.mark.parametrize("clock", [
     "17:00-18:00", "5–7 PM", "17:00 to 18", "17:00 and 21:00",
     "17:00:30", "17:000", "DOC-17:00", "1-17:00", "UTC+05:30",
-    "17:00+05:30",
+    "17:00+05:30", "-17:00", "+17:00",
 ])
 def test_clock_extractor_does_not_salvage_partial_or_unpaired_clocks(clock):
     assert field_changes(

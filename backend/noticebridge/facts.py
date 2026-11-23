@@ -134,6 +134,7 @@ def single_clock_token(text: str) -> re.Match[str] | None:
     if (
         clock is None
         or next(clocks, None) is not None
+        or text[:clock.start()].endswith(("+", "-", "−"))
         or CLOCK_RANGE_PREFIX.search(text[:clock.start()])
         or CLOCK_RANGE_SUFFIX.match(text[clock.end():])
     ):
