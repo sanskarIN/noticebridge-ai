@@ -31,7 +31,8 @@
 - [x] Bounded worker timeouts and best-effort POSIX resource limits.
 - [x] Opt-in, local-only experimental semantic proposal path.
 - [ ] Finish comprehensive adversarial test review for model output and PDF parsing.
-- [ ] Confirm Windows 11 native launch and termination behavior.
+- [x] Add a Windows CI job for backend integration, lint and subprocess behavior.
+- [ ] Confirm Windows 11 native launch and termination behavior with a local desktop tester; CI alone is not equivalent.
 
 **Gate:** Every accepted AI pairing must point to two existing, noninvented
 source passages. No model output may mark a change or source as official.

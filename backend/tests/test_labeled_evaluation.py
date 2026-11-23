@@ -96,7 +96,10 @@ def test_symlink_outside_dataset_is_rejected(tmp_path, pdf_bytes):
     manifest = _dataset(tmp_path, pdf_bytes)
     outsider = tmp_path.parent / "outside-fixture.pdf"
     outsider.write_bytes(pdf_bytes([["Outside"]]))
-    (tmp_path / "linked.pdf").symlink_to(outsider)
+    try:
+        (tmp_path / "linked.pdf").symlink_to(outsider)
+    except OSError:
+        pytest.skip("Windows test account cannot create symlinks")
     payload = json.loads(manifest.read_text())
     payload["cases"][0]["original"] = "linked.pdf"
     manifest.write_text(json.dumps(payload))
