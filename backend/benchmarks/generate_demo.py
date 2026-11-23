@@ -43,7 +43,7 @@ def generate_pdf(path: Path, *, title: str, lines: list[str]) -> None:
                      "Generated synthetic content. Uploaded order does not prove authority.",
                      fontsize=9, color=(0.39, 0.43, 0.48))
     path.parent.mkdir(parents=True, exist_ok=True)
-    pdf.save(path)
+    pdf.save(path, no_new_id=True)
     pdf.close()
 
 

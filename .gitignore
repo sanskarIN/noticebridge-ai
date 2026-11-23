@@ -225,6 +225,7 @@ __marimo__/
 # NoticeBridge AI: frontend builds, browser test artifacts and local secrets
 frontend/node_modules/
 frontend/dist/
+frontend/dist-showcase/
 frontend/.vite/
 frontend/playwright-report/
 frontend/test-results/

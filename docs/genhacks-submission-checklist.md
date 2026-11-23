@@ -28,20 +28,21 @@ Rules describe a hackathon project started after the November 1 opening; partici
 Use only deliberately fictional notices and ensure both PDFs have a prominent watermark or other visible test-document notice:
 
 1. **0:00–0:20 — Problem:** People see multiple notices and need to understand what changed without trusting an unlinked AI summary.
-2. **0:20–0:50 — Source upload:** Upload generated fictional original/revised notices. State that upload order does not prove official precedence.
-3. **0:50–1:25 — Evidence:** Show the changed deadline and fee, their original and revised excerpts, and the PDF.js source highlight.
-4. **1:25–1:45 — Bilingual access:** Switch to Hindi and show the review checklist.
-5. **1:45–2:10 — Reliability:** Explain ambiguous dates, optional OCR flags, missing-page coverage and source hashes.
-6. **2:10–2:35 — Optional AI:** Show or describe how unverified local-model matches can be added without overwriting deterministic findings. Do not imply semantic accuracy has been established.
-7. **2:35–3:00 — Project and limits:** Show open-source architecture, tests, privacy boundaries, JSON export and the manual verification requirement.
+2. **0:20–0:50 — Working example:** Choose **Try a fictional notice** to compare the two Riverton Student Grant PDFs. Inspect the earlier deadline from **Review first**.
+3. **0:50–1:25 — Source evidence:** Open a highlighted PDF page to verify the quoted value. Show the changed fee and the two exact excerpts.
+4. **1:25–1:45 — Uncertainty:** Open the ambiguous interview date and show how it remains in the review queue.
+5. **1:45–2:10 — Review handoff:** Mark the inspected item reviewed. Export the report and show the two source fingerprints and recorded review selection.
+6. **2:10–2:35 — Technical proof:** Describe how the worker limits parsing and how the API checks structured claims against source passages. Show the repository and CI run.
 
-Generate fictional inputs using the existing backend/benchmarks/generate_demo.py. Capture the actual running app, not simulated screenshots. Use accurate captions and readable text; keep the resulting demo at or below 3:00.
+Use the built-in example to capture the working app. Identify whether the
+recording shows a live comparison or the saved static showcase. Keep source
+quotes and reading order easy to follow and stay below the organizer's three-minute limit.
 
 ## Engineering claims checklist
 
 - [ ] Quote the exact tested commit and CI run, including any skipped tests.
 - [ ] Mark verified capabilities separately from experimental local-AI functionality.
-- [ ] Do not report synthetic 14-case regression results as independent real-world accuracy.
+- [ ] Do not report synthetic 16-case regression results as independent real-world accuracy.
 - [ ] Do not claim that source SHA-256 establishes issuer authenticity.
 - [ ] Do not claim a fully isolated production upload server or cloud deployment.
 - [ ] Explain that OCR may mistranscribe and AI matches are suggestions, not verified facts.

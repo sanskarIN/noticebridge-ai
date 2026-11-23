@@ -1,4 +1,3 @@
-export type Language = 'en' | 'hi';
 export type DocumentRole = 'original' | 'revised';
 
 export type Evidence = {
@@ -38,7 +37,7 @@ export type Finding = {
   revised: Evidence | null;
   supporting_evidence: Evidence[];
   similarity: number;
-  match_method: 'deterministic' | 'semantic_proposal';
+  match_method: 'deterministic' | 'semantic_proposal' | 'explicit_amendment';
   authority_verified: boolean;
   field_changes: ValueChange[];
 };

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import type { Evidence, Language } from './comparison';
+import type { Evidence } from './comparison';
 
 // Bundle PDF.js and its matching worker with the application. No external CDN
 // receives the user's local document or its extracted evidence.
@@ -10,20 +10,11 @@ GlobalWorkerOptions.workerSrc = workerUrl;
 type PdfEvidence = Pick<Evidence, 'bbox' | 'page_width' | 'page_height' | 'page_rotation'>;
 
 const previewCopy = {
-  en: {
-    rendering: 'Rendering PDF page…',
-    page: 'Source PDF page',
-    uncovered: 'No text was extracted from this page. Inspect the page directly.',
-    geometry: 'Page geometry could not be verified; inspect the source without an approximate highlight.',
-    highlight: 'Source highlight is positioned using the PDF page transform. Verify the original text and page.',
-  },
-  hi: {
-    rendering: 'PDF पृष्ठ तैयार हो रहा है…',
-    page: 'स्रोत PDF पृष्ठ',
-    uncovered: 'इस पृष्ठ से कोई पाठ नहीं निकला। मूल पृष्ठ की जाँच करें।',
-    geometry: 'पृष्ठ की ज्यामिति की पुष्टि नहीं हुई। मूल पृष्ठ जाँचें।',
-    highlight: 'हाइलाइट PDF पृष्ठ के निर्देशांकों से बनाया गया है। मूल पाठ और पृष्ठ जाँचें।',
-  },
+  rendering: 'Rendering PDF page…',
+  page: 'Source PDF page',
+  uncovered: 'No text was extracted from this page. Inspect the page directly.',
+  geometry: 'Page geometry could not be verified; inspect the source without an approximate highlight.',
+  highlight: 'Source highlight is positioned using the PDF page transform. Verify the original text and page.',
 };
 
 
@@ -91,17 +82,16 @@ function highlightForPage(
   };
 }
 
-export default function PdfEvidencePreview({ file, pageNumber, evidence, language }: {
+export default function PdfEvidencePreview({ file, pageNumber, evidence }: {
   file: File;
   pageNumber: number;
   evidence?: PdfEvidence;
-  language: Language;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [highlight, setHighlight] = useState<CSSProperties | null>(null);
-  const t = previewCopy[language];
+  const t = previewCopy;
 
   useEffect(() => {
     let disposed = false;
