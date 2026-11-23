@@ -406,6 +406,10 @@ def main() -> int:
         help="Minimum number of different PDF source pairs in the independent cohort",
     )
     parser.add_argument(
+        "--require-distinct-independent-pairs", action="store_true",
+        help="Reject repeated PDF source pairs in the independent cohort, even in reverse order",
+    )
+    parser.add_argument(
         "--include-error-examples", action="store_true",
         help="Include bounded normalized PDF quote previews (may contain private text)",
     )
@@ -466,6 +470,10 @@ def main() -> int:
         args.min_independent_distinct_pairs is not None
         and distinct < args.min_independent_distinct_pairs
     ):
+        return 1
+    # A fixed minimum distinct count does not prevent the rest of a corpus
+    # from repeating easy cases and disproportionately increasing micro scores.
+    if args.require_distinct_independent_pairs and distinct != declared:
         return 1
     counts = result["pair_counts"]
     true_positive = counts["true_positive"]
