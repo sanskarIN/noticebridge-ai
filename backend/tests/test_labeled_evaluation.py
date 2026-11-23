@@ -364,6 +364,32 @@ def test_labeled_evaluation_ocr_opt_in_is_explicit_and_never_enables_ai(
     assert without["pair_counts"] == with_ocr["pair_counts"]
 
 
+def test_pinned_manifest_allows_baseline_and_selected_ocr_on_the_same_bytes(tmp_path, pdf_bytes):
+    manifest = _dataset(tmp_path, pdf_bytes)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["cases"][0]["original_ocr_pages"] = [1]
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    manifest = _v2_manifest(manifest)
+
+    baseline = evaluate_labeled(manifest, require_pinned_sources=True)
+    recovered = evaluate_labeled(manifest, require_pinned_sources=True, enable_ocr=True)
+    assert baseline["manifest_sha256"] == recovered["manifest_sha256"]
+    assert baseline["cases"][0]["selected_ocr_pages"] == {"original": [], "revised": []}
+    assert baseline["confirmed_only"]["true_positive"] == 1
+    assert recovered["cases"][0]["selected_ocr_pages"] == {"original": [1], "revised": []}
+    assert recovered["cases"][0]["ocr_page_numbers"]["revised"] == []
+    assert recovered["confirmed_only"]["true_positive"] == 0
+
+
+def test_unpinned_evaluation_rejects_malformed_selected_ocr_pages(tmp_path, pdf_bytes):
+    manifest = _dataset(tmp_path, pdf_bytes)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["cases"][0]["revised_ocr_pages"] = [True]
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid revised_ocr_pages"):
+        evaluate_labeled(manifest)
+
+
 def test_ocr_evaluation_reports_incomplete_scanned_pages_without_hallucinating(
     tmp_path, pdf_bytes
 ):

@@ -12,7 +12,7 @@ from collections import Counter
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from noticebridge.compare import normalize
-from noticebridge.extract import MAX_PAGES, MAX_UPLOAD_BYTES
+from noticebridge.extract import MAX_PAGES, MAX_UPLOAD_BYTES, InvalidDocument, validate_ocr_pages
 from noticebridge.isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 
 MAX_MANIFEST_BYTES = 1_000_000
@@ -72,6 +72,11 @@ def _manifest(path: Path) -> tuple[int, list[dict], str]:
         pairs = case.get("expected_pairs")
         if not isinstance(pairs, list) or len(pairs) > MAX_GOLD_PAIRS:
             raise ValueError(f"{label}: expected_pairs must be a bounded array")
+        for field in ("original_ocr_pages", "revised_ocr_pages"):
+            try:
+                validate_ocr_pages(case.get(field, []))
+            except InvalidDocument as exc:
+                raise ValueError(f"{label}: invalid {field}: {exc}") from exc
         for pair in pairs:
             if not isinstance(pair, dict) or not all(key in pair for key in PAIR_FIELDS):
                 raise ValueError(f"{label}: incomplete labeled passage pair")
@@ -132,6 +137,8 @@ def _score(
         new_name=Path(case["revised"]).name,
         enable_ocr=enable_ocr,
         enable_semantic=False,
+        original_ocr_pages=tuple(case.get("original_ocr_pages", [])) if enable_ocr else (),
+        revised_ocr_pages=tuple(case.get("revised_ocr_pages", [])) if enable_ocr else (),
     )
     for document in result.documents:
         if any(
@@ -162,6 +169,10 @@ def _score(
         "text_coverage": result.text_coverage,
         "fuzzy_matching_limited": result.fuzzy_matching_limited,
         "ocr_pages": sum(document.ocr_page_count for document in result.documents),
+        "ocr_page_numbers": {document.id: document.ocr_pages for document in result.documents},
+        "selected_ocr_pages": {
+            document.id: document.ocr_override_pages for document in result.documents
+        },
         "pages_without_text": sum(
             len(document.pages_without_text) for document in result.documents
         ),

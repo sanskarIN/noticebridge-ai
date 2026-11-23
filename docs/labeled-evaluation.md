@@ -136,6 +136,14 @@ PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
   demo-output/labels-pinned.json --require-pinned-sources --enable-ocr
 ```
 
+For a pinned recovery experiment, add `original_ocr_pages` and/or
+`revised_ocr_pages` as arrays of one-based page numbers inside a case, for
+example `"revised_ocr_pages": [2, 4]`. Running the same manifest with
+`--enable-ocr` applies those selections, while the default run measures
+native extraction. The case output reports the applied page selection and
+the pages that yielded OCR text. Both runs retain the same manifest and PDF
+fingerprints.
+
 Check that the backend host actually has Tesseract plus `eng` and `hin`
 language data. Results report `ocr_enabled`, the number of
 `ocr_page_count` pages, `pages_without_text_count`, per-case OCR page counts,
