@@ -58,8 +58,8 @@ claims. If the independent set is insufficient, publish the limitation prominent
   mobile widths and error/failure recovery.
 - [ ] Validate rotated and cropped PDF highlights or retain a prominent manual-only
   fallback until geometry is correct.
-- [ ] Threat-model multipart uploads, parsing, OCR execution, log/temporary-file
-  handling, local model access and resource exhaustion.
+- [x] Write an initial security threat model and P0/P1 risk register (docs/security-threat-model.md).
+- [ ] Remediate public-hosting P0 threats and test Windows process-tree termination and temp-file cleanup.
 - [ ] Implement or document production deployment isolation, rate limiting,
   resource budgets and authentication; no unaudited public hostile upload service.
 - [ ] Check dependencies and security advisories; pin reproducible builds.

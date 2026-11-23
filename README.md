@@ -8,7 +8,7 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 
 ## What works now
 
-- Two-PDF upload with per-file checks (10 MiB/PDF), **total ASGI request-body cap** (20 MiB plus 1 MiB framing), PDF type, encryption, and page-count checks. Both declared lengths and actual incoming bytes are bounded before multipart spooling.
+- Two-PDF upload with per-file checks (10 MiB/PDF), **total ASGI request-body cap** (20 MiB plus 1 MiB framing), PDF type, encryption, and page-count checks. Upload reception is limited to **90 seconds** and **eight concurrent compare requests per API process**, before multipart parsing.
 - Line-level PDF text extraction with **actual 1-based page references, source coordinates, and SHA-256 file fingerprints** from PyMuPDF. The API also reports per-document pages without extractable text and overall text-coverage status: all pages yielded text, partial, or inconclusive.
 - **Optional local OCR** for image-only PDF pages (English + Hindi). OCR provenance is attached to each extracted line, and OCR-derived changes cannot be labeled as confirmed purely by a text match. A limit of 12 OCR pages per document and a render-pixel ceiling bound work.
 - **PDF.js page preview with highlighted evidence coordinates** for unrotated pages, rendered locally from the selected File without a CDN; rotated pages omit potentially inaccurate highlights. Rendered bitmap size is limited to 9 million physical pixels and 4096 pixels per dimension, including device pixel ratio.
@@ -19,7 +19,7 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 - Human-verification checklist for changed deadlines, fees, eligibility, and instructions.
 - React/TypeScript comparison workspace with side-by-side evidence, locally rendered source pages, an explicit OCR opt-in, portable JSON evidence export, and review controls.
 - Worker outputs undergo independent **structural provenance checks** in the API: the SHA-256 must match uploaded bytes, document roles and filenames cannot be swapped, evidence page references must be in range, and an AI suggestion cannot become a confirmed/official claim. This is not independent verification of the actual notice's authenticity.
-- Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, Linux address-space ceilings (2 GiB), POSIX CPU/file/open-descriptor limits, no-cache responses, Pytest regression tests, and CI configuration.
+- Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, Linux address-space ceilings (2 GiB), POSIX CPU/file/open-descriptor limits, no-cache responses, Pytest regression tests, and CI configuration. Worker stdout is captured in a private temporary file and read with a 64 MiB result limit. Opt-in local Ollama responses are streamed with a 64 KiB total byte cap.
 - **Browser end-to-end tests** (Playwright/Chromium) verifying upload, evidence display, local PDF.js canvas/highlights, Hindi switching, and JSON export.
 - A reproducible **12-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
 - A local-only [labeled evaluation tool](docs/labeled-evaluation.md) for counting evidence-pair true positives, false positives and false negatives on a user-supplied PDF corpus. The tool and tests exist; a representative, independently labeled real-world corpus does **not** yet exist.
@@ -81,7 +81,7 @@ All evidence references point to source text extracted from the uploaded PDFs, i
 4. PDF.js rotation/crop-aware coordinate transforms, visual regression tests, and optional reviewed CSV/calendar exports.
 5. Stronger adversarial testing, privacy/security hardening, and an accessible deployed demo.
 
-See [engineering verification notes](docs/verification-matrix.md) for design invariants, test coverage, and accepted limitations.
+See [engineering verification notes](docs/verification-matrix.md) and the [security threat model](docs/security-threat-model.md) for data boundaries, remaining P0 risks, test coverage and accepted limitations.
 
 ## Reproducible fictional demo
 
