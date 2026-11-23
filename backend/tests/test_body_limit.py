@@ -279,3 +279,110 @@ def test_actual_upload_limit_response_stays_cache_disabled():
     assert response.status_code == 413
     assert response.headers["cache-control"] == "no-store"
 
+
+@pytest.mark.parametrize("failure_at", ["open", "write", "seek"])
+def test_temp_spool_failure_returns_503_and_releases_request_slot(
+    monkeypatch, failure_at
+):
+    inner_invoked = []
+    sent = []
+    spool_states = []
+
+    class FailingSpool:
+        def __init__(self):
+            self.closed = False
+            spool_states.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            self.closed = True
+
+        def write(self, content):
+            if failure_at == "write":
+                raise OSError("simulated full upload storage")
+            return len(content)
+
+        def seek(self, position):
+            if failure_at == "seek":
+                raise OSError("simulated unavailable upload storage")
+            return position
+
+    def create_spool(**kwargs):
+        if failure_at == "open":
+            raise OSError("simulated failed temporary directory")
+        return FailingSpool()
+
+    async def receive():
+        return {"type": "http.request", "body": b"example", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    async def inner(scope, receive, send):
+        inner_invoked.append(True)
+
+    monkeypatch.setattr(body_limit, "SpooledTemporaryFile", create_spool)
+    guard = body_limit.CompareBodyLimit(inner)
+    asyncio.run(guard(
+        {"type": "http", "path": "/api/compare", "method": "POST", "headers": []},
+        receive, send,
+    ))
+    assert guard._active == 0
+    assert not inner_invoked
+    assert all(spool.closed for spool in spool_states)
+    assert next(
+        msg["status"] for msg in sent if msg["type"] == "http.response.start"
+    ) == 503
+    assert json.loads(b"".join(
+        msg.get("body", b"") for msg in sent
+        if msg["type"] == "http.response.body"
+    ))["detail"] == "Temporary upload storage is unavailable"
+
+
+def test_spooled_upload_is_closed_on_client_disconnect(monkeypatch):
+    original_spool = body_limit.SpooledTemporaryFile
+    spools = []
+    sent = []
+
+    class TrackedSpool:
+        def __init__(self, **kwargs):
+            self.inner = original_spool(**kwargs)
+            self.closed = False
+            spools.append(self)
+
+        def __enter__(self):
+            self.inner.__enter__()
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            self.inner.__exit__(exc_type, exc, traceback)
+            self.closed = True
+
+        def write(self, data):
+            return self.inner.write(data)
+
+    incoming = iter([
+        {"type": "http.request", "body": b"partial", "more_body": True},
+        {"type": "http.disconnect"},
+    ])
+    async def receive():
+        return next(incoming)
+
+    async def send(message):
+        sent.append(message)
+
+    async def forbidden_inner(*args):
+        pytest.fail("A disconnected upload must not reach the PDF parser")
+
+    monkeypatch.setattr(body_limit, "SpooledTemporaryFile", TrackedSpool)
+    guard = body_limit.CompareBodyLimit(forbidden_inner)
+    asyncio.run(guard(
+        {"type": "http", "path": "/api/compare", "method": "POST", "headers": []},
+        receive, send,
+    ))
+    assert guard._active == 0
+    assert len(spools) == 1 and spools[0].closed
+    assert not sent
+
