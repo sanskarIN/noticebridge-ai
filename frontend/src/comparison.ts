@@ -61,6 +61,7 @@ type DocumentSummary = {
   ocr_override_pages?: number[];
   pages_with_text: number;
   pages_without_text: number[];
+  pages_with_unchecked_images?: number[];
 };
 
 export type Report = {

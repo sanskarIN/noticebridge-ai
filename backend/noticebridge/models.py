@@ -38,6 +38,7 @@ class DocumentSummary(BaseModel):
     ocr_override_pages: list[int] = Field(default_factory=list)
     pages_with_text: int = Field(default=0, ge=0)
     pages_without_text: list[int] = Field(default_factory=list)
+    pages_with_unchecked_images: list[int] = Field(default_factory=list)
 
 
 class ParsedValue(BaseModel):

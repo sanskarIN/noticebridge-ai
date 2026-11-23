@@ -147,7 +147,9 @@ fingerprints.
 Check that the backend host actually has Tesseract plus `eng` and `hin`
 language data. Results report `ocr_enabled`, the number of
 `ocr_page_count` pages, `pages_without_text_count`, per-case OCR page counts,
-processing warnings, and incomplete-case counts. If no OCR data is available,
+processing warnings, and incomplete-case counts. The separate
+`unchecked_image_page_count` and per-document page numbers flag large images on
+pages with some native text. If no OCR data is available,
 the tool does not invent transcriptions or artificially increase recall.
 Do not compare OCR-on and OCR-off evaluation results without identifying the
 different extraction mode and environment. OCR-derived possible text
