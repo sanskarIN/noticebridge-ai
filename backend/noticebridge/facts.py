@@ -27,16 +27,26 @@ MONTHS = {
     "dec": 12, "december": 12, "दिसंबर": 12, "दिसम्बर": 12,
 }
 
-MONTH_WORDS = "|".join(re.escape(k) for k in sorted(MONTHS, key=len, reverse=True))
+MONTH_NAMES = sorted(MONTHS, key=len, reverse=True)
+MONTH_WORDS = "|".join(re.escape(month) for month in MONTH_NAMES)
+ENGLISH_MONTH_WORDS = "|".join(re.escape(month) for month in MONTH_NAMES if month.isascii())
 # Python's \w covers letters and numbers but omits Devanagari combining marks.
 # Include the marks without treating the danda or double danda as word characters.
 WORD_CHAR = r"[\w\u0900-\u0903\u093a-\u094f\u0951-\u0957\u0962-\u0963]"
 ISO_DATE = re.compile(r"\d{4}-\d{1,2}-\d{1,2}")
 NUMERIC_DATE = re.compile(r"(\d{1,2})([/.-])(\d{1,2})\2(\d{4})")
+DAY_FIRST = (
+    rf"(?P<dmy_day>\d{{1,2}})\s+(?P<dmy_month>{MONTH_WORDS})\.?,?\s+(?P<dmy_year>\d{{4}})"
+)
+MONTH_FIRST = (
+    rf"(?P<mdy_month>{ENGLISH_MONTH_WORDS})\.?\s+(?P<mdy_day>\d{{1,2}}),?\s+"
+    rf"(?P<mdy_year>\d{{4}})"
+)
+NAMED_DATE = re.compile(rf"(?:{DAY_FIRST}|{MONTH_FIRST})", re.IGNORECASE)
 DATE_TOKEN = re.compile(
     rf"(?<!{WORD_CHAR})(?<!\d[/.-])(?:{ISO_DATE.pattern}|"
     rf"\d{{1,2}}[/.-]\d{{1,2}}[/.-]\d{{4}}|"
-    rf"\d{{1,2}}\s+(?:{MONTH_WORDS})\s+\d{{4}})(?!{WORD_CHAR}|[/.-]\d)",
+    rf"{NAMED_DATE.pattern})(?!{WORD_CHAR}|[/.-]\d)",
     re.IGNORECASE,
 )
 AMOUNT_DIGITS = r"\d+(?:,\d+)*(?:\.\d{1,2})?"
@@ -69,12 +79,14 @@ def parse_date(token: str) -> ParsedValue:
     """
     raw = token
     cleaned = ascii_digits(unicodedata.normalize("NFKC", token)).strip()
-    words = cleaned.casefold().split()
-    if len(words) == 3 and words[1] in MONTHS:
-        try:
-            canonical = _valid_date(int(words[2]), MONTHS[words[1]], int(words[0]))
-        except ValueError:
-            canonical = None
+    named = NAMED_DATE.fullmatch(cleaned)
+    if named:
+        order = "dmy" if named["dmy_month"] is not None else "mdy"
+        month = MONTHS.get(named[f"{order}_month"].casefold())
+        canonical = (
+            _valid_date(int(named[f"{order}_year"]), month, int(named[f"{order}_day"]))
+            if month is not None else None
+        )
         return ParsedValue(kind="date", raw=raw, canonical=canonical,
                            confidence="parsed" if canonical else "invalid")
     if ISO_DATE.fullmatch(cleaned):

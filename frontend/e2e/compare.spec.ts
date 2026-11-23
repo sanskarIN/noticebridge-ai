@@ -681,7 +681,7 @@ test('runs the fictional demo through the live API and prioritizes the earlier d
 test('links a separate amendment to the quoted original without accepting its authority', async ({ page }) => {
   await compareReviewFixture(
     page, [['Application deadline: 19 December 2026', 'Application fee: Rs. 500']],
-    [['Application deadline revised from 19 December 2026 to 13 December 2026',
+    [['Application deadline revised from December 19, 2026 to Dec. 13, 2026',
       'Application fee was reduced from Rs. 500 to Rs. 350']],
   );
   const findings = page.locator('.finding');
@@ -692,7 +692,7 @@ test('links a separate amendment to the quoted original without accepting its au
   await expect(finding.locator('.value-outcome')).toHaveText('Date: Stated in amendment');
   await expect(finding.locator('blockquote')).toHaveText([
     'Application deadline: 19 December 2026',
-    'Application deadline revised from 19 December 2026 to 13 December 2026',
+    'Application deadline revised from December 19, 2026 to Dec. 13, 2026',
   ]);
   await expect(page.getByRole('button', {
     name: 'Inspect finding: Deadline amendment needs verification',

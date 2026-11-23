@@ -42,7 +42,7 @@ quotes and reading order easy to follow and stay below the organizer's three-min
 
 - [ ] Quote the exact tested commit and CI run, including any skipped tests.
 - [ ] Mark verified capabilities separately from experimental local-AI functionality.
-- [ ] Do not report synthetic 16-case regression results as independent real-world accuracy.
+- [ ] Do not report synthetic 18-case regression results as independent real-world accuracy.
 - [ ] Do not claim that source SHA-256 establishes issuer authenticity.
 - [ ] Do not claim a fully isolated production upload server or cloud deployment.
 - [ ] Explain that OCR may mistranscribe and AI matches are suggestions, not verified facts.

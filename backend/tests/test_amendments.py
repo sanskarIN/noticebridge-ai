@@ -9,7 +9,7 @@ from noticebridge.provenance import InvalidReportProvenance, verify_report_prove
 @pytest.mark.parametrize(("old", "new", "category", "before", "after"), [
     (
         "Application deadline: 19 December 2026",
-        "The application deadline was advanced from 2026-12-19 to 13 December 2026.",
+        "The application deadline was advanced from December 19, 2026 to 13 December 2026.",
         "deadline", "2026-12-19", "2026-12-13",
     ),
     (

@@ -22,7 +22,7 @@ NoticeBridge AI is an open-source document comparison prototype for official not
 - Worker outputs undergo independent **structural provenance checks** in the API: the SHA-256 must match uploaded bytes, document roles and filenames cannot be swapped, evidence page references must be in range, and an AI suggestion cannot become a confirmed/official claim. This is not independent verification of the actual notice's authenticity.
 - Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, Linux address-space ceilings (2 GiB), POSIX CPU/file/open-descriptor limits, no-cache responses, Pytest regression tests, and CI configuration. Worker stdout is captured in a private temporary file and read with a 64 MiB result limit. Opt-in local Ollama responses are streamed with a 64 KiB total byte cap.
 - **Browser end-to-end tests** (Playwright/Chromium) cover live uploads, the API-free showcase, source highlighting, review priorities, and report export.
-- A reproducible **16-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
+- A reproducible **18-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
 - A local-only [labeled evaluation tool](docs/labeled-evaluation.md) for evidence-pair precision/recall on operator-supplied PDFs. **Version-2 pinned-source manifests** record exact PDF SHA-256 fingerprints and declared label provenance; a non-overwriting helper preserves human labels. An explicit `--enable-ocr` option can evaluate scanned documents using local Tesseract while leaving experimental AI disabled. The report exposes OCR usage and extraction gaps. A representative, independently labeled real-world corpus does **not** yet exist.
 
 ## Local development
@@ -119,7 +119,7 @@ Generate two attractive **fictional** sample PDFs to demonstrate the changed-dea
 PYTHONPATH=backend python backend/benchmarks/generate_demo.py --output demo-output
 ```
 
-The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The 16-case synthetic benchmark and Chromium browser tests are separate checks.
+The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The 18-case synthetic benchmark and Chromium browser tests are separate checks.
 
 ## Hackathon
 

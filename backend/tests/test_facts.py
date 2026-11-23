@@ -8,12 +8,17 @@ from noticebridge.facts import amount_tokens, date_tokens, field_changes, parse_
 @pytest.mark.parametrize(("token", "canonical"), [
     ("13 December 2026", "2026-12-13"),
     ("13 Dec 2026", "2026-12-13"),
+    ("December 13, 2026", "2026-12-13"),
+    ("DEC. 13, 2026", "2026-12-13"),
+    ("13 December, 2026", "2026-12-13"),
+    ("13 Dec. 2026", "2026-12-13"),
     ("13 दिसंबर 2026", "2026-12-13"),
     ("१३ दिसंबर २०२६", "2026-12-13"),
     ("2026-12-13", "2026-12-13"),
     ("13/12/2026", "2026-12-13"),
     ("12/12/2026", "2026-12-12"),
     ("29 February 2028", "2028-02-29"),
+    ("February 29, 2028", "2028-02-29"),
 ])
 def test_unambiguous_dates(token, canonical):
     parsed = parse_date(token)
@@ -30,7 +35,8 @@ def test_ambiguous_numeric_date_is_not_guessed(token):
 
 @pytest.mark.parametrize("token", [
     "31 February 2026", "2026-02-30", "32/12/2026", "12/32/2026",
-    "01/02/0000", "13/12-2026", "not-a-date",
+    "01/02/0000", "13/12-2026", "February 29, 2026", "November 31, 2026", "Aprıl 14, 2026",
+    "not-a-date",
 ])
 def test_invalid_calendar_dates(token):
     parsed = parse_date(token)
@@ -48,6 +54,16 @@ def test_date_extractor_does_not_salvage_fragments_from_a_longer_numeric_token()
     dates = date_tokens("Reference 17/13/12/2026, Annex 2026-12-13-12, close 13.12.2026.")
     assert [(value.raw, value.canonical) for value in dates] == [
         ("13.12.2026", "2026-12-13"),
+    ]
+
+
+def test_named_month_extraction_preserves_written_format_and_token_boundaries():
+    values = date_tokens(
+        "Ref xDecember 13, 2026 and July 8, 20261. "
+        "Close December 13, 2026; correction Dec. 19, 2026."
+    )
+    assert [(date.raw, date.canonical) for date in values] == [
+        ("December 13, 2026", "2026-12-13"), ("Dec. 19, 2026", "2026-12-19"),
     ]
 
 

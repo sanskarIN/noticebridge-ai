@@ -27,6 +27,7 @@ This note documents the conservative behavior of the third engineering milestone
 | `13 December 2026`, `13 दिसंबर 2026` | Valid date, `2026-12-13` |
 | `१३ दिसंबर २०२६` | Valid date, `2026-12-13` |
 | `2026-12-13` | Valid ISO date, `2026-12-13` |
+| `December 13, 2026` or `13 December 2026` | Explicit month and valid calendar date, `2026-12-13` |
 | `13/12/2026` | Unique day-month interpretation, `2026-12-13` |
 | `01/02/2026` | **Ambiguous** (1 Feb or 2 Jan), no canonical value |
 | `31 February 2026` | **Invalid** date, no canonical value |
