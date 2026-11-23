@@ -57,6 +57,7 @@ def test_valid_native_comparison_preserves_source_integrity(source_report):
     ("forged_raw_date", "Structured field claims"),
     ("missing_review_task", "checklist is missing"),
     ("fake_identical_confirmation", "identical source wording"),
+    ("fake_context_confirmation", "matching source context"),
     ("wrong_deterministic_category", "category contradicts"),
     ("forged_summary_en", "Finding explanation"),
     ("forged_summary_hi", "Finding explanation"),
@@ -120,6 +121,8 @@ def test_forged_report_fields_are_rejected(source_report, mutation, expected_err
         report.checklist.clear()
     elif mutation == "fake_identical_confirmation":
         finding.revised.text = finding.original.text
+    elif mutation == "fake_context_confirmation":
+        finding.revised.text = "Renewal deadline: 14 December 2026"
     elif mutation == "wrong_deterministic_category":
         finding.category = "fee"
     elif mutation == "forged_summary_en":
@@ -347,6 +350,22 @@ def test_ocr_source_cannot_claim_a_certain_structured_field_change(source_report
         old_name="old.pdf", new_name="new.pdf",
         ocr_requested=True,
     )
+
+
+def test_possible_native_pair_cannot_claim_a_certain_structured_field_change(pdf_bytes):
+    original = pdf_bytes([["Phase 1 deadline: 13 December 2026"]])
+    revised = pdf_bytes([["Phase 2 deadline: 14 December 2026"]])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    source = (original, revised, report)
+    verify(source)
+    finding = report.findings[0]
+    assert finding.status == "possible_change"
+    finding.field_changes[0].outcome = "changed"
+    with pytest.raises(InvalidReportProvenance, match="Structured field claims"):
+        verify(source)
 
 
 @pytest.mark.parametrize("mutation", ["same_date", "different_label"])

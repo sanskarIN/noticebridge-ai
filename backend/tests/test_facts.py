@@ -28,7 +28,10 @@ def test_ambiguous_numeric_date_is_not_guessed(token):
     assert parsed.canonical is None
 
 
-@pytest.mark.parametrize("token", ["31 February 2026", "2026-02-30", "32/12/2026"])
+@pytest.mark.parametrize("token", [
+    "31 February 2026", "2026-02-30", "32/12/2026", "12/32/2026",
+    "01/02/0000", "13/12-2026", "not-a-date",
+])
 def test_invalid_calendar_dates(token):
     parsed = parse_date(token)
     assert parsed.confidence == "invalid"
@@ -39,6 +42,13 @@ def test_hindi_date_extracted_from_full_statement():
     values = date_tokens("अंतिम तिथि १३ दिसंबर २०२६ है।")
     assert len(values) == 1
     assert values[0].canonical == "2026-12-13"
+
+
+def test_date_extractor_does_not_salvage_fragments_from_a_longer_numeric_token():
+    dates = date_tokens("Reference 17/13/12/2026, Annex 2026-12-13-12, close 13.12.2026.")
+    assert [(value.raw, value.canonical) for value in dates] == [
+        ("13.12.2026", "2026-12-13"),
+    ]
 
 
 def test_equal_dates_written_differently():
@@ -88,3 +98,21 @@ def test_invalid_comma_grouping_is_not_verified():
 
 def test_indian_currency_grouping():
     assert amount_tokens("Fee ₹10,00,000")[0].canonical == "INR 1000000.00"
+
+
+@pytest.mark.parametrize(("text", "token", "canonical"), [
+    ("Fee: Rs. 500.", "Rs. 500", "INR 500.00"),
+    ("Fee: INR 250.50, payable online.", "INR 250.50", "INR 250.50"),
+    ("आवेदन शुल्क १,२५० रुपये।", "१,२५० रुपये", "INR 1250.00"),
+    ("आवेदन शुल्क ₹७५०/-।", "₹७५०", "INR 750.00"),
+])
+def test_currency_parsing_preserves_quotes_and_handles_sentence_endings(text, token, canonical):
+    assert [(value.raw, value.canonical) for value in amount_tokens(text)] == [(token, canonical)]
+
+
+@pytest.mark.parametrize("text", [
+    "Fee Rs 500.509", "Fee ₹500/100", "Fee -250 रुपये", "Fee 1/250 रुपये",
+    "Fee 250 रुपयेशुल्क",
+])
+def test_currency_parsing_does_not_return_a_partial_number(text):
+    assert amount_tokens(text) == []

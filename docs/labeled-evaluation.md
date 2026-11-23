@@ -5,7 +5,7 @@ locally curated PDF pairs. The dataset owner supplies ground-truth page numbers
 and exact source quotations. The benchmark does not decide whether an issuer,
 notice, deadline, or eligibility criterion is officially valid.
 
-This is **different** from the 12 fictional examples under
+This is **different** from the 14 fictional examples under
 `backend/benchmarks/cases.json`: those are code regression fixtures, not a
 representative real-world accuracy study.
 

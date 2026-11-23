@@ -41,7 +41,7 @@ Generate fictional inputs using the existing backend/benchmarks/generate_demo.py
 
 - [ ] Quote the exact tested commit and CI run, including any skipped tests.
 - [ ] Mark verified capabilities separately from experimental local-AI functionality.
-- [ ] Do not report synthetic 12-case regression results as independent real-world accuracy.
+- [ ] Do not report synthetic 14-case regression results as independent real-world accuracy.
 - [ ] Do not claim that source SHA-256 establishes issuer authenticity.
 - [ ] Do not claim a fully isolated production upload server or cloud deployment.
 - [ ] Explain that OCR may mistranscribe and AI matches are suggestions, not verified facts.

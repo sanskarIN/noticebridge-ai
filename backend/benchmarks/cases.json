@@ -56,7 +56,21 @@
     "original": ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
     "revised": ["Deadline: 15 December 2026", "Deadline: 16 December 2026"],
     "expected_status_counts": {"possible_change": 2, "contradiction": 2},
-    "expected_field_outcomes": ["changed", "changed"]
+    "expected_field_outcomes": ["uncertain", "uncertain"]
+  },
+  {
+    "id": "numbered_deadline_scope",
+    "original": ["Phase 1 deadline: 13 December 2026", "Phase 2 deadline: 18 December 2026"],
+    "revised": ["Phase 2 deadline: 18 December 2026", "Phase 1 deadline: 14 December 2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["changed"]
+  },
+  {
+    "id": "numbered_fee_scope",
+    "original": ["Paper 1 fee: Rs. 200"],
+    "revised": ["Paper 2 fee: Rs. 500"],
+    "expected_status_counts": {"possible_change": 1},
+    "expected_field_outcomes": ["uncertain"]
   },
   {
     "id": "unchanged_duplicate_headers_reordered",

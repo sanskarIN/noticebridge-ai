@@ -8,7 +8,7 @@ reject contradictory, fabricated-role or self-certified evidence structures.
 import hashlib
 import math
 
-from .compare import _score, anchor, category_for, normalize
+from .compare import anchor, category_for, context_similarity, normalize
 from .extract import MAX_EXTRACTED_LINES, MAX_LINE_CHARACTERS, MAX_OCR_PAGES, MAX_PAGES
 from .facts import date_tokens, field_changes
 from .messages import HINDI_CATEGORY, SUMMARY_MESSAGES, review_messages
@@ -220,7 +220,7 @@ def verify_report_provenance(
                 and first_dates[0].canonical != second_dates[0].canonical
                 and category_for(evidence[0].text) == "deadline"
                 and category_for(evidence[1].text) == "deadline"
-                and anchor(evidence[0].text) == anchor(evidence[1].text),
+                and anchor(evidence[0].text, "deadline") == anchor(evidence[1].text, "deadline"),
                 "Contradiction must quote distinct parsed dates under the same label",
             )
         else:
@@ -233,20 +233,8 @@ def verify_report_provenance(
             _require(finding.similarity == 0, "Unmatched statement has fake similarity")
         elif finding.status == "contradiction":
             _require(finding.similarity == 1, "Contradiction has fake similarity")
-        elif finding.match_method == "deterministic":
-            expected_similarity = round(
-                _score(finding.original.text, finding.revised.text), 3
-            )
-            _require(
-                abs(finding.similarity - expected_similarity) <= 0.001,
-                "Reported text similarity does not match its quotations",
-            )
 
         if finding.status == "confirmed_change":
-            _require(
-                _score(finding.original.text, finding.revised.text) >= 0.85,
-                "Confirmed wording change has insufficient text evidence",
-            )
             _require(
                 finding.match_method == "deterministic"
                 and finding.original is not None
@@ -297,27 +285,33 @@ def verify_report_provenance(
 
         # No need to independently open untrusted PDF bytes in the API.
         # Recalculate structured values from each already-sourced passage;
-        # arbitrary worker output cannot turn OCR into a confirmed field delta.
+        # arbitrary worker output cannot turn a possible pairing into a certain field delta.
         if (
             finding.status in ("confirmed_change", "possible_change")
             and finding.match_method == "deterministic"
         ):
             _require(
-                finding.category == category_for(finding.original.text),
+                finding.category == category_for(finding.original.text)
+                and finding.category == category_for(finding.revised.text),
                 "Deterministic finding category contradicts its source quotation",
+            )
+            old_context = anchor(finding.original.text, finding.category)
+            new_context = anchor(finding.revised.text, finding.category)
+            if finding.status == "confirmed_change":
+                _require(
+                    old_context == new_context,
+                    "Confirmed change requires matching source context",
+                )
+            expected_similarity = round(context_similarity(old_context, new_context), 3)
+            _require(
+                finding.similarity == expected_similarity,
+                "Reported text similarity does not match its quotations",
             )
             expected = field_changes(
                 finding.original.text, finding.revised.text,
                 category=finding.category,
+                pairing_confirmed=finding.status == "confirmed_change",
             )
-            if (
-                finding.original.extraction_method == "ocr"
-                or finding.revised.extraction_method == "ocr"
-            ):
-                expected = [
-                    item.model_copy(update={"outcome": "uncertain"})
-                    for item in expected
-                ]
             _require(
                 [item.model_dump() for item in finding.field_changes]
                 == [item.model_dump() for item in expected],

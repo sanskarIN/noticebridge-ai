@@ -52,7 +52,7 @@ source passages. No model output may mark a change or source as official.
   numerator, denominator, confidence limitations and failure examples.
 - [ ] Add a reproducible evaluation command and CI regression baseline.
 
-**Gate:** Do not substitute the fictional 12-case benchmark for real-world accuracy
+**Gate:** Do not substitute the fictional 14-case benchmark for real-world accuracy
 claims. If the independent set is insufficient, publish the limitation prominently.
 
 ### 7–13 December — Product and privacy review

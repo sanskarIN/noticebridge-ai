@@ -85,6 +85,39 @@ def test_duplicate_context_is_not_confirmed_change(pdf_bytes):
     changes = [f for f in compare_documents(a, b).findings if f.revised and f.original]
     assert len(changes) == 2
     assert all(f.status == "possible_change" for f in changes)
+    assert all(f.field_changes[0].outcome == "uncertain" for f in changes)
+
+
+@pytest.mark.parametrize(("original", "revised"), [
+    ("Phase 1 deadline: 13 December 2026", "Phase 2 deadline: 14 December 2026"),
+    ("Paper 1 fee: Rs. 200", "Paper 2 fee: Rs. 500"),
+    ("Application deadline: 13 December 2026", "Online application deadline: 14 December 2026"),
+])
+def test_fuzzy_pair_does_not_certify_a_value_delta(pdf_bytes, original, revised):
+    report = compare_documents(*_pair(pdf_bytes, original, revised))
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.status == "possible_change"
+    assert finding.field_changes[0].outcome == "uncertain"
+    assert finding.field_changes[0].original.canonical is not None
+    assert finding.original.text == original
+    assert finding.revised.text == revised
+
+
+def test_distinct_numbered_deadline_labels_are_not_contradictory(pdf_bytes):
+    revised_lines = [
+        "Phase 1 deadline: 14 December 2026", "Phase 2 deadline: 18 December 2026",
+    ]
+    original_lines = [
+        "Phase 2 deadline: 18 December 2026", "Phase 1 deadline: 13 December 2026",
+    ]
+    report = compare_documents(
+        extract_pdf(pdf_bytes([original_lines]), document_id="original", filename="a.pdf"),
+        extract_pdf(pdf_bytes([revised_lines]), document_id="revised", filename="b.pdf"),
+    )
+    assert [finding.status for finding in report.findings] == ["confirmed_change"]
+    assert report.findings[0].field_changes[0].revised.canonical == "2026-12-14"
+    assert not report.warnings
 
 
 def test_numeric_ambiguity_does_not_create_false_contradiction(pdf_bytes):
@@ -234,6 +267,7 @@ def test_same_page_contradictions_remain_evidence_linked_across_multiple_pages(
     ("Ineligible applicants may not register", "eligibility"),
     ("अंतिम तिथि: 13 दिसंबर 2026", "deadline"),
     ("आवेदन शुल्क: 250 रुपये", "fee"),
+    ("आवेदन शुल्क।", "fee"),
     ("सभी के लिए पात्रता आवश्यक है", "eligibility"),
     ("पात्रताहीन आवेदन मान्य नहीं", "general"),
 ])
