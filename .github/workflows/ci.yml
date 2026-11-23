@@ -34,6 +34,7 @@ jobs:
           tesseract --list-langs
       - run: pytest -q backend/tests
       - run: ruff check backend
+      - run: python backend/benchmarks/generate_showcase.py --check
   windows-backend:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -84,6 +85,16 @@ jobs:
         working-directory: frontend
       - run: npm run test:e2e
         working-directory: frontend
+      - run: npm run build:showcase
+        working-directory: frontend
+      - run: npm run test:showcase
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: noticebridge-static-showcase
+          path: frontend/dist-showcase/
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

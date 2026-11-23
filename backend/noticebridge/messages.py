@@ -30,6 +30,10 @@ SUMMARY_MESSAGES = {
         "Possibly related passages differ; check the source context.",
         "संभवतः संबंधित अंश अलग हैं; स्रोत का संदर्भ जाँचें।",
     ),
+    "explicit_amendment": (
+        "The updated notice states a change from the quoted original value. Verify both sources.",
+        "संशोधित सूचना में मूल मान से बदलाव लिखा है। दोनों स्रोत जाँचें।",
+    ),
     "contradiction": (
         "Conflicting calendar dates appear under one label on the same PDF page.",
         "PDF के एक पृष्ठ पर समान शीर्षक के अंतर्गत अलग तिथियाँ मिली हैं।",

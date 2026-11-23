@@ -1,6 +1,6 @@
 import ReviewFindings from './ReviewFindings';
 import ReviewRestore from './ReviewRestore';
-import type { DocumentRole, Evidence, Language, Report } from './comparison';
+import type { DocumentRole, Evidence, Report } from './comparison';
 import { serializeReviewCsv } from './exportCsv';
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 
@@ -8,94 +8,81 @@ const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
 
 type SourcePage = Pick<Evidence, 'document_id' | 'filename' | 'page'>;
 type Preview = { url: string; file: File; source: SourcePage; evidence?: Evidence };
-
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const translations = {
-  en: {
-    eyebrow: 'EVIDENCE-FIRST DOCUMENT INTELLIGENCE',
-    title: 'Understand what changed.', subtitle: 'Know what to do. Verify the evidence.',
-    detail: 'Compare two official PDFs and inspect the original passages behind every finding. No invented citations. No automatic authority claims.',
-    original: 'Original notice', revised: 'Updated notice', drop: 'Select a PDF (up to 10 MiB)',
-    comparisonHeading: 'Document comparison', replaceFile: '↻ Replace', browseFile: '+ Browse file',
-    button: 'Compare documents', comparing: 'Comparing source passages…',
-    note: 'Your PDFs are sent to this backend. Uploads may use temporary OS storage while processing; the app does not intentionally retain them permanently.',
-    findings: 'Findings', confirmed: 'Matched text changes', possible: 'Possible changes',
-    noFindings: 'No wording differences were identified in extractable text. This does not prove that the PDFs are equivalent.',
-    insufficient: 'Comparison is inconclusive because one or both PDFs have no extractable text. Enable OCR for scanned pages or supply text-based PDFs.',
-    page: 'Page', verify: 'Verify against the issuing organization before acting on a deadline or eligibility change.',
-    authority: 'Authority not verified', warnings: 'Processing warnings',
-    closePreview: 'Close preview', newTab: 'Open PDF in new tab',
-    export: 'Export evidence report (JSON)', exportCsv: 'Export review CSV',
-    invalidFile: 'Select a PDF no larger than 10 MiB.',
-    ocr: 'Enable local OCR for scanned pages (English + Hindi)',
-    ocrNote: 'Optional. Tesseract and the eng/hin language packs must be installed on the server. OCR text can be wrong; it never establishes an authoritative change. Up to 12 scanned pages per PDF.',
-    ocrRecovery: 'Recover text on selected pages with OCR',
-    ocrRecoveryHelp: 'Use PDF page numbers such as 1, 3–5 when the embedded text is garbled or incomplete. Selected pages use OCR only and take priority within the 12-page limit per PDF.',
-    ocrOriginalPages: 'Original notice OCR pages',
-    ocrRevisedPages: 'Updated notice OCR pages',
-    ocrSelected: 'Selected for OCR',
-    ocrRecovered: 'Text extracted by OCR',
-    coverageTitle: 'Text extraction coverage',
-    coverageFull: 'Every PDF page yielded some text, but this does not prove every statement was captured.',
-    coveragePartial: 'Some PDF pages yielded no text. Changes on those pages may be missed.',
-    coverageInconclusive: 'One or both PDFs yielded no text. The comparison is inconclusive.',
-    coveragePages: 'pages yielded text',
-    uncovered: 'Open pages with no extracted text',
-    fuzzyLimited: 'The comparison skipped some candidate pairings because the matching limit was reached. Check the source before interpreting unmatched statements.',
-    previewLoading: 'Preparing PDF viewer…',
-    semantic: 'Suggest matches with local AI (experimental)',
-    semanticNote: 'Optional: sends selected unmatched text excerpts to Ollama running on the backend computer (127.0.0.1:11434). This feature does not call cloud APIs. Suggestions are unverified.',
-    semanticAdded: 'Local AI suggested possible passage pairings. None are verified.',
-    semanticNoCandidates: 'No unmatched category-labeled passages were eligible for local AI review.',
-    semanticUnavailable: 'Local AI was unavailable; deterministic findings remain available.',
-    semanticRejected: 'No local AI suggestions passed source verification.',
-  },
-  hi: {
-    eyebrow: 'स्रोत-आधारित दस्तावेज़ विश्लेषण',
-    title: 'जानें, क्या बदला।', subtitle: 'अगला कदम समझें। प्रमाण जाँचें।',
-    detail: 'दो आधिकारिक PDF की तुलना करें और हर निष्कर्ष के मूल प्रमाण देखें। कोई काल्पनिक संदर्भ या स्वतः आधिकारिक दावा नहीं।',
-    original: 'मूल सूचना', revised: 'संशोधित सूचना', drop: 'PDF चुनें (अधिकतम 10 MiB)',
-    comparisonHeading: 'दस्तावेज़ तुलना', replaceFile: '↻ बदलें', browseFile: '+ फ़ाइल चुनें',
-    button: 'दस्तावेज़ों की तुलना करें', comparing: 'स्रोत अंशों की तुलना जारी…',
-    note: 'PDF इस बैकएंड पर भेजी जाती हैं। प्रोसेसिंग के दौरान अस्थायी सिस्टम स्टोरेज उपयोग हो सकता है; ऐप इन्हें स्थायी रूप से रखने का उद्देश्य नहीं रखता।',
-    findings: 'निष्कर्ष', confirmed: 'मिलते अंशों में बदलाव', possible: 'संभावित बदलाव',
-    noFindings: 'निकाले जा सकने वाले पाठ में अंतर नहीं मिला। इससे दोनों PDF एक जैसी सिद्ध नहीं होतीं।',
-    insufficient: 'तुलना अधूरी है क्योंकि किसी एक या दोनों PDF से पाठ नहीं मिला। स्कैन किए पन्नों के लिए OCR चालू करें या पाठ वाली PDF चुनें।',
-    page: 'पृष्ठ', verify: 'तिथि या पात्रता में बदलाव के आधार पर कदम उठाने से पहले जारीकर्ता से पुष्टि करें।',
-    authority: 'आधिकारिक प्राथमिकता अप्रमाणित', warnings: 'प्रोसेसिंग चेतावनियाँ',
-    closePreview: 'पूर्वावलोकन बंद करें', newTab: 'नए टैब में PDF खोलें',
-    export: 'प्रमाण रिपोर्ट डाउनलोड करें (JSON)', exportCsv: 'समीक्षा CSV डाउनलोड करें',
-    invalidFile: 'केवल 10 MiB तक की PDF चुनें।',
-    ocr: 'स्कैन किए गए पन्नों के लिए स्थानीय OCR चालू करें (हिंदी + अंग्रेज़ी)',
-    ocrNote: 'वैकल्पिक। सर्वर पर Tesseract और eng/hin भाषा डेटा आवश्यक है। OCR में गलतियाँ हो सकती हैं। प्रत्येक PDF के अधिकतम 12 पन्ने।',
-    ocrRecovery: 'चुने हुए पृष्ठों का पाठ OCR से निकालें',
-    ocrRecoveryHelp: 'PDF का पाठ बिगड़ा या अधूरा हो तो १, ३–५ जैसे PDF पृष्ठ नंबर दें। चुने हुए पृष्ठों पर केवल OCR चलेगा। हर PDF की 12 पृष्ठों की सीमा में इन्हें प्राथमिकता मिलेगी।',
-    ocrOriginalPages: 'मूल सूचना के OCR पृष्ठ',
-    ocrRevisedPages: 'संशोधित सूचना के OCR पृष्ठ',
-    ocrSelected: 'OCR के लिए चुने गए पृष्ठ',
-    ocrRecovered: 'OCR से पाठ मिले पृष्ठ',
-    coverageTitle: 'पाठ निष्कर्षण की स्थिति',
-    coverageFull: 'हर PDF पृष्ठ से कुछ पाठ मिला, लेकिन इससे सभी कथन निकलने की पुष्टि नहीं होती।',
-    coveragePartial: 'कुछ PDF पृष्ठों से पाठ नहीं मिला। उन पृष्ठों के बदलाव छूट सकते हैं।',
-    coverageInconclusive: 'एक या दोनों PDF से कोई पाठ नहीं मिला। तुलना अनिर्णायक है।',
-    coveragePages: 'पृष्ठों से पाठ मिला',
-    uncovered: 'बिना निकाले गए पाठ वाले पृष्ठ खोलें',
-    fuzzyLimited: 'मिलान की सीमा पूरी होने पर कुछ संभावित मिलान छूट गए। बेमेल कथनों की व्याख्या करने से पहले मूल स्रोत जाँचें।',
-    previewLoading: 'PDF व्यूअर तैयार हो रहा है…',
-    semantic: 'स्थानीय AI से संभावित मिलान सुझाएँ (प्रयोगात्मक)',
-    semanticNote: 'वैकल्पिक: कुछ बेमेल पाठ अंश बैकएंड पर चल रहे Ollama (127.0.0.1:11434) को भेजे जाएँगे। यह सुविधा क्लाउड API का उपयोग नहीं करती। सुझाव अप्रमाणित हैं।',
-    semanticAdded: 'स्थानीय AI ने संभावित अंश मिलान सुझाए हैं। कोई भी सत्यापित नहीं है।',
-    semanticNoCandidates: 'स्थानीय AI समीक्षा के लिए उपयुक्त बेमेल अंश नहीं मिले।',
-    semanticUnavailable: 'स्थानीय AI उपलब्ध नहीं था; नियम-आधारित निष्कर्ष उपलब्ध हैं।',
-    semanticRejected: 'स्थानीय AI का कोई सुझाव स्रोत जाँच में सफल नहीं हुआ।',
-  },
+type ComparisonSource = 'live_upload' | 'live_demo' | 'showcase';
+type CompareOptions = {
+  enableOcr: boolean;
+  ocrPages: Record<DocumentRole, string>;
+  enableSemantic: boolean;
 };
 
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const SHOWCASE_ONLY = import.meta.env.MODE === 'showcase';
+const DEFAULT_OPTIONS: CompareOptions = {
+  enableOcr: false, ocrPages: { original: '', revised: '' }, enableSemantic: false,
+};
+const t = {
+  title: 'Know when a notice changes.',
+  detail: 'Compare two PDFs, see which deadlines and requirements changed, and open the exact source passages before you act.',
+  original: 'Original notice', revised: 'Updated notice', drop: 'Select a PDF (up to 10 MiB)',
+  comparisonHeading: 'Document comparison', replaceFile: '↻ Replace', browseFile: '+ Browse file',
+  button: 'Compare documents', comparing: 'Comparing source passages…',
+  note: 'Your PDFs are sent to this backend. Uploads may use temporary OS storage while processing; the app does not intentionally retain them permanently.',
+  findings: 'Findings', confirmed: 'Matched text changes', possible: 'Possible changes',
+  noFindings: 'No wording differences were identified in extractable text. This does not prove that the PDFs are equivalent.',
+  insufficient: 'Comparison is inconclusive because one or both PDFs have no extractable text. Enable OCR for scanned pages or supply text-based PDFs.',
+  page: 'Page', verify: 'Verify against the issuing organization before acting on a deadline or eligibility change.',
+  authority: 'Authority not verified', warnings: 'Processing warnings',
+  closePreview: 'Close preview', newTab: 'Open PDF in new tab',
+  export: 'Export evidence report (JSON)', exportCsv: 'Export review CSV',
+  invalidFile: 'Select a PDF no larger than 10 MiB.',
+  ocr: 'Enable local OCR for scanned pages',
+  ocrNote: 'Requires Tesseract and the configured language data on the server. Check OCR quotations against the PDF. The limit is 12 pages per PDF.',
+  ocrRecovery: 'Recover text on selected pages with OCR',
+  ocrRecoveryHelp: 'Use PDF page numbers such as 1, 3–5 when the embedded text is garbled or incomplete. Selected pages use OCR only and take priority within the 12-page limit per PDF.',
+  ocrOriginalPages: 'Original notice OCR pages',
+  ocrRevisedPages: 'Updated notice OCR pages',
+  ocrSelected: 'Selected for OCR',
+  ocrRecovered: 'Text extracted by OCR',
+  coverageTitle: 'Text extraction coverage',
+  coverageFull: 'Every PDF page yielded some text, but this does not prove every statement was captured.',
+  coveragePartial: 'Some PDF pages yielded no text. Changes on those pages may be missed.',
+  coverageInconclusive: 'One or both PDFs yielded no text. The comparison is inconclusive.',
+  coveragePages: 'pages yielded text',
+  uncovered: 'Open pages with no extracted text',
+  fuzzyLimited: 'The comparison skipped some candidate pairings because the matching limit was reached. Check the source before interpreting unmatched statements.',
+  previewLoading: 'Preparing PDF viewer…',
+  semantic: 'Suggest matches with local AI (experimental)',
+  semanticNote: 'Optional: sends selected unmatched text excerpts to Ollama running on the backend computer (127.0.0.1:11434). This feature does not call cloud APIs. Suggestions are unverified.',
+  semanticAdded: 'Local AI suggested possible passage pairings. None are verified.',
+  semanticNoCandidates: 'No unmatched category-labeled passages were eligible for local AI review.',
+  semanticUnavailable: 'Local AI was unavailable; deterministic findings remain available.',
+  semanticRejected: 'No local AI suggestions passed source verification.',
+};
+
+async function requestComparison(
+  original: File, revised: File, options: CompareOptions, signal: AbortSignal,
+): Promise<Report> {
+  const body = new FormData();
+  body.append('original', original);
+  body.append('revised', revised);
+  body.append('enable_ocr', String(options.enableOcr));
+  body.append('original_ocr_pages', options.ocrPages.original);
+  body.append('revised_ocr_pages', options.ocrPages.revised);
+  body.append('enable_semantic', String(options.enableSemantic));
+  const response = await fetch('/api/compare', { method: 'POST', body, signal });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(typeof payload?.detail === 'string'
+      ? payload.detail : `Request failed (${response.status})`);
+  }
+  return await response.json() as Report;
+}
+
 export default function App() {
-  const [language, setLanguage] = useState<Language>('en');
   const [original, setOriginal] = useState<File | null>(null);
   const [revised, setRevised] = useState<File | null>(null);
   const [report, setReport] = useState<Report | null>(null);
+  const [comparisonSource, setComparisonSource] = useState<ComparisonSource>('live_upload');
   const [pending, setPending] = useState(false);
   const [enableOcr, setEnableOcr] = useState(false);
   const [ocrPages, setOcrPages] = useState<Record<DocumentRole, string>>({
@@ -109,13 +96,15 @@ export default function App() {
   const closePreviewRef = useRef<HTMLButtonElement | null>(null);
   const previewDialogRef = useRef<HTMLElement | null>(null);
   const previewReturnFocusRef = useRef<HTMLElement | null>(null);
-  const t = translations[language];
+  const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
     return () => { if (preview) URL.revokeObjectURL(preview.url); };
   }, [preview]);
   useEffect(() => () => controllerRef.current?.abort(), []);
-  useEffect(() => { document.documentElement.lang = language; }, [language]);
+  useEffect(() => {
+    if (report) resultsHeadingRef.current?.focus();
+  }, [report]);
 
   useEffect(() => {
     if (!preview) return;
@@ -218,7 +207,10 @@ export default function App() {
 
   function exportReport() {
     if (!report) return;
-    const payload = { ...report, review: [...checked], exported_at: new Date().toISOString() };
+    const payload = {
+      ...report, comparison_source: comparisonSource, review: [...checked],
+      exported_at: new Date().toISOString(),
+    };
     downloadLocal(
       'noticebridge-evidence-report.json', 'application/json',
       JSON.stringify(payload, null, 2),
@@ -233,26 +225,16 @@ export default function App() {
     );
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!original || !revised) return;
-    controllerRef.current?.abort();
+  async function runComparison(
+    source: ComparisonSource, getReport: (signal: AbortSignal) => Promise<Report>,
+  ) {
+    clearComparison();
     const controller = new AbortController();
     controllerRef.current = controller;
-    setPending(true); setError(''); setReport(null); setChecked(new Set()); setPreview(null);
+    setComparisonSource(source);
+    setPending(true);
     try {
-      const body = new FormData();
-      body.append('original', original); body.append('revised', revised);
-      body.append('enable_ocr', String(enableOcr));
-      body.append('original_ocr_pages', ocrPages.original);
-      body.append('revised_ocr_pages', ocrPages.revised);
-      body.append('enable_semantic', String(enableSemantic));
-      const response = await fetch('/api/compare', { method: 'POST', body, signal: controller.signal });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(typeof payload?.detail === 'string' ? payload.detail : `Request failed (${response.status})`);
-      }
-      const result = await response.json() as Report;
+      const result = await getReport(controller.signal);
       if (controllerRef.current === controller) setReport(result);
     } catch (cause) {
       if (controllerRef.current === controller && !controller.signal.aborted) {
@@ -266,26 +248,57 @@ export default function App() {
     }
   }
 
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!original || !revised) return;
+    void runComparison('live_upload', signal => requestComparison(
+      original, revised, { enableOcr, ocrPages, enableSemantic }, signal,
+    ));
+  }
+
+  function startDemo() {
+    void runComparison(SHOWCASE_ONLY ? 'showcase' : 'live_demo', async signal => {
+      const { loadShowcase } = await import('./showcase/load');
+      const fixture = loadShowcase();
+      signal.throwIfAborted();
+      setOriginal(fixture.original);
+      setRevised(fixture.revised);
+      setEnableOcr(false);
+      setOcrPages(DEFAULT_OPTIONS.ocrPages);
+      setEnableSemantic(false);
+      return SHOWCASE_ONLY
+        ? fixture.report
+        : requestComparison(fixture.original, fixture.revised, DEFAULT_OPTIONS, signal);
+    });
+  }
+
   return <div className="app-shell">
     <header className="topbar" inert={Boolean(preview)}>
       <div className="brand"><span className="brand-mark">N<span>↗</span></span><span>NoticeBridge <b>AI</b></span></div>
-      <div className="top-actions">
-        <span className="privacy-tag">● Local development MVP</span>
-        <div className="language-switch" role="group" aria-label={language === 'hi' ? 'व्याख्या की भाषा' : 'Explanation language'}>
-          <button lang="en" aria-pressed={language === 'en'} className={language === 'en' ? 'active' : ''} onClick={() => setLanguage('en')} type="button">EN</button>
-          <button lang="hi" aria-pressed={language === 'hi'} className={language === 'hi' ? 'active' : ''} onClick={() => setLanguage('hi')} type="button">हिंदी</button>
-        </div>
-      </div>
+      <a className="repo-link" href="https://github.com/sanskarIN/noticebridge-ai">View source code</a>
     </header>
     <main inert={Boolean(preview)}>
       <section className="hero">
-        <div className="pill"><span className="pill-dot" />{t.eyebrow}</div>
-        <h1>{t.title}<br /><em>{t.subtitle}</em></h1>
+        <h1>{t.title}</h1>
         <p className="hero-copy">{t.detail}</p>
-        <div className="hero-visual" aria-hidden="true"><span className="spark s1">✦</span><span className="spark s2">✧</span><span className="spark s3">✦</span></div>
+        <div className="showcase-actions">
+          <button type="button" className="primary-button" disabled={pending} onClick={startDemo}>
+            {pending && comparisonSource !== 'live_upload' ? 'Loading example…' : 'Try a fictional notice'}
+            <span aria-hidden="true">→</span>
+          </button>
+          {!SHOWCASE_ONLY && <a href="#upload-notices">Compare your own PDFs</a>}
+        </div>
+        <p className="showcase-intro">
+          {SHOWCASE_ONLY
+            ? 'Explore a saved comparison of two fictional notices, including the source PDFs.'
+            : 'See how a moved deadline, a changed fee, and an ambiguous date appear in a live comparison.'}
+        </p>
+        {(SHOWCASE_ONLY || comparisonSource === 'live_demo') && pending &&
+          <p role="status" className="showcase-intro">Loading the fictional notices and evidence…</p>}
+        {SHOWCASE_ONLY && error && <p role="alert" className="error-banner">{error}</p>}
       </section>
-      <section className="workspace" aria-label="PDF comparison workspace">
-        <div className="section-heading"><div><span className="section-number">{language === 'hi' ? '०१ / विश्लेषण' : '01 / ANALYZE'}</span><h2>{t.comparisonHeading}</h2></div><div className="section-hint">PDF → EVIDENCE → FINDINGS</div></div>
+      {!SHOWCASE_ONLY && <section id="upload-notices" className="workspace" aria-label="PDF comparison workspace">
+        <div className="section-heading"><h2>{t.comparisonHeading}</h2></div>
         <form onSubmit={submit}>
           <div className="upload-grid">
             {([['original', original, t.original], ['revised', revised, t.revised]] as const).map(([id, file, label], i) =>
@@ -293,7 +306,11 @@ export default function App() {
                 <span className="upload-icon">{i === 0 ? '01' : '02'}</span><strong>{label}</strong>
                 <span className="upload-detail">{file ? file.name : t.drop}</span>
                 <span className="upload-action">{file ? t.replaceFile : t.browseFile}</span>
-                <input id={id} type="file" accept=".pdf,application/pdf" onChange={(e) => setSource(id, e.target.files?.[0] ?? null)} />
+                <input id={id} type="file" accept=".pdf,application/pdf" onChange={event => {
+                  const selected = event.currentTarget.files?.[0];
+                  event.currentTarget.value = '';
+                  if (selected) setSource(id, selected);
+                }} />
               </label>)}
           </div>
           <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => { clearComparison(); setEnableOcr(e.target.checked); }} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
@@ -317,9 +334,14 @@ export default function App() {
           <div className="upload-footer"><p>{t.note}</p><button type="submit" disabled={!original || !revised || pending} className="primary-button">{pending ? t.comparing : t.button}<span>→</span></button></div>
           {error && <p role="alert" className="error-banner">{error}</p>}
         </form>
-      </section>
+      </section>}
       {report && <section className="results" aria-labelledby="results-heading">
-        <div className="section-heading"><div><span className="section-number">{language === 'hi' ? '०२ / समीक्षा' : '02 / REVIEW'}</span><h2 id="results-heading">{t.findings}</h2></div><div className="export-actions"><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button><button type="button" className="export-button" onClick={exportReviewCsv}>{t.exportCsv} ↓</button></div></div>
+        <div className="section-heading"><div><h2 id="results-heading" ref={resultsHeadingRef} tabIndex={-1}>{t.findings}</h2></div><div className="export-actions"><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button><button type="button" className="export-button" onClick={exportReviewCsv}>{t.exportCsv} ↓</button></div></div>
+        {comparisonSource !== 'live_upload' && <p className="showcase-provenance">
+          {comparisonSource === 'showcase'
+            ? 'Saved comparison from the NoticeBridge engine · Fictional notices'
+            : 'Live comparison · Fictional notices'}
+        </p>}
         <div className="metrics">
           <div><b>{report.findings.length}</b><span>{t.findings}</span></div>
           <div><b>{report.findings.filter(f => f.status === 'confirmed_change').length}</b><span>{t.confirmed}</span></div>
@@ -353,10 +375,10 @@ export default function App() {
         </div>
         {report.fuzzy_matching_limited && <p className="coverage-report partial" role="status">{t.fuzzyLimited}</p>}
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
-        {report.checklist.length > 0 && <ReviewRestore report={report} language={language}
+        {report.checklist.length > 0 && <ReviewRestore report={report}
           onRestore={ids => setChecked(previous => new Set([...previous, ...ids]))} />}
         {report.findings.length > 0 && <ReviewFindings
-          report={report} checked={checked} language={language} onCheck={setReviewed} onOpen={openSource}
+          report={report} checked={checked} onCheck={setReviewed} onOpen={openSource}
         />}
         {report.warnings.length > 0 && <aside className="warnings"><h3>{t.warnings}</h3>{report.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</aside>}
       </section>}
@@ -365,7 +387,7 @@ export default function App() {
       <section ref={previewDialogRef} className="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-heading">
         <div className="preview-top"><strong id="preview-heading">{preview.source.filename} · {t.page} {preview.source.page}</strong><button type="button" ref={closePreviewRef} onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
         <Suspense fallback={<p role="status">{t.previewLoading}</p>}>
-          <PdfEvidencePreview file={preview.file} pageNumber={preview.source.page} evidence={preview.evidence} language={language} />
+          <PdfEvidencePreview file={preview.file} pageNumber={preview.source.page} evidence={preview.evidence} />
         </Suspense>
         {preview.evidence && <p className="preview-quote">{preview.evidence.text}</p>}
         <a href={`${preview.url}#page=${preview.source.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>

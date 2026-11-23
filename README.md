@@ -2,7 +2,7 @@
 
 **Understand what changed. Know what to do. Verify the evidence.**
 
-NoticeBridge AI is an open-source, multilingual document comparison prototype for official notices. The current development milestone compares two PDFs and produces **evidence-linked wording differences, conservative date/fee checks, and optional bilingual OCR** rather than unverifiable AI summaries.
+NoticeBridge AI is an open-source document comparison prototype for official notices. The current development milestone compares two PDFs and produces **evidence-linked wording differences, conservative date/fee checks, and optional bilingual OCR** rather than unverifiable AI summaries.
 
 > **Prototype, not an official verification service.** Document upload order is not proof of authority. Check deadlines, eligibility, and requirements against the issuing organization's official website. A report may miss changes and must not be used as the sole basis for an important decision.
 
@@ -12,16 +12,17 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 - Line-level PDF text extraction with **actual 1-based page references, source coordinates, and SHA-256 file fingerprints** from PyMuPDF. The API also reports per-document pages without extractable text and overall text-coverage status: all pages yielded text, partial, or inconclusive.
 - **Optional local OCR** for image-only pages and selected pages with garbled or incomplete embedded text (English + Hindi). Each document reports the selected pages and the pages that yielded OCR text. A limit of 12 attempts per document and a render-pixel ceiling bound work.
 - **PDF.js source preview with rotation/crop/UserUnit-aware evidence highlights**, rendered locally from the selected File without a CDN. The viewer transforms each source box through the PDF.js page viewport, verifies page dimensions and rotation, and suppresses highlights when geometry does not match. Browser regressions cover 0°, 90°, 180° and 270° pages, cropping and non-default units. Rendered bitmaps remain capped at 9 million physical pixels and 4096 pixels per dimension.
-- Three-pass matching: identical-text reconciliation, anchored value comparison, and globally ranked fuzzy proposals. Unique masked context in native text supports a matched text change. Fuzzy, duplicated-context, and OCR pairings stay possible and every associated date or fee delta stays uncertain. Same-page, label-matched conflicting calendar dates can be flagged for review; different dates under a generic label on separate pages produce a warning rather than an asserted contradiction.
+- Identical-text reconciliation, anchored value comparison, and globally ranked fuzzy proposals. Unique masked context in native text supports a matched text change. Fuzzy, duplicated-context, and OCR pairings stay possible and associated dates and fees stay uncertain. Conflicting calendar dates under the same label on one page are flagged for review.
+- A separate correction can link to its original deadline or fee when the updated quote explicitly states a prior value and a replacement, and the earlier label and value match uniquely. Each link stays in the human review queue.
 - **Structured date/fee deltas** alongside quoted evidence: canonical calendar dates and INR amounts only when syntax is unambiguous and valid. Deadline and fee matching preserves scope such as phase or paper numbers.
 - Ambiguous dates like `01/02/2026` retain an `uncertain` outcome instead of assuming a date order. Supports English and Hindi written month names and Devanagari numerals.
-- Bilingual English/Hindi **templated** explanations. With explicit opt-in, an **experimental local Ollama model** can propose related unmatched passages. Every accepted proposal must reference real extracted source IDs and match the same category; it is added **alongside—not instead of—the deterministic unmatched findings**, remains a `possible_change`, and the API checks its source evidence before accepting it. No model-generated citations are accepted. Without opt-in, no model request occurs.
+- With explicit opt-in, an **experimental local Ollama model** can propose related unmatched passages. Each proposed pair references extracted source IDs in the same category and appears as a `possible_change`. The API verifies the source references before returning a proposal.
 - Human-verification checklist next to the quoted evidence, plus source-text search and finding category, status, and review filters. Long reports show 20 findings per page. Open pages with missing extracted text from the coverage panel.
-- React/TypeScript comparison workspace with English/Hindi review controls, side-by-side evidence, and a local PDF.js viewer loaded on demand. **JSON and spreadsheet-safe CSV exports** include every finding and checklist selection regardless of the active filters. CSV carries source references, fingerprints, authority status and comparison coverage.
+- React/TypeScript comparison workspace with an English review interface, side-by-side evidence, and a local PDF.js viewer loaded on demand. **JSON and spreadsheet-safe CSV exports** include every finding and checklist selection regardless of the active filters. CSV carries source references, fingerprints, authority status and comparison coverage.
 - Worker outputs undergo independent **structural provenance checks** in the API: the SHA-256 must match uploaded bytes, document roles and filenames cannot be swapped, evidence page references must be in range, and an AI suggestion cannot become a confirmed/official claim. This is not independent verification of the actual notice's authenticity.
 - Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, Linux address-space ceilings (2 GiB), POSIX CPU/file/open-descriptor limits, no-cache responses, Pytest regression tests, and CI configuration. Worker stdout is captured in a private temporary file and read with a 64 MiB result limit. Opt-in local Ollama responses are streamed with a 64 KiB total byte cap.
-- **Browser end-to-end tests** (Playwright/Chromium) verifying upload, evidence display, local PDF.js canvas/highlights, Hindi switching, and JSON export.
-- A reproducible **14-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
+- **Browser end-to-end tests** (Playwright/Chromium) cover live uploads, the API-free showcase, source highlighting, review priorities, and report export.
+- A reproducible **18-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
 - A local-only [labeled evaluation tool](docs/labeled-evaluation.md) for evidence-pair precision/recall on operator-supplied PDFs. **Version-2 pinned-source manifests** record exact PDF SHA-256 fingerprints and declared label provenance; a non-overwriting helper preserves human labels. An explicit `--enable-ocr` option can evaluate scanned documents using local Tesseract while leaving experimental AI disabled. The report exposes OCR usage and extraction gaps. A representative, independently labeled real-world corpus does **not** yet exist.
 
 ## Local development
@@ -86,7 +87,31 @@ All evidence references point to source text extracted from the uploaded PDFs, i
 
 See [engineering verification notes](docs/verification-matrix.md), the [security threat model](docs/security-threat-model.md), and the [Windows worker isolation guide](docs/windows-worker-isolation.md) for data boundaries, remaining P0 risks, test coverage and accepted limitations.
 
-## Reproducible fictional demo
+## Try the fictional showcase
+
+Choose **Try a fictional notice** in the app to run the sample PDFs through
+the live comparison API. The sample has a deadline that moved six days
+earlier, a fee change and an ambiguous interview date.
+
+The static showcase bundles the same PDFs and an engine-generated report.
+It can run on a static host under a subdirectory and clearly labels the
+saved comparison. Build it from `frontend`:
+
+```bash
+npm ci
+npm run build:showcase
+npm run preview -- --outDir dist-showcase
+```
+
+The build output is `frontend/dist-showcase/`. Verify that the PDFs and
+report match the live worker by running
+`python backend/benchmarks/generate_showcase.py --check` from the repository
+root with the backend installed. The browser tests exercise real API runs,
+source preview and export in the API-free build.
+Passing browser CI runs also attach the tested files as the
+`noticebridge-static-showcase` build artifact.
+
+## Generate the basic fictional PDF pair
 
 Generate two attractive **fictional** sample PDFs to demonstrate the changed-deadline/changed-fee workflow without using real applicants' documents or confusing anyone with an actual official notice:
 
@@ -94,7 +119,7 @@ Generate two attractive **fictional** sample PDFs to demonstrate the changed-dea
 PYTHONPATH=backend python backend/benchmarks/generate_demo.py --output demo-output
 ```
 
-The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The 14-case synthetic benchmark and Chromium browser tests are separate checks.
+The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The 18-case synthetic benchmark and Chromium browser tests are separate checks.
 
 ## Hackathon
 

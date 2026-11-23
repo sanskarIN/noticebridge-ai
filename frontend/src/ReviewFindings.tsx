@@ -1,95 +1,56 @@
-import { useMemo, useRef, useState } from 'react';
-import type { Evidence, Finding, FindingCategory, Language, Report, ValueChange } from './comparison';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Evidence, Finding, FindingCategory, Report, ValueChange } from './comparison';
+import { reviewPriorities } from './reviewPriority';
 
 const PAGE_SIZE = 20;
 
 const copy = {
-  en: {
-    heading: 'Review findings',
-    search: 'Search source text',
-    status: 'Finding status',
-    category: 'Category',
-    review: 'Checklist status',
-    all: 'All',
-    toReview: 'Needs review',
-    reviewed: 'Marked reviewed',
-    clear: 'Clear filters',
-    empty: 'No findings match these filters.',
-    count: (start: number, end: number, filtered: number, total: number) =>
-      `Showing ${start}–${end} of ${filtered} matching findings (${total} total)`,
-    progress: (reviewed: number, total: number) => `Review checklist · ${reviewed}/${total} marked reviewed`,
-    previous: 'Previous findings',
-    next: 'Next findings',
-    original: 'Original notice',
-    revised: 'Updated notice',
-    page: 'Page',
-    open: 'Open PDF page',
-    ocr: 'Machine OCR — verify transcription',
-    semantic: 'Local AI suggestion — verify PDF source',
-    similarity: 'text similarity (not confidence)',
-    values: 'Extracted values (syntactic check only)',
-  },
-  hi: {
-    heading: 'निष्कर्षों की समीक्षा',
-    search: 'मूल पाठ खोजें',
-    status: 'निष्कर्ष की स्थिति',
-    category: 'श्रेणी',
-    review: 'समीक्षा की स्थिति',
-    all: 'सभी',
-    toReview: 'समीक्षा बाकी',
-    reviewed: 'समीक्षा पूरी चिह्नित',
-    clear: 'फ़िल्टर हटाएँ',
-    empty: 'इन फ़िल्टरों से कोई निष्कर्ष नहीं मिला।',
-    count: (start: number, end: number, filtered: number, total: number) =>
-      `${filtered} मिलते निष्कर्षों में से ${start}–${end} दिख रहे हैं (कुल ${total})`,
-    progress: (reviewed: number, total: number) => `सत्यापन सूची · ${reviewed}/${total} की समीक्षा पूरी चिह्नित`,
-    previous: 'पिछले निष्कर्ष',
-    next: 'अगले निष्कर्ष',
-    original: 'मूल सूचना',
-    revised: 'संशोधित सूचना',
-    page: 'पृष्ठ',
-    open: 'PDF पृष्ठ खोलें',
-    ocr: 'मशीन OCR — पाठ की जाँच करें',
-    semantic: 'स्थानीय AI का सुझाव — PDF स्रोत जाँचें',
-    similarity: 'पाठ समानता (सटीकता की पुष्टि नहीं)',
-    values: 'निकाले गए मान (केवल प्रारूप की जाँच)',
-  },
+  heading: 'Review findings',
+  search: 'Search source text',
+  status: 'Finding status',
+  category: 'Category',
+  review: 'Checklist status',
+  all: 'All',
+  toReview: 'Needs review',
+  reviewed: 'Marked reviewed',
+  clear: 'Clear filters',
+  empty: 'No findings match these filters.',
+  count: (start: number, end: number, filtered: number, total: number) =>
+    `Showing ${start}–${end} of ${filtered} matching findings (${total} total)`,
+  progress: (reviewed: number, total: number) => `Review checklist · ${reviewed}/${total} marked reviewed`,
+  previous: 'Previous findings',
+  next: 'Next findings',
+  original: 'Original notice',
+  revised: 'Updated notice',
+  page: 'Page',
+  open: 'Open PDF page',
+  ocr: 'Machine OCR — verify transcription',
+  semantic: 'Local AI suggestion — verify PDF source',
+  similarity: 'text similarity (not confidence)',
+  values: 'Extracted values (syntactic check only)',
 };
 
-const statuses: Record<Language, Record<Finding['status'], string>> = {
-  en: {
-    confirmed_change: 'Matched text change',
-    possible_change: 'Possible change',
-    contradiction: 'Conflicting dates',
-    missing_information: 'Unmatched statement',
-  },
-  hi: {
-    confirmed_change: 'पाठ में बदलाव',
-    possible_change: 'संभावित बदलाव',
-    contradiction: 'विरोधी तिथियाँ',
-    missing_information: 'बेमेल कथन',
-  },
+const statuses: Record<Finding['status'], string> = {
+  confirmed_change: 'Matched text change',
+  possible_change: 'Possible change',
+  contradiction: 'Conflicting dates',
+  missing_information: 'Unmatched statement',
 };
 
-const categories: Record<Language, Record<FindingCategory, string>> = {
-  en: {
-    deadline: 'Deadline', eligibility: 'Eligibility', fee: 'Fee',
-    time: 'Time', instruction: 'Instruction', general: 'General',
-  },
-  hi: {
-    deadline: 'अंतिम तिथि', eligibility: 'पात्रता', fee: 'शुल्क',
-    time: 'समय', instruction: 'निर्देश', general: 'सामान्य',
-  },
+const categories: Record<FindingCategory, string> = {
+  deadline: 'Deadline', eligibility: 'Eligibility', fee: 'Fee',
+  time: 'Time', instruction: 'Instruction', general: 'General',
 };
 
-const valueKinds: Record<Language, Record<ValueChange['kind'], string>> = {
-  en: { date: 'Date', amount: 'Amount' },
-  hi: { date: 'तिथि', amount: 'राशि' },
+const valueKinds: Record<ValueChange['kind'], string> = {
+  date: 'Date',
+  amount: 'Amount',
 };
 
-const valueOutcomes: Record<Language, Record<ValueChange['outcome'], string>> = {
-  en: { changed: 'Changed', same_value: 'Same value', uncertain: 'Uncertain' },
-  hi: { changed: 'बदला', same_value: 'समान मान', uncertain: 'अनिश्चित' },
+const valueOutcomes: Record<ValueChange['outcome'], string> = {
+  changed: 'Changed',
+  same_value: 'Same value',
+  uncertain: 'Uncertain',
 };
 
 function findingEvidence(finding: Finding): Evidence[] {
@@ -101,17 +62,34 @@ function normalizeSearch(value: string): string {
   return value.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim();
 }
 
-function EvidenceCard({ evidence, language, onOpen }: {
+function emphasizedQuote(text: string, tokens: string[]) {
+  const spans = [...new Set(tokens)].flatMap(token => {
+    const start = text.indexOf(token);
+    return token && start >= 0 && start === text.lastIndexOf(token)
+      ? [{ start, end: start + token.length }] : [];
+  }).sort((a, b) => a.start - b.start);
+  let end = 0;
+  const parts = [];
+  for (const span of spans) {
+    if (span.start < end) continue;
+    parts.push(text.slice(end, span.start), <mark key={span.start}>{text.slice(span.start, span.end)}</mark>);
+    end = span.end;
+  }
+  parts.push(text.slice(end));
+  return parts;
+}
+
+function EvidenceCard({ evidence, changedTokens, onOpen }: {
   evidence: Evidence;
-  language: Language;
+  changedTokens: string[];
   onOpen: (evidence: Evidence) => void;
 }) {
-  const t = copy[language];
+  const t = copy;
   return <div className="evidence-card">
     <div className="evidence-label">{t[evidence.document_id]}</div>
     <div className="page-ref">{evidence.filename} · {t.page} {evidence.page}</div>
     {evidence.extraction_method === 'ocr' && <p className="ocr-source">{t.ocr}</p>}
-    <blockquote>{evidence.text}</blockquote>
+    <blockquote>{emphasizedQuote(evidence.text, changedTokens)}</blockquote>
     <button type="button" className="source-button" onClick={() => onOpen(evidence)}>{t.open} ↗</button>
   </div>;
 }
@@ -125,20 +103,25 @@ type Filters = {
 
 const DEFAULT_FILTERS: Filters = { search: '', status: 'all', category: 'all', review: 'all' };
 
-export default function ReviewFindings({ report, checked, language, onCheck, onOpen }: {
+export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
   report: Report;
   checked: ReadonlySet<string>;
-  language: Language;
   onCheck: (id: string, selected: boolean) => void;
   onOpen: (evidence: Evidence) => void;
 }) {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
+  const [focusFinding, setFocusFinding] = useState<string | null>(null);
   const countRef = useRef<HTMLParagraphElement>(null);
-  const t = copy[language];
+  const t = copy;
 
   const checklist = useMemo(() =>
     new Map(report.checklist.map(item => [item.finding_id, item])), [report.checklist]
+  );
+  const reviewable = useMemo(() => new Set(checklist.keys()), [checklist]);
+  const priorities = useMemo(
+    () => reviewPriorities(report.findings, reviewable, checked),
+    [report.findings, reviewable, checked],
   );
   const indexed = useMemo(() => report.findings.map(finding => {
     const evidence = findingEvidence(finding);
@@ -163,6 +146,20 @@ export default function ReviewFindings({ report, checked, language, onCheck, onO
     return filters[filter] !== DEFAULT_FILTERS[filter];
   });
 
+  useEffect(() => {
+    if (focusFinding === null) return;
+    document.getElementById(`finding-${focusFinding}`)?.focus();
+    setFocusFinding(null);
+  }, [focusFinding]);
+
+  function jumpToFinding(id: string) {
+    const index = indexed.findIndex(entry => entry.finding.id === id);
+    if (index < 0) return;
+    setFilters(DEFAULT_FILTERS);
+    setPage(Math.floor(index / PAGE_SIZE) + 1);
+    setFocusFinding(id);
+  }
+
   function changeFilters(updates: Partial<Filters>) {
     setFilters(previous => ({ ...previous, ...updates }));
     setPage(1);
@@ -183,6 +180,20 @@ export default function ReviewFindings({ report, checked, language, onCheck, onO
   }
 
   return <section className="review-findings" aria-labelledby="review-heading">
+    {!!priorities.length && <section className="review-priorities" aria-labelledby="review-first-heading">
+      <div className="priority-intro">
+        <h3 id="review-first-heading">Review first</h3>
+        <p>Check urgent or uncertain changes against the source before acting.</p>
+      </div>
+      <ul>{priorities.map(item =>
+        <li key={item.id}>
+          <div><strong>{item.title}</strong><p>{item.detail}</p></div>
+          <button type="button" className="review-button"
+            aria-label={`Inspect finding: ${item.title}`}
+            onClick={() => jumpToFinding(item.id)}>Inspect finding</button>
+        </li>
+      )}</ul>
+    </section>}
     <h3 id="review-heading">{t.heading}</h3>
     {checklist.size > 0 && <p className="review-progress" role="status">
       {t.progress(checked.size, checklist.size)}
@@ -193,13 +204,13 @@ export default function ReviewFindings({ report, checked, language, onCheck, onO
       <label><span>{t.status}</span><select value={filters.status}
         onChange={event => changeFilters({ status: event.target.value as Filters['status'] })}>
         <option value="all">{t.all}</option>
-        {Object.entries(statuses[language]).map(([key, label]) =>
+        {Object.entries(statuses).map(([key, label]) =>
           <option key={key} value={key}>{label}</option>)}
       </select></label>
       <label><span>{t.category}</span><select value={filters.category}
         onChange={event => changeFilters({ category: event.target.value as Filters['category'] })}>
         <option value="all">{t.all}</option>
-        {Object.entries(categories[language]).map(([key, label]) =>
+        {Object.entries(categories).map(([key, label]) =>
           <option key={key} value={key}>{label}</option>)}
       </select></label>
       {checklist.size > 0 && <label><span>{t.review}</span><select value={filters.review}
@@ -218,22 +229,25 @@ export default function ReviewFindings({ report, checked, language, onCheck, onO
     </p>
     <div className="findings-list">{shown.map(({ finding, evidence }) => {
       const task = checklist.get(finding.id);
-      return <article className="finding" key={finding.id}>
+      const changed = finding.field_changes.filter(delta => delta.outcome === 'changed');
+      return <article className="finding" key={finding.id} id={`finding-${finding.id}`} tabIndex={-1}>
         <div className="finding-header">
           <div>
-            <span className={`status ${finding.status}`}>{statuses[language][finding.status]}</span>
-            <span className="category">{categories[language][finding.category]}</span>
+            <span className={`status ${finding.status}`}>{statuses[finding.status]}</span>
+            <span className="category">{categories[finding.category]}</span>
           </div>
           {finding.original && finding.revised && <span className="match-score">
             {finding.match_method === 'semantic_proposal' ? t.semantic :
-              `${Math.round(finding.similarity * 100)}% ${t.similarity}`}
+              finding.match_method === 'explicit_amendment' ? 'Explicit amendment wording' :
+                `${Math.round(finding.similarity * 100)}% ${t.similarity}`}
           </span>}
         </div>
-        <p className="finding-summary">{language === 'hi' ? finding.summary_hi : finding.summary_en}</p>
+        <p className="finding-summary">{finding.summary_en}</p>
         {finding.field_changes.length > 0 && <div className="value-changes">
           <b>{t.values}</b>
           {finding.field_changes.map((delta, i) => <p key={i}>
-            <span className="value-outcome">{valueKinds[language][delta.kind]}: {valueOutcomes[language][delta.outcome]}</span>
+            <span className="value-outcome">{valueKinds[delta.kind]}: {finding.match_method === 'explicit_amendment'
+              ? 'Stated in amendment' : valueOutcomes[delta.outcome]}</span>
             {' '}{delta.original.raw} → {delta.revised.raw}
             {delta.outcome !== 'uncertain' && ` (${delta.original.canonical} → ${delta.revised.canonical})`}
           </p>)}
@@ -241,13 +255,16 @@ export default function ReviewFindings({ report, checked, language, onCheck, onO
         <div className={`evidence-grid${evidence.length === 1 ? ' single-evidence' : ''}`}>
           {evidence.map((item, i) => <EvidenceCard
             key={`${item.document_id}-${item.page}-${i}`}
-            evidence={item} language={language} onOpen={onOpen}
+            evidence={item} onOpen={onOpen}
+            changedTokens={item === finding.original
+              ? changed.map(delta => delta.original.raw)
+              : item === finding.revised ? changed.map(delta => delta.revised.raw) : []}
           />)}
         </div>
         {task && <label className="checklist-item">
           <input type="checkbox" checked={checked.has(finding.id)}
             onChange={event => changeReview(finding.id, event.target.checked)} />
-          <span>{language === 'hi' ? task.description_hi : task.description_en}</span>
+          <span>{task.description_en}</span>
         </label>}
       </article>;
     })}</div>

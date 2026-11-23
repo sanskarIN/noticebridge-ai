@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
+    "build:showcase": "tsc --noEmit && vite build --mode showcase --outDir dist-showcase",
     "preview": "vite preview",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:showcase": "playwright test --config playwright.showcase.config.ts"
   },
   "dependencies": {
     "react": "^19.0.0",

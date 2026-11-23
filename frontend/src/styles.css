@@ -110,6 +110,10 @@
   outline: 2px solid #9df2d5;
   outline-offset: 2px;
 }
+
+.preview-backdrop { grid-template-columns: minmax(0, 1fr); }
+.preview-top button { flex-shrink: 0; }
+.pdf-stage:focus-visible { outline: 2px solid #a1f1da; outline-offset: -3px; }
 .evidence-grid.single-evidence { grid-template-columns: 1fr; }
 .finding .checklist-item { padding: 0.85rem 1.3rem; cursor: pointer; }
 .finding-header > div { min-width: 0; flex-wrap: wrap; }
@@ -133,3 +137,42 @@
   border: 1px solid #53758b;
   border-radius: 0.5rem;
 }
+
+.repo-link { color: #b6cbe0; font-size: 0.875rem; }
+.hero { padding-block: clamp(3rem, 8vw, 6rem); }
+.hero h1 { max-width: 870px; margin-top: 0; }
+.showcase-actions { display: flex; flex-wrap: wrap; gap: 0.9rem 1.4rem; align-items: center; }
+.showcase-actions a { color: #b1ecd9; font-size: 0.95rem; text-underline-offset: 0.25rem; }
+.showcase-intro { color: #a9bfd1; font-size: 0.875rem; margin-block: 1rem 0; }
+.showcase-provenance {
+  background: #183640;
+  border: 1px solid #47716f;
+  color: #b5f1de;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.55rem;
+  font-weight: 600;
+}
+.review-priorities {
+  margin-block: 1.25rem;
+  border: 1px solid #3f6a71;
+  border-radius: 0.75rem;
+  background: #0e2737;
+}
+.priority-intro { padding: 1rem 1rem 0.8rem; }
+.priority-intro h3, .review-priorities p { margin: 0; }
+.priority-intro p { margin-top: 0.45rem; }
+.review-priorities p { color: #bacfe0; font-size: 0.875rem; }
+.review-priorities ul { list-style: none; margin: 0; padding: 0; }
+.review-priorities li {
+  display: flex;
+  gap: 0.75rem 1.25rem;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 1rem;
+  border-top: 1px solid #355560;
+}
+.review-priorities li p { margin-top: 0.3rem; overflow-wrap: anywhere; }
+.evidence-card mark { color: #1c2230; background: #f3d58d; border-radius: 0.2em; }
+.finding:focus, #results-heading:focus { outline: 2px solid #9df2d5; outline-offset: 4px; }
+#upload-notices, #results-heading, .finding { scroll-margin-block-start: 1rem; }

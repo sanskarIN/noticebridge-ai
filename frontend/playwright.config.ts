@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: '**/showcase.offline.spec.ts',
   timeout: 45_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,

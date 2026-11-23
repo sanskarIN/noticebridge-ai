@@ -31,14 +31,12 @@ test('shows evidence and locally renders a highlighted PDF.js page', async ({ pa
   await expect(page.locator('.preview-dialog')).toHaveCount(0);
 });
 
-test('exports source-bound evidence JSON and offers Hindi explanations', async ({ page }) => {
+test('exports source-bound evidence JSON from a live upload', async ({ page }) => {
   await addSources(page);
   await page.getByRole('button', { name: /Compare documents/ }).click();
   await expect(page.locator('.finding')).toHaveCount(1);
-  await page.getByRole('button', { name: 'हिंदी' }).click();
-  await expect(page.getByText(/संबंधित स्रोत अंशों/)).toBeVisible();
   const promise = page.waitForEvent('download');
-  await page.getByRole('button', { name: /प्रमाण रिपोर्ट डाउनलोड करें/ }).click();
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
   const download = await promise;
   const payload = JSON.parse(await readFile(await download.path(), 'utf8'));
   expect(payload.documents).toHaveLength(2);
@@ -64,9 +62,9 @@ test('keeps experimental local AI opt-in and submits only on explicit choice', a
 });
 
 
-function widePagePdf(day: number): Buffer {
+function widePagePdf(day: number, baseline = 3900): Buffer {
   // Tiny fictional native-text PDF with a deliberately large page.
-  const stream = `BT /F1 24 Tf 80 3900 Td (Deadline: ${day} December 2026) Tj ET\n`;
+  const stream = `BT /F1 24 Tf 80 ${baseline} Td (Deadline: ${day} December 2026) Tj ET\n`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -87,7 +85,7 @@ function widePagePdf(day: number): Buffer {
   return Buffer.from(pdf);
 }
 
-test('bounds physical PDF canvas pixels on a high-resolution screen', async ({ browser }) => {
+test('reveals evidence low on a PDF page and bounds the high-resolution canvas', async ({ browser }) => {
   const context = await browser.newContext({
     deviceScaleFactor: 2,
     baseURL: 'http://127.0.0.1:5173',
@@ -96,17 +94,19 @@ test('bounds physical PDF canvas pixels on a high-resolution screen', async ({ b
     const page = await context.newPage();
     await page.goto('/');
     await page.locator('#original').setInputFiles({
-      name: 'wide-original.pdf', mimeType: 'application/pdf', buffer: widePagePdf(13),
+      name: 'wide-original.pdf', mimeType: 'application/pdf', buffer: widePagePdf(13, 140),
     });
     await page.locator('#revised').setInputFiles({
-      name: 'wide-revised.pdf', mimeType: 'application/pdf', buffer: widePagePdf(14),
+      name: 'wide-revised.pdf', mimeType: 'application/pdf', buffer: widePagePdf(14, 140),
     });
     await page.getByRole('button', { name: /Compare documents/ }).click();
     await expect(page.locator('.finding')).toHaveCount(1);
     await page.getByRole('button', { name: /Open PDF page/ }).first().click();
     const canvas = page.locator('.preview-dialog canvas');
     await expect(canvas).toBeVisible();
-    await expect(page.locator('.evidence-highlight')).toBeVisible();
+    await expect(page.locator('.evidence-highlight')).toBeInViewport({ ratio: 1 });
+    const viewer = page.getByRole('region', { name: 'PDF page viewer' });
+    await expect.poll(() => viewer.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
     const dimensions = await canvas.evaluate(el => ({
       width: (el as HTMLCanvasElement).width,
       height: (el as HTMLCanvasElement).height,
@@ -133,6 +133,14 @@ test('source preview traps keyboard focus, closes on Escape and restores focus',
   await expect(dialog.getByRole('link', { name: /Open PDF in new tab/ })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(close).toBeFocused();
+  const viewer = dialog.getByRole('region', { name: 'PDF page viewer' });
+  await expect(viewer.locator('.evidence-highlight')).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(viewer).toBeFocused();
+  await page.keyboard.press('PageDown');
+  await expect.poll(() => viewer.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('link', { name: /Open PDF in new tab/ })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(launch).toBeFocused();
@@ -158,8 +166,6 @@ test('mobile comparison stays within viewport and discloses temporary storage', 
     await page.getByRole('button', { name: /Open PDF page/ }).first().click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'हिंदी' }).click();
-    await expect(page.getByText(/अस्थायी सिस्टम स्टोरेज/)).toBeVisible();
   } finally {
     await context.close();
   }
@@ -284,22 +290,16 @@ test('dark theme displays readable text extraction and local AI status panels', 
 });
 
 
-test('Hindi review localizes category, status, value, and source action labels', async ({ page }) => {
+test('labels the exact changed date within both full source quotes', async ({ page }) => {
   await addSources(page);
-  const hindi = page.getByRole('button', { name: 'हिंदी' });
-  await hindi.click();
-  await expect(hindi).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('button', { name: 'EN' })).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.getByRole('heading', { name: 'दस्तावेज़ तुलना' })).toBeVisible();
-  await expect(page.getByText('↻ बदलें')).toHaveCount(2);
-  await page.getByRole('button', { name: /दस्तावेज़ों की तुलना करें/ }).click();
-  await expect(page.locator('.finding')).toHaveCount(1);
-  await expect(page.locator('.finding .status')).toHaveText('पाठ में बदलाव');
-  await expect(page.locator('.finding .category')).toHaveText('अंतिम तिथि');
-  await expect(page.locator('.value-outcome')).toContainText('तिथि: बदला');
-  await expect(page.locator('.checklist-item')).toContainText('अंतिम तिथि संबंधी कथन');
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const finding = page.locator('.finding');
+  await expect(finding.locator('.category')).toHaveText('Deadline');
+  await expect(finding.locator('.value-outcome')).toHaveText('Date: Changed');
+  await expect(finding.locator('blockquote').first()).toHaveText('Application deadline: 13 December 2026');
+  await expect(finding.locator('mark')).toHaveText(['13 December 2026', '14 December 2026']);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
-
 
 test('exports an Excel-compatible evidence and review CSV without asserting official authority', async ({ page }) => {
   await addSources(page);
@@ -343,7 +343,7 @@ test('CSV export neutralizes formulas from untrusted notice quotations and summa
   expect(csv).not.toContain("\"@SUM(");
 });
 
-test('Hindi review CSV is downloadable without a mobile horizontal overflow', async ({ browser }) => {
+test('review CSV is downloadable without a mobile horizontal overflow', async ({ browser }) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     baseURL: 'http://127.0.0.1:5173',
@@ -351,12 +351,11 @@ test('Hindi review CSV is downloadable without a mobile horizontal overflow', as
   try {
     const page = await context.newPage();
     await addSources(page);
-    await page.getByRole('button', { name: 'हिंदी' }).click();
-    await page.getByRole('button', { name: /दस्तावेज़ों की तुलना करें/ }).click();
+    await page.getByRole('button', { name: /Compare documents/ }).click();
     const downloadReady = page.waitForEvent('download');
-    await page.getByRole('button', { name: /समीक्षा CSV डाउनलोड करें/ }).click();
+    await page.getByRole('button', { name: /Export review CSV/ }).click();
     const csv = await readFile(await (await downloadReady).path(), 'utf8');
-    expect(csv).toContain('अंतिम तिथि');
+    expect(csv).toContain('Application deadline: 14 December 2026');
     const overflow = await page.evaluate(() =>
       document.documentElement.scrollWidth - document.documentElement.clientWidth
     );
@@ -462,17 +461,15 @@ test('pages and filters a real comparison while exporting all findings and revie
   await expect(cards.getByRole('checkbox')).toBeChecked();
   await expect(page.locator('.review-progress')).toContainText('1/23 marked reviewed');
 
-  await page.getByRole('button', { name: 'हिंदी' }).click();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'hi');
-  await expect(page.getByLabel('मूल पाठ खोजें')).toHaveValue('  PAPER 1   FEE ');
+  await expect(page.getByLabel('Search source text')).toHaveValue('  PAPER 1   FEE ');
   await expect(cards.getByRole('checkbox')).toBeChecked();
   const downloadReady = page.waitForEvent('download');
-  await page.getByRole('button', { name: /प्रमाण रिपोर्ट डाउनलोड करें/ }).click();
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
   const payload = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
   expect(payload.findings).toHaveLength(23);
   expect(payload.review).toEqual([payload.findings.find((finding: { category: string }) =>
     finding.category === 'fee').id]);
-  await page.getByRole('button', { name: 'फ़िल्टर हटाएँ' }).click();
+  await page.getByRole('button', { name: 'Clear filters' }).click();
   await expect(cards).toHaveCount(20);
 });
 
@@ -637,8 +634,72 @@ test('page-specific OCR reports a coverage gap when a selected page exceeds the 
   await expect(page.getByText(/page would exceed OCR pixel limit/)).toBeVisible();
   await expect(page.locator('.finding')).toHaveCount(1);
   await expect(page.locator('.finding')).not.toContainText('Deadline: 13 December 2026');
-  await page.getByRole('button', { name: 'हिंदी' }).click();
-  await expect(coverage).toContainText('OCR के लिए चुने गए पृष्ठ · 1');
-  await page.getByLabel('मूल सूचना के OCR पृष्ठ').fill('');
+  await page.getByLabel('Original notice OCR pages').fill('');
   await expect(page.locator('.results')).toHaveCount(0);
+});
+
+test('runs the fictional demo through the live API and prioritizes the earlier deadline', async ({ page }) => {
+  await page.goto('/');
+  const responseReady = page.waitForResponse(response =>
+    response.url().endsWith('/api/compare') && response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Try a fictional notice' }).click();
+  const response = await responseReady;
+  expect(response.ok()).toBe(true);
+  const data = await response.json();
+  expect(data.findings).toHaveLength(3);
+  await expect(page.getByText('Live comparison · Fictional notices')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Findings', exact: true })).toBeFocused();
+
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText([
+    'Deadline moved 6 days earlier', 'Deadline needs verification', 'Fee changed',
+  ]);
+  await page.getByLabel('Category').selectOption('fee');
+  await expect(page.locator('.finding')).toHaveCount(1);
+  await first.getByRole('button', { name: /Inspect finding: Deadline moved/ }).click();
+  const deadline = page.locator('#finding-f1');
+  await expect(deadline).toBeFocused();
+  await expect(page.getByLabel('Category')).toHaveValue('all');
+  await expect(deadline.locator('mark')).toHaveText(['19 December 2026', '13 December 2026']);
+  await deadline.getByRole('button', { name: /Open PDF page/ }).last().click();
+  await expect(page.locator('.evidence-highlight')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await deadline.getByRole('checkbox').check();
+  await expect(first.getByText('Deadline moved 6 days earlier')).toHaveCount(0);
+  const ambiguous = page.locator('#finding-f3');
+  await expect(ambiguous.locator('.value-outcome')).toHaveText('Date: Uncertain');
+  await expect(ambiguous.locator('mark')).toHaveCount(0);
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const result = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(result.comparison_source).toBe('live_demo');
+  expect(result.review).toEqual(['f1']);
+});
+
+test('links a separate amendment to the quoted original without accepting its authority', async ({ page }) => {
+  await compareReviewFixture(
+    page, [['Application deadline: 19 December 2026', 'Application fee: Rs. 500']],
+    [['Application deadline revised from December 19, 2026 to Dec. 13, 2026',
+      'Application fee was reduced from Rs. 500 to Rs. 350']],
+  );
+  const findings = page.locator('.finding');
+  await expect(findings).toHaveCount(2);
+  const finding = findings.first();
+  await expect(finding.locator('.match-score')).toHaveText('Explicit amendment wording');
+  await expect(finding.locator('.status')).toHaveText('Possible change');
+  await expect(finding.locator('.value-outcome')).toHaveText('Date: Stated in amendment');
+  await expect(finding.locator('blockquote')).toHaveText([
+    'Application deadline: 19 December 2026',
+    'Application deadline revised from December 19, 2026 to Dec. 13, 2026',
+  ]);
+  await expect(page.getByRole('button', {
+    name: 'Inspect finding: Deadline amendment needs verification',
+  })).toBeVisible();
+  await page.getByRole('button', { name: 'Inspect finding: Fee amendment needs verification' }).click();
+  await expect(findings.last()).toBeFocused();
+  await expect(findings.last().locator('.value-outcome')).toHaveText('Amount: Stated in amendment');
+  await finding.getByRole('button', { name: /Open PDF page/ }).last().click();
+  await expect(page.locator('.evidence-highlight')).toBeVisible();
 });
