@@ -63,3 +63,58 @@ test('keeps experimental local AI opt-in and submits only on explicit choice', a
   await expect(page.locator('.finding')).toHaveCount(1);
 });
 
+
+function widePagePdf(day: number): Buffer {
+  // Tiny fictional native-text PDF with a deliberately large page.
+  const stream = `BT /F1 24 Tf 80 3900 Td (Deadline: ${day} December 2026) Tj ET\n`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 4000 4000] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}endstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [0];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(pdf));
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xref = Buffer.byteLength(pdf);
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets.slice(1)) pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf);
+}
+
+test('bounds physical PDF canvas pixels on a high-resolution screen', async ({ browser }) => {
+  const context = await browser.newContext({
+    deviceScaleFactor: 2,
+    baseURL: 'http://127.0.0.1:5173',
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto('/');
+    await page.locator('#original').setInputFiles({
+      name: 'wide-original.pdf', mimeType: 'application/pdf', buffer: widePagePdf(13),
+    });
+    await page.locator('#revised').setInputFiles({
+      name: 'wide-revised.pdf', mimeType: 'application/pdf', buffer: widePagePdf(14),
+    });
+    await page.getByRole('button', { name: /Compare documents/ }).click();
+    await expect(page.locator('.finding')).toHaveCount(1);
+    await page.getByRole('button', { name: /Open PDF page/ }).first().click();
+    const canvas = page.locator('.preview-dialog canvas');
+    await expect(canvas).toBeVisible();
+    await expect(page.locator('.evidence-highlight')).toBeVisible();
+    const dimensions = await canvas.evaluate(el => ({
+      width: (el as HTMLCanvasElement).width,
+      height: (el as HTMLCanvasElement).height,
+    }));
+    expect(dimensions.width * dimensions.height).toBeLessThanOrEqual(9_000_000);
+    expect(Math.max(dimensions.width, dimensions.height)).toBeLessThanOrEqual(4096);
+  } finally {
+    await context.close();
+  }
+});
+
