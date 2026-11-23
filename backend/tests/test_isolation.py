@@ -241,3 +241,67 @@ def test_worker_stdout_capture_is_not_a_memory_pipe(monkeypatch, pdf_bytes):
     assert report.documents[0].page_count == 1
     assert captured == [True]
 
+
+def test_containment_failure_never_sends_untrusted_pdf_bytes(monkeypatch, pdf_bytes):
+    """Fail closed if the Windows worker cannot be assigned to a job."""
+    import noticebridge.isolation as module
+
+    class MockProcess:
+        def __init__(self):
+            self.communicate_called = False
+
+        def communicate(self, **kwargs):
+            self.communicate_called = True
+            raise AssertionError("uncontained worker must not receive PDF bytes")
+
+    process = MockProcess()
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: process)
+
+    def unavailable(_):
+        raise ProcessingFailed("Windows worker process containment unavailable")
+
+    monkeypatch.setattr(module, "_attach_windows_job", unavailable)
+    pdf = pdf_bytes([["One"]])
+    with pytest.raises(ProcessingFailed, match="containment unavailable"):
+        _run(pdf, pdf)
+    assert not process.communicate_called
+
+
+def test_timeout_terminates_job_and_closes_handle(monkeypatch, pdf_bytes):
+    import noticebridge.isolation as module
+
+    class MockJob:
+        terminated = False
+        closed = False
+
+        def terminate(self):
+            self.terminated = True
+            return True
+
+        def close(self):
+            self.closed = True
+
+    class HungProcess:
+        def __init__(self):
+            self.calls = 0
+
+        def communicate(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise subprocess.TimeoutExpired("noticebridge.worker", 1)
+            return None, None
+
+    job = MockJob()
+    process = HungProcess()
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: process)
+    monkeypatch.setattr(module, "_attach_windows_job", lambda _: job)
+    monkeypatch.setattr(
+        module, "_kill_worker",
+        lambda _: (_ for _ in ()).throw(AssertionError("job termination expected")),
+    )
+    pdf = pdf_bytes([["One"]])
+    with pytest.raises(ProcessingTimedOut):
+        _run(pdf, pdf)
+    assert job.terminated and job.closed
+    assert process.calls == 2
+

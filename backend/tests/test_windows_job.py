@@ -10,8 +10,8 @@ from noticebridge.windows_job import (
     ACTIVE_PROCESS_LIMIT,
     JOB_MEMORY_LIMIT,
     KILL_ON_CLOSE,
-    PROCESS_MEMORY_LIMIT,
     MAX_JOB_PROCESSES,
+    PROCESS_MEMORY_LIMIT,
     WORKER_MEMORY_LIMIT,
     WindowsWorkerJob,
 )
