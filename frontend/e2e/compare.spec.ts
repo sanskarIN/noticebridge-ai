@@ -300,3 +300,69 @@ test('Hindi review localizes category, status, value, and source action labels',
   await expect(page.locator('.checklist-item')).toContainText('अंतिम तिथि संबंधी कथन');
 });
 
+
+test('exports an Excel-compatible evidence and review CSV without asserting official authority', async ({ page }) => {
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(page.locator('.finding')).toHaveCount(1);
+  await page.locator('.checklist-item input').first().check();
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export review CSV/ }).click();
+  const download = await downloadReady;
+  expect(download.suggestedFilename()).toBe('noticebridge-review.csv');
+  const csv = await readFile(await download.path(), 'utf8');
+  expect(csv.startsWith('\uFEFF')).toBe(true);
+  const rows = csv.slice(1).trim().split('\r\n');
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toContain('"original_sha256"');
+  expect(rows[0]).toContain('"supporting_evidence_json"');
+  expect(rows[1]).toContain('"yes","yes","no"');
+  expect(rows[1]).toMatch(/[0-9a-f]{64}/);
+  expect(rows[1]).toContain('December 2026');
+});
+
+test('CSV export neutralizes formulas from untrusted notice quotations and summaries', async ({ page }) => {
+  await page.route('**/api/compare', async (route) => {
+    const response = await route.fetch();
+    const report = await response.json();
+    report.findings[0].original.text = '=HYPERLINK("https://example.invalid")';
+    report.findings[0].summary_en = '@SUM(1)';
+    report.findings[0].summary_hi = '\t=2+2';
+    await route.fulfill({ response, json: report });
+  });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await expect(page.locator('.finding')).toHaveCount(1);
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export review CSV/ }).click();
+  const csv = await readFile(await (await downloadReady).path(), 'utf8');
+  expect(csv).toContain("\"'=HYPERLINK(\"\"https://example.invalid\"\")\"");
+  expect(csv).toContain("\"'@SUM(1)\"");
+  expect(csv).toContain("\"'\t=2+2\"");
+  expect(csv).not.toContain("\"=HYPERLINK(");
+  expect(csv).not.toContain("\"@SUM(");
+});
+
+test('Hindi review CSV is downloadable without a mobile horizontal overflow', async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    baseURL: 'http://127.0.0.1:5173',
+  });
+  try {
+    const page = await context.newPage();
+    await addSources(page);
+    await page.getByRole('button', { name: 'हिंदी' }).click();
+    await page.getByRole('button', { name: /दस्तावेज़ों की तुलना करें/ }).click();
+    const downloadReady = page.waitForEvent('download');
+    await page.getByRole('button', { name: /समीक्षा CSV डाउनलोड करें/ }).click();
+    const csv = await readFile(await (await downloadReady).path(), 'utf8');
+    expect(csv).toContain('अंतिम तिथि');
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await context.close();
+  }
+});
+
