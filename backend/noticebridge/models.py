@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 FindingStatus = Literal[
     "confirmed_change", "possible_change", "contradiction", "missing_information"
 ]
+ValueKind = Literal["date", "amount", "time"]
 
 
 class Evidence(BaseModel):
@@ -41,14 +42,14 @@ class DocumentSummary(BaseModel):
 
 
 class ParsedValue(BaseModel):
-    kind: Literal["date", "amount"]
+    kind: ValueKind
     raw: str
     canonical: str | None = None
     confidence: Literal["parsed", "ambiguous", "invalid"]
 
 
 class ValueChange(BaseModel):
-    kind: Literal["date", "amount"]
+    kind: ValueKind
     original: ParsedValue
     revised: ParsedValue
     outcome: Literal["changed", "same_value", "uncertain"]

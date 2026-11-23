@@ -13,7 +13,7 @@ export type Evidence = {
 };
 
 type ParsedValue = {
-  kind: 'date' | 'amount';
+  kind: 'date' | 'amount' | 'time';
   raw: string;
   canonical: string | null;
   confidence: 'parsed' | 'ambiguous' | 'invalid';

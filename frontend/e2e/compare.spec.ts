@@ -678,6 +678,57 @@ test('runs the fictional demo through the live API and prioritizes the earlier d
   expect(result.review).toEqual(['f1']);
 });
 
+test('prioritizes same-date cutoff changes and displays their quoted times', async ({ page }) => {
+  await compareReviewFixture(page, [[
+    'Application deadline: 13 December 2026 at 5:00 PM IST',
+    'Reporting time: 08:00 IST',
+    'Interview time: 9:30',
+  ]], [[
+    'Application deadline: 13 December 2026 at 14:00 IST',
+    'Reporting time: 07:30 IST',
+    'Interview time: 10:30 AM',
+  ]]);
+
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText([
+    'Deadline time changed', 'Scheduled time changed', 'Scheduled time needs verification',
+  ]);
+  await first.getByRole('button', { name: 'Inspect finding: Deadline time changed' }).click();
+  const deadline = page.locator('#finding-f1');
+  await expect(deadline).toBeFocused();
+  await expect(deadline.locator('.value-outcome')).toHaveText(['Date: Same value', 'Time: Changed']);
+  await expect(deadline.locator('mark')).toHaveText(['5:00 PM', '14:00']);
+  await deadline.getByRole('button', { name: /Open PDF page/ }).last().click();
+  await expect(page.locator('.evidence-highlight')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  const interview = page.locator('#finding-f3');
+  await expect(interview.locator('.value-outcome')).toHaveText('Time: Uncertain');
+  await expect(interview.locator('mark')).toHaveCount(0);
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(report.findings[0].field_changes[1]).toMatchObject({
+    kind: 'time', outcome: 'changed',
+    original: { raw: '5:00 PM', canonical: '17:00' },
+    revised: { raw: '14:00', canonical: '14:00' },
+  });
+  expect(report.findings[0].authority_verified).toBe(false);
+});
+
+test('shows both cutoff values when the revision crosses midnight', async ({ page }) => {
+  await compareReviewFixture(
+    page, [['Application deadline: 13 December 2026 at 23:59 IST']],
+    [['Application deadline: 14 December 2026 at 00:01 IST']],
+  );
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText('Deadline date and time changed');
+  await expect(first).toContainText('13 December 2026 at 23:59 → 14 December 2026 at 00:01');
+  await expect(page.locator('.finding mark')).toHaveText([
+    '13 December 2026', '23:59', '14 December 2026', '00:01',
+  ]);
+});
+
 test('links a separate amendment to the quoted original without accepting its authority', async ({ page }) => {
   await compareReviewFixture(
     page, [['Application deadline: 19 December 2026', 'Application fee: Rs. 500']],

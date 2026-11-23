@@ -12,7 +12,14 @@ from .amendments import (
     revised_amendment,
 )
 from .extract import ExtractedDocument
-from .facts import AMOUNT_TOKEN, DATE_TOKEN, WORD_CHAR, date_tokens, field_changes
+from .facts import (
+    AMOUNT_TOKEN,
+    DATE_TOKEN,
+    WORD_CHAR,
+    date_tokens,
+    field_changes,
+    single_clock_token,
+)
 from .matching import StatementKey, fuzzy_proposals
 from .messages import SUMMARY_MESSAGES, review_messages
 from .models import ChecklistItem, ComparisonReport, Evidence, Finding, ValueChange
@@ -34,7 +41,7 @@ CATEGORIES = (
         ("eligib", "ineligib", "qualification", "required degree", "पात्रता", "योग्यता"),
     ),
     ("fee", ("application fee", "fees", "fee", "payment", "शुल्क", "फीस")),
-    ("time", ("exam time", "reporting time", "time of", "समय")),
+    ("time", ("exam time", "reporting time", "interview time", "time of", "समय")),
     ("instruction", ("must", "submit", "required", "instruction", "अनिवार्य", "जमा करें")),
 )
 
@@ -71,14 +78,18 @@ def category_for(text: str) -> str:
     return "general"
 
 
-def anchor(text: str, category: str) -> str:
-    """Mask the expected value while keeping numeric scope in deadlines and fees."""
+def anchor(text: str, category: str, *, mask_clock: bool = True) -> str:
+    """Mask expected values while keeping dates of scheduled events and other scope."""
+    if mask_clock and category in ("deadline", "time"):
+        clock = single_clock_token(text)
+        if clock is not None:
+            text = text[:clock.start()] + " [time] " + text[clock.end():]
     value = normalize(text)
     if category == "deadline":
         value = DATE_TOKEN.sub(" [date] ", value)
     elif category == "fee":
         value = AMOUNT_TOKEN.sub(" [amount] ", value)
-    else:
+    elif category != "time":
         value = DATE_TOKEN.sub(" [date] ", value)
         value = AMOUNT_TOKEN.sub(" [amount] ", value)
         value = NUMBER.sub(" [number] ", value)
@@ -268,7 +279,7 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
     for document, keys in ((old, old_keys), (new, new_keys)):
         grouped: dict[str, list[tuple[str, Evidence]]] = defaultdict(list)
         cross_page_warnings = 0
-        for line, (category, context) in zip(document.lines, keys, strict=True):
+        for line, (category, _) in zip(document.lines, keys, strict=True):
             if (
                 category != "deadline"
                 or line.evidence.extraction_method != "native"
@@ -276,6 +287,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                 continue
             dates = date_tokens(line.text)
             if len(dates) == 1 and dates[0].canonical is not None:
+                # Keep clock labels distinct for the existing calendar-date conflict rule.
+                context = anchor(line.text, "deadline", mask_clock=False)
                 grouped[context].append((dates[0].canonical, line.evidence))
         for records in grouped.values():
             if len({value for value, _ in records}) < 2:

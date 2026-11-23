@@ -132,3 +132,58 @@ def test_currency_parsing_preserves_quotes_and_handles_sentence_endings(text, to
 ])
 def test_currency_parsing_does_not_return_a_partial_number(text):
     assert amount_tokens(text) == []
+
+
+@pytest.mark.parametrize(("clock", "expected"), [
+    ("17:00", "17:00"),
+    ("5:00 p.m.", "17:00"),
+    ("5PM", "17:00"),
+    ("12 a.m.", "00:00"),
+    ("12:00 PM", "12:00"),
+    ("07:30", "07:30"),
+    ("०७：३०", "07:30"),
+])
+def test_clock_values_preserve_the_printed_token(clock, expected):
+    (change,) = field_changes(
+        f"Reporting time: {clock}", "Reporting time: 14:00", category="time",
+    )
+    assert change.kind == "time"
+    assert change.original.raw == clock
+    assert change.original.canonical == expected
+    assert change.revised.canonical == "14:00"
+    assert change.outcome == "changed"
+
+
+@pytest.mark.parametrize(("clock", "confidence"), [
+    ("5:00", "ambiguous"),
+    ("24:00", "invalid"),
+    ("17:99", "invalid"),
+    ("13 PM", "invalid"),
+])
+def test_ambiguous_or_invalid_clocks_stay_uncertain(clock, confidence):
+    (change,) = field_changes(
+        f"Reporting time: {clock}", "Reporting time: 17:00", category="time",
+    )
+    assert change.original.confidence == confidence
+    assert change.original.canonical is None
+    assert change.outcome == "uncertain"
+
+
+@pytest.mark.parametrize("clock", [
+    "17:00-18:00", "5–7 PM", "17:00 to 18", "17:00 and 21:00",
+    "17:00:30", "17:000", "DOC-17:00", "1-17:00", "UTC+05:30",
+    "17:00+05:30", "-17:00", "+17:00",
+])
+def test_clock_extractor_does_not_salvage_partial_or_unpaired_clocks(clock):
+    assert field_changes(
+        f"Reporting time: {clock}", "Reporting time: 17:00", category="time",
+    ) == []
+
+
+def test_equivalent_clock_formats_match_with_an_explicit_offset():
+    (change,) = field_changes(
+        "Reporting time: 5:30 PM UTC + 05:30", "Reporting time: 17:30 UTC + 05:30",
+        category="time",
+    )
+    assert change.outcome == "same_value"
+    assert change.original.canonical == change.revised.canonical == "17:30"
