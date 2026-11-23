@@ -48,7 +48,9 @@ class CompareBodyLimit:
             if key.lower() == b"content-length"
         ]
         if len(lengths) > 1 or (
-            lengths and (not lengths[0].isdigit() or not lengths[0])
+            lengths and (
+                len(lengths[0]) > 20 or not lengths[0].isdigit() or not lengths[0]
+            )
         ):
             await self._reject(
                 scope, receive, send, status=400, detail="Invalid Content-Length"
