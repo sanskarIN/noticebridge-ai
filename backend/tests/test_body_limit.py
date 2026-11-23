@@ -4,10 +4,10 @@ import asyncio
 import json
 
 import pytest
+from fastapi.testclient import TestClient
 
 from noticebridge import body_limit
 from noticebridge.api import app
-from fastapi.testclient import TestClient
 
 
 def _exercise(*, chunks, headers=(), path="/api/compare", method="POST"):
