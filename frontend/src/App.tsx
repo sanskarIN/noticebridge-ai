@@ -1,4 +1,5 @@
 import PdfEvidencePreview from './PdfEvidencePreview';
+import { serializeReviewCsv } from './exportCsv';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 type Language = 'en' | 'hi';
@@ -39,7 +40,7 @@ const translations = {
     authority: 'Authority not verified', warnings: 'Processing warnings',
     openPage: 'Open PDF page', closePreview: 'Close preview', newTab: 'Open PDF in new tab',
     previewNote: 'The PDF preview highlights source evidence when page geometry can be verified. If no highlight appears, inspect the original page manually.',
-    export: 'Export evidence report (JSON)', progress: 'Reviewed',
+    export: 'Export evidence report (JSON)', exportCsv: 'Export review CSV', progress: 'Reviewed',
     values: 'Extracted values (syntactic check only)', uncertain: 'Uncertain',
     invalidFile: 'Select a PDF no larger than 10 MiB.',
     ocr: 'Enable local OCR for scanned pages (English + Hindi)',
@@ -74,7 +75,7 @@ const translations = {
     authority: 'आधिकारिक प्राथमिकता अप्रमाणित', warnings: 'प्रोसेसिंग चेतावनियाँ',
     openPage: 'PDF पृष्ठ खोलें', closePreview: 'पूर्वावलोकन बंद करें', newTab: 'नए टैब में PDF खोलें',
     previewNote: 'जिन PDF पृष्ठों की ज्यामिति सत्यापित हो सकती है, उन पर स्रोत अंश हाइलाइट होता है। हाइलाइट न दिखे तो मूल पृष्ठ स्वयं जाँचें।',
-    export: 'प्रमाण रिपोर्ट डाउनलोड करें (JSON)', progress: 'समीक्षा पूरी',
+    export: 'प्रमाण रिपोर्ट डाउनलोड करें (JSON)', exportCsv: 'समीक्षा CSV डाउनलोड करें', progress: 'समीक्षा पूरी',
     values: 'निकाले गए मान (केवल प्रारूप की जाँच)', uncertain: 'अनिश्चित',
     invalidFile: 'केवल 10 MiB तक की PDF चुनें।',
     ocr: 'स्कैन किए गए पन्नों के लिए स्थानीय OCR चालू करें (हिंदी + अंग्रेज़ी)',
@@ -229,15 +230,30 @@ export default function App() {
     });
   }
 
+  function downloadLocal(filename: string, type: string, contents: string) {
+    const url = URL.createObjectURL(new Blob([contents], { type }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function exportReport() {
     if (!report) return;
     const payload = { ...report, review: checked, exported_at: new Date().toISOString() };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'noticebridge-evidence-report.json';
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadLocal(
+      'noticebridge-evidence-report.json', 'application/json',
+      JSON.stringify(payload, null, 2),
+    );
+  }
+
+  function exportReviewCsv() {
+    if (!report) return;
+    downloadLocal(
+      'noticebridge-review.csv', 'text/csv;charset=utf-8',
+      serializeReviewCsv(report, checked),
+    );
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -308,7 +324,7 @@ export default function App() {
         </form>
       </section>
       {report && <section className="results" aria-live="polite">
-        <div className="section-heading"><div><span className="section-number">{language === 'hi' ? '०२ / समीक्षा' : '02 / REVIEW'}</span><h2>{t.findings}</h2></div><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button></div>
+        <div className="section-heading"><div><span className="section-number">{language === 'hi' ? '०२ / समीक्षा' : '02 / REVIEW'}</span><h2>{t.findings}</h2></div><div className="export-actions"><button type="button" className="export-button" onClick={exportReport}>{t.export} ↓</button><button type="button" className="export-button" onClick={exportReviewCsv}>{t.exportCsv} ↓</button></div></div>
         <div className="metrics">
           <div><b>{report.findings.length}</b><span>{t.findings}</span></div>
           <div><b>{report.findings.filter(f => f.status === 'confirmed_change').length}</b><span>{t.confirmed}</span></div>
