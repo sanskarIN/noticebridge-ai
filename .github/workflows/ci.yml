@@ -1,4 +1,12 @@
 name: CI
+
+# Prefer the latest commit on each branch/PR; obsolete test runs need not queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 on:
   push:
     branches: [main]
