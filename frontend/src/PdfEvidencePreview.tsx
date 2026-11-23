@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist';
+import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 // Bundle PDF.js and its matching worker with the application. No external CDN
@@ -26,6 +26,7 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
   useEffect(() => {
     let disposed = false;
     let pdf: PDFDocumentProxy | null = null;
+    let loadingTask: PDFDocumentLoadingTask | null = null;
     let renderTask: { cancel: () => void; promise: Promise<unknown> } | null = null;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -37,13 +38,13 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
         // File.arrayBuffer() never sends the document to an external service.
         const bytes = new Uint8Array(await file.arrayBuffer());
         if (disposed) return;
-        const loadTask = getDocument({
+        loadingTask = getDocument({
           data: bytes,
           isEvalSupported: false,
           disableAutoFetch: true,
           disableStream: true,
         });
-        pdf = await loadTask.promise;
+        pdf = await loadingTask.promise;
         if (disposed) return;
         if (evidence.page < 1 || evidence.page > pdf.numPages) {
           throw new Error('Evidence page is outside the source PDF.');
@@ -51,15 +52,28 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
         const page = await pdf.getPage(evidence.page);
         if (disposed) return;
         const unscaled = page.getViewport({ scale: 1 });
-        // Keep a single-page preview comfortably within reasonable canvas size.
-        const scale = Math.min(1.5, Math.sqrt(9_000_000 /
-          Math.max(1, unscaled.width * unscaled.height)));
+        const pixelRatio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+        // The budget applies to the actual bitmap, including device pixel ratio.
+        // Also cap either dimension for extremely narrow or tall PDF pages.
+        const maxBitmapPixels = 9_000_000;
+        const maxBitmapDimension = 4096;
+        const area = unscaled.width * unscaled.height;
+        if (!Number.isFinite(area) || area <= 0) {
+          throw new Error('Invalid source PDF page dimensions.');
+        }
+        const scale = Math.min(
+          1.5,
+          Math.sqrt(maxBitmapPixels / (area * pixelRatio * pixelRatio)),
+          maxBitmapDimension / (Math.max(unscaled.width, unscaled.height) * pixelRatio),
+        );
+        if (!Number.isFinite(scale) || scale <= 0) {
+          throw new Error('Source PDF page is too large to preview.');
+        }
         const viewport = page.getViewport({ scale });
         const context = canvas?.getContext('2d');
         if (!canvas || !context) throw new Error('Canvas rendering is unavailable.');
-        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-        canvas.width = Math.max(1, Math.round(viewport.width * pixelRatio));
-        canvas.height = Math.max(1, Math.round(viewport.height * pixelRatio));
+        canvas.width = Math.max(1, Math.floor(viewport.width * pixelRatio));
+        canvas.height = Math.max(1, Math.floor(viewport.height * pixelRatio));
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
         renderTask = page.render({
@@ -81,7 +95,9 @@ export default function PdfEvidencePreview({ file, evidence, language }: {
     return () => {
       disposed = true;
       renderTask?.cancel();
-      if (pdf) void pdf.destroy();
+      // Cancel loading even if the document has not yet finished opening.
+      if (loadingTask) void loadingTask.destroy();
+      else if (pdf) void pdf.destroy();
     };
   }, [file, evidence.page]);
 
