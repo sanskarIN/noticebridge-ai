@@ -77,7 +77,8 @@ def test_missing_content_length_is_not_an_escape(monkeypatch):
     status, body, received = _exercise(chunks=[b"1234", b"567890", b"X"])
     assert status == 413
     assert "too large" in json.loads(body)["detail"]
-    assert received == [b"1234", b"567890"]
+    # No incomplete multipart body reaches FastAPI when the cap is exceeded.
+    assert received == []
 
 
 def test_falsely_small_content_length_cannot_bypass_limit(monkeypatch):
@@ -86,7 +87,7 @@ def test_falsely_small_content_length_cannot_bypass_limit(monkeypatch):
         chunks=[b"abc", b"def"], headers=[(b"content-length", b"2")]
     )
     assert status == 413
-    assert received == [b"abc"]
+    assert received == []
 
 
 def test_exact_body_limit_is_allowed(monkeypatch):
@@ -96,7 +97,7 @@ def test_exact_body_limit_is_allowed(monkeypatch):
     )
     assert status == 200
     assert body == b"ok"
-    assert received == [b"abc", b"defg"]
+    assert received == [b"abcdefg"]
 
 
 @pytest.mark.parametrize(("path", "method"), [
@@ -157,4 +158,28 @@ def test_real_api_stream_without_content_length_is_limited(monkeypatch):
     )
     assert response.status_code == 413
     assert response.json()["detail"] == "Comparison upload is too large"
+
+
+def test_body_is_replayed_in_bounded_chunks(monkeypatch):
+    monkeypatch.setattr(body_limit, "REPLAY_CHUNK_BYTES", 3)
+    status, body, received = _exercise(chunks=[b"abcdef", b"g"])
+    assert status == 200
+    assert body == b"ok"
+    assert received == [b"abc", b"def", b"g"]
+
+
+def test_small_upload_stays_in_memory(monkeypatch):
+    # A controlled spool threshold must not change the request semantics.
+    monkeypatch.setattr(body_limit, "IN_MEMORY_SPOOL_BYTES", 3)
+    status, body, received = _exercise(chunks=[b"ab", b"cdef"])
+    assert status == 200
+    assert body == b"ok"
+    assert received == [b"abcdef"]
+
+
+def test_empty_body_is_replayed_without_disconnection():
+    status, body, received = _exercise(chunks=[])
+    assert status == 200
+    assert body == b"ok"
+    assert received == [b""]
 
