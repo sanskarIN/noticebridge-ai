@@ -249,9 +249,11 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
             by_page: dict[int, list[tuple[str, Evidence]]] = defaultdict(list)
             for value, evidence in records:
                 by_page[evidence.page].append((value, evidence))
+            has_same_page_conflict = False
             for page_records in by_page.values():
                 if len({value for value, _ in page_records}) < 2:
                     continue
+                has_same_page_conflict = True
                 first_value, first_evidence = page_records[0]
                 different = next(
                     (ev for value, ev in page_records if value != first_value), None
@@ -270,7 +272,7 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
                     supporting_evidence=[first_evidence, different],
                     similarity=1.0,
                 ))
-            if len(by_page) > 1:
+            if len(by_page) > 1 and not has_same_page_conflict:
                 page_list = ", ".join(str(page) for page in sorted(by_page))
                 warnings.append(
                     f"{document.summary.id}: differing dates under a repeated deadline "
