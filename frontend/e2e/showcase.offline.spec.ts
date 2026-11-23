@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 
 test('static showcase opens the evidence and exports a labeled report without an API', async ({ page }) => {
-  await page.setViewportSize({ width: 360, height: 800 });
+  await page.setViewportSize({ width: 320, height: 720 });
   const apiCalls: string[] = [];
   await page.route('**/api/**', route => {
     apiCalls.push(route.request().url());
@@ -16,7 +16,9 @@ test('static showcase opens the evidence and exports a labeled report without an
   const target = page.locator('#finding-f1');
   await expect(target).toBeFocused();
   await target.getByRole('button', { name: /Open PDF page/ }).last().click();
-  await expect(page.locator('.evidence-highlight')).toBeVisible();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('.evidence-highlight')).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByRole('button', { name: /Close preview/ })).toBeInViewport({ ratio: 1 });
   await page.keyboard.press('Escape');
   await target.getByRole('checkbox').check();
   const downloadReady = page.waitForEvent('download');
@@ -26,5 +28,5 @@ test('static showcase opens the evidence and exports a labeled report without an
   expect(report.review).toEqual(['f1']);
   expect(report.documents).toHaveLength(2);
   expect(apiCalls).toEqual([]);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(361);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(321);
 });

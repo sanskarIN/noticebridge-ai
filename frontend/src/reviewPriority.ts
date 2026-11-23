@@ -36,6 +36,9 @@ function describeFinding(finding: Finding): ReviewPriority | undefined {
   if (status === 'confirmed_change' && category === 'fee' && delta?.kind === 'amount') {
     return { id, rank: 4, title: 'Fee changed', detail: `${delta.original.raw} → ${delta.revised.raw}` };
   }
+  if (category === 'fee' && finding.match_method === 'explicit_amendment') {
+    return { id, rank: 5, title: 'Fee amendment needs verification', detail: 'Check the quoted amounts in both notices.' };
+  }
   return undefined;
 }
 

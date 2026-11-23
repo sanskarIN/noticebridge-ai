@@ -246,7 +246,8 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
         {finding.field_changes.length > 0 && <div className="value-changes">
           <b>{t.values}</b>
           {finding.field_changes.map((delta, i) => <p key={i}>
-            <span className="value-outcome">{valueKinds[delta.kind]}: {valueOutcomes[delta.outcome]}</span>
+            <span className="value-outcome">{valueKinds[delta.kind]}: {finding.match_method === 'explicit_amendment'
+              ? 'Stated in amendment' : valueOutcomes[delta.outcome]}</span>
             {' '}{delta.original.raw} → {delta.revised.raw}
             {delta.outcome !== 'uncertain' && ` (${delta.original.canonical} → ${delta.revised.canonical})`}
           </p>)}

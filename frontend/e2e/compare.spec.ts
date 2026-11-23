@@ -680,14 +680,16 @@ test('runs the fictional demo through the live API and prioritizes the earlier d
 
 test('links a separate amendment to the quoted original without accepting its authority', async ({ page }) => {
   await compareReviewFixture(
-    page, [['Application deadline: 19 December 2026']],
-    [['Application deadline revised from 19 December 2026 to 13 December 2026']],
+    page, [['Application deadline: 19 December 2026', 'Application fee: Rs. 500']],
+    [['Application deadline revised from 19 December 2026 to 13 December 2026',
+      'Application fee was reduced from Rs. 500 to Rs. 350']],
   );
-  const finding = page.locator('.finding');
-  await expect(finding).toHaveCount(1);
+  const findings = page.locator('.finding');
+  await expect(findings).toHaveCount(2);
+  const finding = findings.first();
   await expect(finding.locator('.match-score')).toHaveText('Explicit amendment wording');
   await expect(finding.locator('.status')).toHaveText('Possible change');
-  await expect(finding.locator('.value-outcome')).toHaveText('Date: Uncertain');
+  await expect(finding.locator('.value-outcome')).toHaveText('Date: Stated in amendment');
   await expect(finding.locator('blockquote')).toHaveText([
     'Application deadline: 19 December 2026',
     'Application deadline revised from 19 December 2026 to 13 December 2026',
@@ -695,6 +697,9 @@ test('links a separate amendment to the quoted original without accepting its au
   await expect(page.getByRole('button', {
     name: 'Inspect finding: Deadline amendment needs verification',
   })).toBeVisible();
+  await page.getByRole('button', { name: 'Inspect finding: Fee amendment needs verification' }).click();
+  await expect(findings.last()).toBeFocused();
+  await expect(findings.last().locator('.value-outcome')).toHaveText('Amount: Stated in amendment');
   await finding.getByRole('button', { name: /Open PDF page/ }).last().click();
   await expect(page.locator('.evidence-highlight')).toBeVisible();
 });
