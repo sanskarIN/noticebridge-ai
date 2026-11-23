@@ -8,19 +8,21 @@ NoticeBridge AI is an open-source, multilingual document comparison prototype fo
 
 ## What works now
 
-- Two-PDF upload with file-size, file-type, encryption, and page-count checks.
+- Two-PDF upload with per-file checks (10 MiB/PDF), **total ASGI request-body cap** (20 MiB plus 1 MiB framing), PDF type, encryption, and page-count checks. Both declared lengths and actual incoming bytes are bounded before multipart spooling.
 - Line-level PDF text extraction with **actual 1-based page references, source coordinates, and SHA-256 file fingerprints** from PyMuPDF. The API also reports per-document pages without extractable text and overall text-coverage status: all pages yielded text, partial, or inconclusive.
 - **Optional local OCR** for image-only PDF pages (English + Hindi). OCR provenance is attached to each extracted line, and OCR-derived changes cannot be labeled as confirmed purely by a text match. A limit of 12 OCR pages per document and a render-pixel ceiling bound work.
-- **PDF.js page preview with highlighted evidence coordinates** for unrotated pages, rendered locally from the user-selected File without sending it to a CDN; rotated pages deliberately omit potentially inaccurate highlights.
+- **PDF.js page preview with highlighted evidence coordinates** for unrotated pages, rendered locally from the selected File without a CDN; rotated pages omit potentially inaccurate highlights. Rendered bitmap size is limited to 9 million physical pixels and 4096 pixels per dimension, including device pixel ratio.
 - Three-pass matching: identical-text reconciliation, anchored value comparison, and globally ranked fuzzy proposals. Repeated headings are marked uncertain rather than overconfident.
 - **Structured date/fee deltas** alongside quoted evidence: canonical calendar dates and INR amounts only when syntax is unambiguous and valid.
 - Ambiguous dates like `01/02/2026` retain an `uncertain` outcome instead of assuming a date order. Supports English and Hindi written month names and Devanagari numerals.
 - Bilingual English/Hindi **templated** explanations. With explicit opt-in, an **experimental local Ollama model** can propose related unmatched passages. Every accepted proposal must reference real extracted source IDs and match the same category; it remains a `possible_change`, never verified, and no model-generated citations are accepted. Without opt-in, no model request occurs.
 - Human-verification checklist for changed deadlines, fees, eligibility, and instructions.
 - React/TypeScript comparison workspace with side-by-side evidence, locally rendered source pages, an explicit OCR opt-in, portable JSON evidence export, and review controls.
+- Worker outputs undergo independent **structural provenance checks** in the API: the SHA-256 must match uploaded bytes, document roles and filenames cannot be swapped, evidence page references must be in range, and an AI suggestion cannot become a confirmed/official claim. This is not independent verification of the actual notice's authenticity.
 - Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, Linux address-space ceilings (2 GiB), POSIX CPU/file/open-descriptor limits, no-cache responses, Pytest regression tests, and CI configuration.
 - **Browser end-to-end tests** (Playwright/Chromium) verifying upload, evidence display, local PDF.js canvas/highlights, Hindi switching, and JSON export.
 - A reproducible **12-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
+- A local-only [labeled evaluation tool](docs/labeled-evaluation.md) for counting evidence-pair true positives, false positives and false negatives on a user-supplied PDF corpus. The tool and tests exist; a representative, independently labeled real-world corpus does **not** yet exist.
 
 ## Local development
 

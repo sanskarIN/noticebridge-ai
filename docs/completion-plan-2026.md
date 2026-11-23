@@ -38,6 +38,7 @@ source passages. No model output may mark a change or source as official.
 
 ### 30 November–6 December — Quality evaluation
 
+- [x] Implement a local, labeled evidence-pair evaluation runner and tests (no representative dataset yet).
 - [ ] Build a separately tracked, permission-safe evaluation set with documented
   sources, golden page references, original/revised pairing ground truth and labels.
 - [ ] Include native-text and scanned PDFs; English, Hindi and mixed-script examples.
