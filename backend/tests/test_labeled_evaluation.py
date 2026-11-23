@@ -440,3 +440,98 @@ def test_cli_forwards_ocr_flag_but_keeps_labeled_sources_local(
     assert captured["enable_semantic"] is False
     assert json.loads(capsys.readouterr().out)["ocr_enabled"] is True
 
+
+
+def test_cohorts_separate_synthetic_success_from_declared_independent_failure(
+    tmp_path, pdf_bytes,
+):
+    # Both fixtures are deliberately fictional: the metadata classifier must
+    # report what a manifest claims without pretending to verify its source.
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes), source_kind="fictional", label_method="synthetic",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    second = dict(payload["cases"][0])
+    second.update({
+        "id": "separately_labeled",
+        "source_kind": "public_notice",
+        "label_method": "independent_human",
+        "expected_pairs": [],
+    })
+    payload["cases"].append(second)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = evaluate_labeled(manifest)
+    assert result["case_count"] == 2
+    assert result["pair_counts"] == {
+        "true_positive": 1, "false_positive": 1, "false_negative": 0,
+        "unsupported_confirmed_changes": 1,
+    }
+    assert result["precision"] == 0.5
+    assert result["recall"] == 1
+    groups = result["cohorts"]
+    assert groups["by_source_kind"]["fictional"]["precision"] == 1
+    assert groups["by_source_kind"]["public_notice"]["precision"] == 0
+    assert groups["by_label_method"]["independent_human"]["recall"] is None
+    assert groups["by_source_and_label_method"][
+        "public_notice:independent_human"
+    ]["confirmed_only"]["false_positive"] == 1
+    independent = groups["declared_independent_nonfictional"]
+    assert independent["case_count"] == 1
+    assert independent["precision"] == 0
+    assert independent["recall"] is None
+    assert independent["pair_counts"]["unsupported_confirmed_changes"] == 1
+
+
+def test_empty_declared_independent_cohort_keeps_metrics_undefined(tmp_path, pdf_bytes):
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    group = evaluate_labeled(manifest)["cohorts"]["declared_independent_nonfictional"]
+    assert group["case_count"] == 0
+    assert group["precision"] is None
+    assert group["recall"] is None
+    assert group["confirmed_only"]["precision"] is None
+    assert group["confirmed_only"]["recall"] is None
+
+
+def test_independent_corpus_gate_rejects_mixed_labels_then_accepts_declared_subset(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--require-independent-corpus"],
+    )
+    assert main() == 1
+    capsys.readouterr()
+
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["cases"][0]["source_kind"] = "consented"
+    payload["cases"][0]["label_method"] = "independent_human"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    assert main() == 0
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["case_count"] == 1
+
+
+def test_independent_case_count_gate_and_bad_argument(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="public_notice", label_method="independent_human",
+    )
+    argv = ["evaluate_labeled", str(manifest), "--min-independent-cases", "2"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert main() == 1
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", argv[:-1] + ["1"])
+    assert main() == 0
+    capsys.readouterr()
+    monkeypatch.setattr(sys, "argv", argv[:-1] + ["0"])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2

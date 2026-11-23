@@ -8,7 +8,7 @@ import argparse
 import hashlib
 import json
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from noticebridge.compare import normalize
@@ -191,6 +191,69 @@ def _ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
 
 
+def _cohort_summary(cases: list[dict]) -> dict:
+    """Micro-average exact evidence pairs; never average rounded case ratios."""
+    tp = sum(case["true_positive"] for case in cases)
+    fp = sum(case["false_positive"] for case in cases)
+    fn = sum(case["false_negative"] for case in cases)
+    confirmed_tp = sum(case["confirmed_true_positive"] for case in cases)
+    unsupported = sum(case["unsupported_confirmed_changes"] for case in cases)
+    return {
+        "case_count": len(cases),
+        "pair_counts": {
+            "true_positive": tp,
+            "false_positive": fp,
+            "false_negative": fn,
+            "unsupported_confirmed_changes": unsupported,
+        },
+        "precision": _ratio(tp, tp + fp),
+        "recall": _ratio(tp, tp + fn),
+        "confirmed_only": {
+            "true_positive": confirmed_tp,
+            "false_positive": unsupported,
+            "precision": _ratio(confirmed_tp, confirmed_tp + unsupported),
+            "recall": _ratio(confirmed_tp, tp + fn),
+        },
+        "incomplete_case_count": sum(
+            case["text_coverage"] != "all_pages_have_text" for case in cases
+        ),
+        "fuzzy_matching_limited_case_count": sum(
+            case["fuzzy_matching_limited"] for case in cases
+        ),
+        "ocr_page_count": sum(case["ocr_pages"] for case in cases),
+        "pages_without_text_count": sum(case["pages_without_text"] for case in cases),
+        "processing_warning_count": sum(case["processing_warnings"] for case in cases),
+    }
+
+
+def _cohort_results(cases: list[dict]) -> dict:
+    """Keep synthetic and operator-declared independent labels visibly separate."""
+
+    def grouped(key_for_case) -> dict:
+        buckets: dict[str, list[dict]] = defaultdict(list)
+        for case in cases:
+            buckets[key_for_case(case)].append(case)
+        return {key: _cohort_summary(buckets[key]) for key in sorted(buckets)}
+
+    independently_labeled_nonfictional = [
+        case for case in cases
+        if case["source_kind"] in ("public_notice", "consented")
+        and case["label_method"] == "independent_human"
+    ]
+    return {
+        "by_source_kind": grouped(lambda case: case["source_kind"]),
+        "by_label_method": grouped(lambda case: case["label_method"]),
+        "by_source_and_label_method": grouped(
+            lambda case: f'{case["source_kind"]}:{case["label_method"]}'
+        ),
+        # These names are operator declarations from the manifest, NOT verified
+        # provenance or a claim that the labeled sample is representative.
+        "declared_independent_nonfictional": _cohort_summary(
+            independently_labeled_nonfictional
+        ),
+    }
+
+
 def evaluate_labeled(
     manifest: Path, *, enable_ocr: bool = False, require_pinned_sources: bool = False,
 ) -> dict:
@@ -257,13 +320,15 @@ def evaluate_labeled(
         "incomplete_case_count": sum(
             case["text_coverage"] != "all_pages_have_text" for case in results
         ),
+        "cohorts": _cohort_results(results),
         "cases": results,
         "warning": (
             "Metrics measure exact page-and-quotation pair alignment only. "
             "Undefined denominators yield null, not 100%. Label quality, issuer "
             "authenticity, and representative real-world accuracy are not established. "
             "OCR-on results depend on installed Tesseract and language packs; "
-            "inspect processing warnings and incomplete text coverage."
+            "inspect processing warnings and incomplete text coverage. "
+            "Cohort labels are operator declarations, not authenticated evidence."
         ),
     }
 
@@ -279,6 +344,17 @@ def main() -> int:
         "--enable-ocr", action="store_true",
         help="Opt into local English/Hindi Tesseract OCR for scanned pages",
     )
+    parser.add_argument(
+        "--require-independent-corpus", action="store_true",
+        help=(
+            "Fail unless every case declares a non-fictional source and independent "
+            "human labels (declarations are not independently authenticated)"
+        ),
+    )
+    parser.add_argument(
+        "--min-independent-cases", type=int,
+        help="Minimum number of declared independent non-fictional cases",
+    )
     parser.add_argument("--min-precision", type=float, default=None)
     parser.add_argument("--min-recall", type=float, default=None)
     parser.add_argument(
@@ -291,6 +367,8 @@ def main() -> int:
             parser.error("Thresholds must be between 0 and 1")
     if args.max_unsupported_confirmed is not None and args.max_unsupported_confirmed < 0:
         parser.error("Maximum unsupported confirmed changes must be nonnegative")
+    if args.min_independent_cases is not None and args.min_independent_cases < 1:
+        parser.error("Minimum independent case count must be positive")
     try:
         result = evaluate_labeled(
             args.manifest, enable_ocr=args.enable_ocr,
@@ -299,6 +377,11 @@ def main() -> int:
     except (OSError, ValueError, ProcessingFailed, ProcessingTimedOut) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    declared = result["cohorts"]["declared_independent_nonfictional"]["case_count"]
+    if args.require_independent_corpus and declared != result["case_count"]:
+        return 1
+    if args.min_independent_cases is not None and declared < args.min_independent_cases:
+        return 1
     counts = result["pair_counts"]
     true_positive = counts["true_positive"]
     # Compare thresholds to the raw counts, before presentation rounding.

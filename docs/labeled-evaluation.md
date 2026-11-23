@@ -183,6 +183,44 @@ these pair-level metrics.
 A tiny synthetic demo yielding 100% precision and recall proves only that the
 sample passed. It does not imply real-world accuracy.
 
+## Preventing synthetic results from masking independent results
+
+The evaluator reports **micro-averaged** precision, recall, and confirmed-only
+counts for each manifest-declared source kind, labeling method, and combined
+source/label cohort. The JSON cohorts object also includes
+declared_independent_nonfictional, containing **only** cases declaring
+public_notice or consented sources **and** independent_human labels.
+
+This matters when a corpus includes many easy fictional regression pairs and
+a smaller set of difficult real-notice cases. The combined headline score
+can look good even if performance on the declared independent cases is poor.
+Inspect stratified counts and uncovered pages in each cohort, not just the
+aggregate score. Undefined ratios remain null; a cohort with zero cases does
+**not** receive a 100% score.
+
+For an explicit release-evaluation check, use an exclusively non-fictional,
+independently human-labeled version-2 manifest:
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
+  evaluation/independent-pinned.json --require-pinned-sources \
+  --require-independent-corpus --min-independent-cases 20 \
+  --min-precision 0.90 --min-recall 0.90 --max-unsupported-confirmed 0
+~~~
+
+The sample count and thresholds above are **operator-configured targets**,
+not statistically validated guarantees. The gate exits nonzero if any case
+lacks the declared eligible provenance, the minimum count is unmet, or
+the requested score thresholds fail. The minimum-case flag can also
+be used on a mixed manifest, but it does **not** isolate aggregate
+precision/recall gates; combine it with the require-independent flag.
+
+**Critical limitation:** NoticeBridge does not authenticate source-kind or
+label-method metadata. Someone could label fictional or AI-generated examples
+as independent_human. These flags prevent accidental mixing; they cannot
+prove representative data, independent annotation, consent or issuer authority.
+Keep signed-off dataset provenance and adjudication records outside the tool.
+
 ## 4. Build a useful independent evaluation corpus
 
 For the December completion gate, use a permission-safe, diverse set of
