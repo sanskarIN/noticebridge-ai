@@ -83,7 +83,8 @@ def test_closing_job_terminates_worker_descendants():
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires Windows job assignment path")
-def test_failed_job_assignment_never_leaves_worker_running(monkeypatch):
+@pytest.mark.parametrize("failure", [OSError, RuntimeError, ValueError])
+def test_failed_job_assignment_never_leaves_worker_running(monkeypatch, failure):
     import noticebridge.isolation as isolation
 
     class FakeWorker:
@@ -102,7 +103,7 @@ def test_failed_job_assignment_never_leaves_worker_running(monkeypatch):
             return None, None
 
     def deny_assignment(pid):
-        raise OSError("simulated denied job assignment")
+        raise failure("simulated denied job assignment")
 
     process = FakeWorker()
     monkeypatch.setattr(isolation, "WindowsWorkerJob", deny_assignment)

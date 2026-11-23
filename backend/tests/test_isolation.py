@@ -305,3 +305,88 @@ def test_timeout_terminates_job_and_closes_handle(monkeypatch, pdf_bytes):
     assert job.terminated and job.closed
     assert process.calls == 2
 
+
+@pytest.mark.parametrize("with_job", [False, True])
+def test_worker_broken_pipe_kills_and_reaps_process_tree(
+    monkeypatch, pdf_bytes, with_job
+):
+    import noticebridge.isolation as module
+
+    events = []
+
+    class Process:
+        def __init__(self):
+            self.calls = 0
+
+        def communicate(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise BrokenPipeError("simulated broken pipe during worker input")
+            events.append("reaped")
+            return None, None
+
+    class Job:
+        def terminate(self):
+            events.append("job_terminated")
+            return True
+
+        def close(self):
+            events.append("job_closed")
+
+    process = Process()
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: process)
+    monkeypatch.setattr(module, "_attach_windows_job", lambda _: Job() if with_job else None)
+    monkeypatch.setattr(module, "_kill_worker", lambda _: events.append("worker_killed"))
+    payload = pdf_bytes([["Deadline: 13 December 2026"]])
+    with pytest.raises(ProcessingFailed, match="could not start"):
+        _run(payload, payload)
+    assert process.calls == 2
+    assert "reaped" in events
+    if with_job:
+        assert events == ["job_terminated", "reaped", "job_closed"]
+    else:
+        assert events == ["worker_killed", "reaped"]
+
+
+def test_temporary_worker_output_is_closed_after_communication_error(
+    monkeypatch, pdf_bytes
+):
+    import noticebridge.isolation as module
+
+    create_file = module.tempfile.TemporaryFile
+    tracked = []
+
+    class TrackedFile:
+        def __init__(self):
+            self.inner = create_file(mode="w+b")
+            self.closed = False
+            tracked.append(self)
+
+        def __enter__(self):
+            return self.inner
+
+        def __exit__(self, exc_type, exc, traceback):
+            self.inner.close()
+            self.closed = True
+
+    class BrokenProcess:
+        def __init__(self):
+            self.calls = 0
+
+        def communicate(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise OSError("simulated worker input pipe failure")
+            return None, None
+
+    process = BrokenProcess()
+    monkeypatch.setattr(module.tempfile, "TemporaryFile", lambda **kw: TrackedFile())
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: process)
+    monkeypatch.setattr(module, "_attach_windows_job", lambda _: None)
+    monkeypatch.setattr(module, "_kill_worker", lambda _: None)
+    pdf = pdf_bytes([["Deadline: 13 December 2026"]])
+    with pytest.raises(ProcessingFailed):
+        _run(pdf, pdf)
+    assert tracked and all(output.closed for output in tracked)
+    assert process.calls == 2
+
