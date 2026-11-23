@@ -754,3 +754,55 @@ def test_independent_accuracy_thresholds_reject_invalid_inputs(
     with pytest.raises(SystemExit) as error:
         main()
     assert error.value.code == 2
+
+def test_strict_independent_pair_gate_prevents_duplicate_weighting(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="consented", label_method="independent_human",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    repeated = dict(payload["cases"][0])
+    repeated["id"] = "duplicate_inputs"
+    payload["cases"].append(repeated)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    report = evaluate_labeled(manifest)
+    cohort = report["cohorts"]["declared_independent_nonfictional"]
+    assert cohort["case_count"] == 2
+    assert cohort["unique_pdf_pair_count"] == 1
+    assert cohort["precision"] == 1  # Micro-averaging still weights repeats.
+
+    argv = [
+        "evaluate_labeled", str(manifest), "--require-distinct-independent-pairs",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert main() == 1
+    capsys.readouterr()
+    # A minimum unique-pair count alone does not prohibit duplicate weighting.
+    monkeypatch.setattr(sys, "argv", argv[:-1] + [
+        "--min-independent-distinct-pairs", "1",
+    ])
+    assert main() == 0
+    capsys.readouterr()
+    # Duplicate files must also be rejected when original/revised are reversed.
+    payload["cases"][1]["original"], payload["cases"][1]["revised"] = (
+        payload["cases"][1]["revised"], payload["cases"][1]["original"]
+    )
+    payload["cases"][1]["original_sha256"], payload["cases"][1]["revised_sha256"] = (
+        payload["cases"][1]["revised_sha256"], payload["cases"][1]["original_sha256"]
+    )
+    payload["cases"][1]["expected_pairs"] = []
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", argv)
+    assert main() == 1
+    capsys.readouterr()
+
+    payload["cases"] = payload["cases"][:1]
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    assert main() == 0
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["unique_pdf_pair_count"] == 1
