@@ -8,7 +8,7 @@ reject contradictory, fabricated-role or self-certified evidence structures.
 import hashlib
 import math
 
-from .extract import MAX_EXTRACTED_LINES, MAX_OCR_PAGES, MAX_PAGES
+from .extract import MAX_EXTRACTED_LINES, MAX_LINE_CHARACTERS, MAX_OCR_PAGES, MAX_PAGES
 from .models import ComparisonReport, Evidence
 
 EXPECTED_POLICY = ComparisonReport.model_fields["verification_policy"].default
@@ -108,11 +108,39 @@ def verify_report_provenance(
             and x0 < x1 and y0 < y1,
             "Evidence contains invalid source coordinates",
         )
-        _require(bool(evidence.text.strip()), "Evidence has no source quotation")
-        if not ocr_requested:
+        _require(
+            math.isfinite(evidence.page_width)
+            and math.isfinite(evidence.page_height),
+            "Evidence contains invalid source page geometry",
+        )
+        # PyMuPDF always reports text boxes before page rotation. Reject a
+        # wholly off-page box while allowing a legitimate partly clipped glyph.
+        unrotated_width = (
+            evidence.page_width if evidence.page_rotation in (0, 180)
+            else evidence.page_height
+        )
+        unrotated_height = (
+            evidence.page_height if evidence.page_rotation in (0, 180)
+            else evidence.page_width
+        )
+        _require(
+            x1 > 0 and y1 > 0
+            and x0 < unrotated_width and y0 < unrotated_height,
+            "Evidence source box is outside the source page",
+        )
+        _require(
+            0 < len(evidence.text.strip()) <= MAX_LINE_CHARACTERS,
+            "Evidence has an empty or overlong source quotation",
+        )
+        _require(
+            evidence.page not in document.pages_without_text,
+            "Evidence points to a page reported without source text",
+        )
+        if evidence.extraction_method == "ocr":
+            _require(ocr_requested, "OCR evidence appeared without opt-in")
             _require(
-                evidence.extraction_method == "native",
-                "OCR evidence appeared without opt-in",
+                document.ocr_page_count > 0,
+                "OCR evidence is absent from the document summary",
             )
 
     # Every AI suggestion must be traceable to the original unmatched
