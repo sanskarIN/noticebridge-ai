@@ -190,3 +190,49 @@ def test_bootstrap_rejects_unknown_modes(monkeypatch):
     monkeypatch.setattr("sys.argv", ["python", "--unsupported"])
     assert worker_entry.main() == 2
 
+
+def test_worker_output_is_read_only_up_to_limit_plus_one(monkeypatch, pdf_bytes):
+    import noticebridge.isolation as module
+
+    monkeypatch.setattr(module, "MAX_RESULT_BYTES", 64)
+
+    class NoisyProcess:
+        returncode = 0
+
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+        def communicate(self, **kwargs):
+            self.stdout.write(b"X" * 1024)
+            self.stdout.flush()
+            return None, None
+
+    monkeypatch.setattr(
+        module.subprocess, "Popen",
+        lambda *args, **kwargs: NoisyProcess(kwargs["stdout"]),
+    )
+    pdf = pdf_bytes([["One line"]])
+    with pytest.raises(ProcessingFailed, match="result exceeded the safety limit"):
+        _run(pdf, pdf)
+
+
+def test_worker_stdout_capture_is_not_a_memory_pipe(monkeypatch, pdf_bytes):
+    import noticebridge.isolation as module
+
+    original_popen = module.subprocess.Popen
+    captured = []
+
+    def record(*args, **kwargs):
+        stdout = kwargs["stdout"]
+        assert stdout is not subprocess.PIPE
+        assert callable(stdout.write)
+        assert stdout.fileno() >= 0
+        captured.append(True)
+        return original_popen(*args, **kwargs)
+
+    monkeypatch.setattr(module.subprocess, "Popen", record)
+    pdf = pdf_bytes([["Deadline: 13 December 2026"]])
+    report = _run(pdf, pdf)
+    assert report.documents[0].page_count == 1
+    assert captured == [True]
+
