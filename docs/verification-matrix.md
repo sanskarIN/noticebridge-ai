@@ -41,6 +41,12 @@ Unrecognized date and currency syntax is ignored rather than inferred. There is 
 3. Remaining potential matches are globally ranked using bounded token-index retrieval and context similarity. Close competitors reduce confidence.
 4. Lines without defensible matches receive `missing_information` rather than claims of repeal or addition.
 
+Category detection uses Unicode-aware token boundaries instead of arbitrary substring
+matches, so incidental words such as "coffee" and "repayment" do not create fee
+findings. It still relies on a small English/Hindi keyword dictionary and can
+miss synonyms or contextual labels. Every important category should be manually
+checked against the quoted source.
+
 This is still **line-level**, not semantic paragraph/document understanding. Long paragraphs, table columns, hyphenated line breaks, mixed scripts, duplicate form fields, and scanned images can produce incomplete or misleading matches. Important cases require human review.
 
 ## Security and privacy scope

@@ -28,8 +28,8 @@ CATEGORIES = (
             "अंतिम तिथि", "अंतिम तारीख",
         ),
     ),
-    ("eligibility", ("eligib", "qualification", "required degree", "पात्रता", "योग्यता")),
-    ("fee", ("application fee", "fee", "payment", "शुल्क", "फीस")),
+    ("eligibility", ("eligib", "ineligib", "qualification", "required degree", "पात्रता", "योग्यता")),
+    ("fee", ("application fee", "fees", "fee", "payment", "शुल्क", "फीस")),
     ("time", ("exam time", "reporting time", "time of", "समय")),
     ("instruction", ("must", "submit", "required", "instruction", "अनिवार्य", "जमा करें")),
 )
@@ -39,10 +39,29 @@ def normalize(value: str) -> str:
     return SPACE.sub(" ", unicodedata.normalize("NFKC", value).casefold()).strip()
 
 
+# Unicode-aware token boundaries: Python's plain \\w excludes some Devanagari
+# combining marks, so include the entire Devanagari range. A raw substring
+# test would classify "coffee" as a fee or "repayment" as payment evidence.
+TOKEN_CHAR = r"[\\w\\u0900-\\u097f]"
+CATEGORY_MATCHERS = tuple(
+    (
+        category,
+        tuple(
+            re.compile(
+                rf"(?<!{TOKEN_CHAR}){re.escape(term)}"
+                + (rf"{TOKEN_CHAR}*" if term in {"eligib", "ineligib"} else rf"(?!{TOKEN_CHAR})")
+            )
+            for term in terms
+        ),
+    )
+    for category, terms in CATEGORIES
+)
+
+
 def category_for(text: str) -> str:
     value = normalize(text)
-    for category, terms in CATEGORIES:
-        if any(term in value for term in terms):
+    for category, expressions in CATEGORY_MATCHERS:
+        if any(expression.search(value) for expression in expressions):
             return category
     return "general"
 

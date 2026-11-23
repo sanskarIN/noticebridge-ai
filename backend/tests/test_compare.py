@@ -1,3 +1,5 @@
+import pytest
+
 from noticebridge.compare import compare_documents
 from noticebridge.extract import extract_pdf
 
@@ -217,4 +219,51 @@ def test_same_page_contradictions_remain_evidence_linked_across_multiple_pages(
         for f in contradictions
     )
     assert not any("repeated deadline label on pages" in w for w in report.warnings)
+
+
+@pytest.mark.parametrize(("passage", "expected"), [
+    ("Coffee break is available", "general"),
+    ("Repayment details will be communicated later", "general"),
+    ("The application officer is offering a new programme", "general"),
+    ("Please review the certification offered", "general"),
+    ("Application fee: Rs. 500", "fee"),
+    ("Exam fees must be paid online", "fee"),
+    ("The payment deadline is 13 December 2026", "deadline"),
+    ("Eligibility: class 12", "eligibility"),
+    ("Eligible applicants should apply", "eligibility"),
+    ("Ineligible applicants may not register", "eligibility"),
+    ("अंतिम तिथि: 13 दिसंबर 2026", "deadline"),
+    ("आवेदन शुल्क: 250 रुपये", "fee"),
+    ("सभी के लिए पात्रता आवश्यक है", "eligibility"),
+    ("पात्रताहीन आवेदन मान्य नहीं", "general"),
+])
+def test_category_matchers_use_token_boundaries(passage, expected):
+    from noticebridge.compare import category_for
+
+    assert category_for(passage) == expected
+
+
+def test_unrelated_coffee_remarks_do_not_require_fee_verification(pdf_bytes):
+    report = compare_documents(
+        *_pair(
+            pdf_bytes,
+            "Coffee break at examination center",
+            "Coffee service will not be provided",
+        )
+    )
+    assert report.findings
+    assert all(f.category == "general" for f in report.findings)
+    assert not any("fee" in item.description_en.lower() for item in report.checklist)
+
+
+def test_real_fee_variants_remain_evidence_backed(pdf_bytes):
+    report = compare_documents(
+        *_pair(pdf_bytes, "Exam fees: Rs. 200", "Exam fees: Rs. 300")
+    )
+    assert len(report.findings) == 1
+    finding = report.findings[0]
+    assert finding.category == "fee"
+    assert finding.status == "confirmed_change"
+    assert finding.field_changes[0].outcome == "changed"
+    assert len(report.checklist) == 1
 
