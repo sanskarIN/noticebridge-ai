@@ -391,16 +391,24 @@ test('changing OCR or local AI options invalidates stale evidence and review exp
   await expect(page.locator('.finding')).toHaveCount(1);
 });
 
-function reviewFixture(pages: string[][]): Buffer {
+type ReviewFixtureLine = string | readonly [label: string, value: string];
+
+function reviewFixture(pages: ReviewFixtureLine[][]): Buffer {
+  const textAt = (text: string, x: number, y: number) =>
+    `BT /F1 12 Tf ${x} ${y} Td (${text.replace(/[\\()]/g, '\\$&')}) Tj ET\n`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     `<< /Type /Pages /Count ${pages.length} /Kids [${pages.map((_, i) => `${i * 2 + 4} 0 R`).join(' ')}] >>`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
   ];
   for (const [index, lines] of pages.entries()) {
-    const stream = lines.map((line, row) =>
-      `BT /F1 12 Tf 40 ${754 - row * 23} Td (${line.replace(/[\\()]/g, '\\$&')}) Tj ET\n`
-    ).join('');
+    const stream = lines.map((line, row) => {
+      const y = 754 - row * 23;
+      if (typeof line === 'string') return textAt(line, 40, y);
+      const [label, value] = line;
+      return `32 ${y - 6} 218 23 re S\n250 ${y - 6} 280 23 re S\n` +
+        textAt(label, 40, y) + textAt(value, 260, y);
+    }).join('');
     objects.push(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${index * 2 + 5} 0 R >>`,
       `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}endstream`,
@@ -420,7 +428,8 @@ function reviewFixture(pages: string[][]): Buffer {
 }
 
 async function compareReviewFixture(
-  page: import('@playwright/test').Page, original: string[][], revised: string[][],
+  page: import('@playwright/test').Page,
+  original: ReviewFixtureLine[][], revised: ReviewFixtureLine[][],
 ) {
   await page.goto('/');
   for (const [role, pages] of [['original', original], ['revised', revised]] as const) {
@@ -430,6 +439,46 @@ async function compareReviewFixture(
   }
   await page.getByRole('button', { name: /Compare documents/ }).click();
 }
+
+test('keeps ruled deadline and fee cells together through review and export', async ({ page }) => {
+  await compareReviewFixture(page, [[
+    ['Requirement', 'Published value'],
+    ['Application deadline', '13 December 2026'],
+    ['Application fee', 'Rs. 300'],
+  ]], [[
+    ['Requirement', 'Published value'],
+    ['Application fee', 'Rs. 450'],
+    ['Application deadline', '11 December 2026'],
+  ]]);
+
+  const priorities = page.getByRole('region', { name: 'Review first' });
+  await expect(priorities.locator('strong')).toHaveText([
+    'Deadline moved 2 days earlier', 'Fee changed',
+  ]);
+  await priorities.getByRole('button', { name: /Inspect finding: Deadline moved/ }).click();
+  const deadline = page.locator('#finding-f1');
+  await expect(deadline.locator('blockquote')).toHaveText([
+    'Application deadline 13 December 2026', 'Application deadline 11 December 2026',
+  ]);
+  await expect(deadline.locator('mark')).toHaveText(['13 December 2026', '11 December 2026']);
+  await deadline.getByRole('button', { name: /Open PDF page/ }).last().click();
+  await expect(page.locator('.preview-quote')).toHaveText('Application deadline 11 December 2026');
+  const highlight = page.locator('.evidence-highlight');
+  await expect(highlight).toBeVisible();
+  expect(await highlight.evaluate(element => parseFloat(element.style.width))).toBeGreaterThan(40);
+  await page.keyboard.press('Escape');
+
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(report.findings).toHaveLength(2);
+  expect(report.findings[1]).toMatchObject({
+    category: 'fee',
+    original: { page: 1, text: 'Application fee Rs. 300' },
+    revised: { page: 1, text: 'Application fee Rs. 450' },
+    field_changes: [{ outcome: 'changed', revised: { canonical: 'INR 450.00' } }],
+  });
+});
 
 test('pages and filters a real comparison while exporting all findings and review selections', async ({ page }) => {
   function rows(day: number, amount: number) {
