@@ -1,5 +1,8 @@
 """Keep the synthetic evaluation fixtures from silently regressing."""
 
+import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,3 +34,20 @@ def test_fictional_demo_pdf_pair_is_truthfully_evidence_linked(tmp_path):
     assert all(finding.original and finding.revised for finding in actual)
     assert all(not finding.authority_verified for finding in report.findings)
     assert any("FICTIONAL NOTICE" in line.text for line in old.lines)
+
+
+def test_fictional_benchmark_cli_emits_clean_json():
+    """Warnings on stdout would corrupt automated benchmark ingestion."""
+    root = Path(__file__).resolve().parents[2]
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(root / "backend")
+    run = subprocess.run(
+        [sys.executable, str(root / "backend/benchmarks/evaluate.py")],
+        cwd=root, env=environment, text=True,
+        capture_output=True, check=True, timeout=30,
+    )
+    payload = json.loads(run.stdout)
+    assert payload["synthetic_cases"] >= 12
+    assert payload["passing_cases"] == payload["synthetic_cases"]
+    assert "Synthetic regression" in payload["warning"]
+
