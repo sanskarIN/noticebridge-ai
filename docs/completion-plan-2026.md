@@ -42,7 +42,7 @@ source passages. No model output may mark a change or source as official.
 
 ### 30 November–6 December — Quality evaluation
 
-- [x] Implement a local, labeled evidence-pair evaluation runner and tests (no representative dataset yet).
+- [x] Implement a local, labeled evidence-pair evaluation runner and tests, including version-2 SHA-pinned inputs and declared label provenance (no representative dataset yet).
 - [ ] Build a separately tracked, permission-safe evaluation set with documented
   sources, golden page references, original/revised pairing ground truth and labels.
 - [ ] Include native-text and scanned PDFs; English, Hindi and mixed-script examples.
@@ -59,8 +59,8 @@ claims. If the independent set is insufficient, publish the limitation prominent
 
 - [ ] Audit keyboard navigation, screen reader labels, Hindi copy, color contrast,
   mobile widths and error/failure recovery.
-- [ ] Validate rotated and cropped PDF highlights or retain a prominent manual-only
-  fallback until geometry is correct.
+- [x] Implement rotation/crop/UserUnit-aware source highlights with browser regression tests and a geometry-mismatch fallback.
+- [ ] Run independent visual review on exotic page matrices and mixed-script documents.
 - [x] Write an initial security threat model and P0/P1 risk register (docs/security-threat-model.md).
 - [ ] Remediate public-hosting P0 threats and test Windows process-tree termination and temp-file cleanup.
 - [ ] Implement or document production deployment isolation, rate limiting,
