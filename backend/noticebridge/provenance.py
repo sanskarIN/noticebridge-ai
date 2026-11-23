@@ -8,7 +8,9 @@ reject contradictory, fabricated-role or self-certified evidence structures.
 import hashlib
 import math
 
+from .compare import anchor, category_for, normalize
 from .extract import MAX_EXTRACTED_LINES, MAX_LINE_CHARACTERS, MAX_OCR_PAGES, MAX_PAGES
+from .facts import date_tokens, field_changes
 from .models import ComparisonReport, Evidence
 
 EXPECTED_POLICY = ComparisonReport.model_fields["verification_policy"].default
@@ -177,13 +179,37 @@ def verify_report_provenance(
                 (finding.original is None) != (finding.revised is None),
                 "Unmatched statement must have one source passage",
             )
+            reference = finding.original or finding.revised
+            _require(
+                finding.category == category_for(reference.text)
+                and not finding.field_changes
+                and finding.match_method == "deterministic",
+                "Unmatched evidence has invalid classification or field claims",
+            )
         elif finding.status == "contradiction":
             evidence = finding.supporting_evidence
             _require(
-                len(evidence) >= 2
+                finding.original is None
+                and finding.revised is None
+                and finding.category == "deadline"
+                and finding.match_method == "deterministic"
+                and not finding.field_changes
+                and len(evidence) == 2
                 and all(item.extraction_method == "native" for item in evidence)
                 and len({item.document_id for item in evidence}) == 1,
                 "Contradiction must have native support from one PDF",
+            )
+            first_dates = date_tokens(evidence[0].text)
+            second_dates = date_tokens(evidence[1].text)
+            _require(
+                len(first_dates) == 1 and len(second_dates) == 1
+                and first_dates[0].canonical is not None
+                and second_dates[0].canonical is not None
+                and first_dates[0].canonical != second_dates[0].canonical
+                and category_for(evidence[0].text) == "deadline"
+                and category_for(evidence[1].text) == "deadline"
+                and anchor(evidence[0].text) == anchor(evidence[1].text),
+                "Contradiction must quote distinct parsed dates under the same label",
             )
         else:
             _require(
@@ -199,6 +225,10 @@ def verify_report_provenance(
                 and finding.original.extraction_method == "native"
                 and finding.revised.extraction_method == "native",
                 "A confirmed text change cannot depend on OCR or model inference",
+            )
+            _require(
+                normalize(finding.original.text) != normalize(finding.revised.text),
+                "Confirmed change cannot cite identical source wording",
             )
 
         if finding.match_method == "semantic_proposal":
@@ -236,12 +266,50 @@ def verify_report_provenance(
                     "Claimed field delta is missing canonical evidence",
                 )
 
+        # No need to independently open untrusted PDF bytes in the API.
+        # Recalculate structured values from each already-sourced passage;
+        # arbitrary worker output cannot turn OCR into a confirmed field delta.
+        if (
+            finding.status in ("confirmed_change", "possible_change")
+            and finding.match_method == "deterministic"
+        ):
+            _require(
+                finding.category == category_for(finding.original.text),
+                "Deterministic finding category contradicts its source quotation",
+            )
+            expected = field_changes(
+                finding.original.text, finding.revised.text,
+                category=finding.category,
+            )
+            if (
+                finding.original.extraction_method == "ocr"
+                or finding.revised.extraction_method == "ocr"
+            ):
+                expected = [
+                    item.model_copy(update={"outcome": "uncertain"})
+                    for item in expected
+                ]
+            _require(
+                [item.model_dump() for item in finding.field_changes]
+                == [item.model_dump() for item in expected],
+                "Structured field claims do not match the source quotations",
+            )
+
     checklist_ids: set[str] = set()
     for item in report.checklist:
         _require(item.finding_id in finding_ids, "Checklist references a missing finding")
         _require(item.finding_id not in checklist_ids, "Duplicate review checklist entry")
         checklist_ids.add(item.finding_id)
         _require(item.requires_human_verification, "Human review was disabled")
+
+    required_review_ids = {
+        finding.id for finding in report.findings
+        if finding.category in {"deadline", "fee", "eligibility", "time", "instruction"}
+    }
+    _require(
+        checklist_ids == required_review_ids,
+        "Review checklist is missing consequential findings",
+    )
 
     _require(
         (report.semantic_assistance == "proposals_added") == (ai_proposals > 0),
