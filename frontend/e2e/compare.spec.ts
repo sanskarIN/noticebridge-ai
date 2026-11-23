@@ -768,3 +768,28 @@ test('Review first never silently treats an uncertain fee relationship as confir
   await expect(first).not.toContainText('Fee changed');
   await expect(first).toContainText('verify the intended requirement with the issuer');
 });
+
+
+test('Review first discloses hidden priority items and updates counts when reviewed', async ({
+  page,
+}) => {
+  await compareReviewFixture(
+    page,
+    [[
+      'Track A deadline: 13 December 2026',
+      'Track B deadline: 13 December 2026',
+      'Track C deadline: 13 December 2026',
+      'Track D deadline: 13 December 2026',
+    ]],
+    [['Eligibility requirement: diploma']],
+  );
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('li')).toHaveCount(3);
+  await expect(first).toContainText('Showing 3 of 5 prioritized items.');
+  await expect(first).toContainText('Review all findings below; this is not an official verification.');
+  await first.getByRole('button', { name: /Inspect finding: Unmatched deadline statement/ }).first().click();
+  await expect(page.locator('.finding').first()).toBeFocused();
+  await page.locator('.finding').first().getByRole('checkbox').check();
+  await expect(first).toContainText('Showing 3 of 4 prioritized items.');
+  await expect(page.locator('.finding')).toHaveCount(5);
+});

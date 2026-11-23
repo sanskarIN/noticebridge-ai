@@ -114,5 +114,5 @@ export function reviewPriorities(
   return findings.flatMap(finding => {
     if (checked.has(finding.id) || !reviewable.has(finding.id)) return [];
     return describeFinding(finding) ?? [];
-  }).sort((first, second) => first.rank - second.rank).slice(0, 3);
+  }).sort((first, second) => first.rank - second.rank);
 }
