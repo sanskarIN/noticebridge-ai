@@ -116,12 +116,14 @@ def _key(pair: dict) -> tuple[int, str, int, str]:
     )
 
 
-def _score(case: dict, original: bytes, revised: bytes) -> dict:
+def _score(
+    case: dict, original: bytes, revised: bytes, *, enable_ocr: bool = False
+) -> dict:
     result = run_isolated_comparison(
         original, revised,
         old_name=Path(case["original"]).name,
         new_name=Path(case["revised"]).name,
-        enable_ocr=False,
+        enable_ocr=enable_ocr,
         enable_semantic=False,
     )
     gold = Counter(_key(pair) for pair in case["expected_pairs"])
@@ -145,6 +147,10 @@ def _score(case: dict, original: bytes, revised: bytes) -> dict:
         "source_kind": case.get("source_kind", "unrecorded"),
         "label_method": case.get("label_method", "unrecorded"),
         "text_coverage": result.text_coverage,
+        "ocr_pages": sum(document.ocr_page_count for document in result.documents),
+        "pages_without_text": sum(
+            len(document.pages_without_text) for document in result.documents
+        ),
         "expected_pairs": sum(gold.values()),
         "predicted_pairs": sum(predicted.values()),
         "true_positive": sum((gold & predicted).values()),
@@ -159,8 +165,13 @@ def _ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
 
 
-def evaluate_labeled(manifest: Path) -> dict:
-    """Run deterministic, offline evaluation from a human-labeled case manifest."""
+def evaluate_labeled(manifest: Path, *, enable_ocr: bool = False) -> dict:
+    """Run offline evidence-pair evaluation from operator-supplied ground truth.
+
+    OCR is optional and never enables experimental semantic suggestions. Do
+    not compare OCR-on metrics against OCR-off metrics without reporting the
+    different extraction setting and runtime environment.
+    """
     resolved = manifest.resolve()
     version, cases, manifest_sha256 = _manifest(resolved)
     root = resolved.parent
@@ -174,7 +185,7 @@ def evaluate_labeled(manifest: Path) -> dict:
             root, case.get("revised"),
             case["revised_sha256"] if version == 2 else None,
         )
-        results.append(_score(case, old, new))
+        results.append(_score(case, old, new, enable_ocr=enable_ocr))
     tp = sum(case["true_positive"] for case in results)
     fp = sum(case["false_positive"] for case in results)
     fn = sum(case["false_negative"] for case in results)
@@ -189,6 +200,11 @@ def evaluate_labeled(manifest: Path) -> dict:
             case["label_method"] for case in results
         )),
         "case_count": len(results),
+        "ocr_enabled": enable_ocr,
+        "ocr_page_count": sum(case["ocr_pages"] for case in results),
+        "pages_without_text_count": sum(
+            case["pages_without_text"] for case in results
+        ),
         "pair_counts": {
             "true_positive": tp,
             "false_positive": fp,
@@ -206,7 +222,9 @@ def evaluate_labeled(manifest: Path) -> dict:
         "warning": (
             "Metrics measure exact page-and-quotation pair alignment only. "
             "Undefined denominators yield null, not 100%. Label quality, issuer "
-            "authenticity, and representative real-world accuracy are not established."
+            "authenticity, and representative real-world accuracy are not established. "
+            "OCR-on results depend on installed Tesseract and language packs; "
+            "inspect processing warnings and incomplete text coverage."
         ),
     }
 
@@ -218,6 +236,10 @@ def main() -> int:
         "--require-pinned-sources", action="store_true",
         help="Reject legacy version-1 manifests without pinned PDF hashes",
     )
+    parser.add_argument(
+        "--enable-ocr", action="store_true",
+        help="Opt into local English/Hindi Tesseract OCR for scanned pages",
+    )
     parser.add_argument("--min-precision", type=float, default=None)
     parser.add_argument("--min-recall", type=float, default=None)
     args = parser.parse_args()
@@ -225,7 +247,7 @@ def main() -> int:
         if threshold is not None and not 0 <= threshold <= 1:
             parser.error("Thresholds must be between 0 and 1")
     try:
-        result = evaluate_labeled(args.manifest)
+        result = evaluate_labeled(args.manifest, enable_ocr=args.enable_ocr)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
     if args.require_pinned_sources and result["manifest_version"] != 2:
