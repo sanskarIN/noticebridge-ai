@@ -8,6 +8,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
+from .body_limit import CompareBodyLimit
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument
 from .isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 from .models import ComparisonReport
@@ -34,6 +35,8 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+# Keep the pure ASGI body guard outermost, before multipart parsing/spooling.
+app.add_middleware(CompareBodyLimit)
 
 
 @app.get("/api/health")
