@@ -649,3 +649,108 @@ def test_cli_error_examples_are_explicit_opt_in(
     report = json.loads(capsys.readouterr().out)
     assert report["cases"][0]["error_examples"]["false_positive"]
     assert report["cases"][0]["error_examples"]["false_negative"] == []
+
+def _mixed_accuracy_gate_manifest(tmp_path, pdf_bytes):
+    """Two correct fictional cases must not mask one bad declared-independent case."""
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes),
+        source_kind="fictional", label_method="synthetic",
+    )
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    correct = dict(payload["cases"][0])
+    correct["id"] = "second_fictional"
+    independent = dict(correct)
+    independent.update({
+        "id": "declared_independent_failure",
+        "source_kind": "consented",
+        "label_method": "independent_human",
+        "expected_pairs": [{
+            "original_page": 1,
+            "original_text": "Deadline: 13 December 2026",
+            "revised_page": 1,
+            "revised_text": "Deadline: 25 December 2026",
+        }],
+    })
+    payload["cases"].extend([correct, independent])
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    return manifest
+
+
+@pytest.mark.parametrize(("flag", "value", "expected"), [
+    ("--min-precision", "0.60", 0),
+    ("--min-recall", "0.60", 0),
+    ("--max-unsupported-confirmed", "1", 0),
+    ("--min-independent-precision", "0.60", 1),
+    ("--min-independent-recall", "0.60", 1),
+    ("--max-independent-unsupported-confirmed", "0", 1),
+    ("--min-independent-precision", "0", 0),
+    ("--min-independent-recall", "0", 0),
+    ("--max-independent-unsupported-confirmed", "1", 0),
+])
+def test_independent_accuracy_gates_not_diluted_by_synthetic_cases(
+    tmp_path, pdf_bytes, monkeypatch, capsys, flag, value, expected,
+):
+    from evaluate_labeled import main
+
+    manifest = _mixed_accuracy_gate_manifest(tmp_path, pdf_bytes)
+    report = evaluate_labeled(manifest)
+    assert report["precision"] == report["recall"] == 0.6667
+    independent = report["cohorts"]["declared_independent_nonfictional"]
+    assert independent["precision"] == independent["recall"] == 0
+    assert independent["pair_counts"]["unsupported_confirmed_changes"] == 1
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, value])
+    assert main() == expected
+    assert json.loads(capsys.readouterr().out)["pair_counts"]["true_positive"] == 2
+
+
+@pytest.mark.parametrize(("flag", "value"), [
+    ("--min-independent-precision", "0"),
+    ("--min-independent-recall", "0"),
+    ("--max-independent-unsupported-confirmed", "0"),
+])
+def test_independent_accuracy_gates_reject_empty_cohort(
+    tmp_path, pdf_bytes, monkeypatch, capsys, flag, value,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, value])
+    assert main() == 1
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["case_count"] == 0
+
+
+def test_independent_recall_gate_rejects_undefined_denominator(
+    tmp_path, pdf_bytes, monkeypatch, capsys,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(
+        _dataset(tmp_path, pdf_bytes, labels=[]),
+        source_kind="public_notice", label_method="independent_human",
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["evaluate_labeled", str(manifest), "--min-independent-recall", "0"],
+    )
+    assert main() == 1
+    assert json.loads(capsys.readouterr().out)["cohorts"][
+        "declared_independent_nonfictional"
+    ]["recall"] is None
+
+
+@pytest.mark.parametrize(("flag", "value"), [
+    ("--min-independent-precision", "-0.01"),
+    ("--min-independent-recall", "1.01"),
+    ("--max-independent-unsupported-confirmed", "-1"),
+])
+def test_independent_accuracy_thresholds_reject_invalid_inputs(
+    tmp_path, pdf_bytes, monkeypatch, flag, value,
+):
+    from evaluate_labeled import main
+
+    manifest = _v2_manifest(_dataset(tmp_path, pdf_bytes))
+    monkeypatch.setattr(sys, "argv", ["evaluate_labeled", str(manifest), flag, value])
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 2
