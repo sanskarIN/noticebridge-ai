@@ -62,6 +62,7 @@ class Finding(BaseModel):
     revised: Evidence | None = None
     supporting_evidence: list[Evidence] = Field(default_factory=list)
     similarity: float = Field(ge=0, le=1)
+    match_method: Literal["deterministic", "semantic_proposal"] = "deterministic"
     authority_verified: bool = False
     field_changes: list[ValueChange] = Field(default_factory=list)
 
@@ -79,6 +80,10 @@ class ComparisonReport(BaseModel):
     checklist: list[ChecklistItem]
     warnings: list[str]
     text_coverage: Literal["all_pages_have_text", "partial", "inconclusive"] = "inconclusive"
+    semantic_assistance: Literal[
+        "not_requested", "no_candidates", "unavailable", "no_verified_pairs",
+        "proposals_added"
+    ] = "not_requested"
     verification_policy: str = (
         "Uploaded order does not establish authority. Verify consequential claims "
         "against the issuing organization's official publications."

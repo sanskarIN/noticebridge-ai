@@ -11,6 +11,7 @@ import sys
 
 from .compare import compare_documents
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument, extract_pdf
+from .semantic import propose_semantic_matches
 
 MAX_B64_CHARS = 4 * ((MAX_UPLOAD_BYTES + 2) // 3)
 MAX_REQUEST_BYTES = (2 * MAX_B64_CHARS) + 8192
@@ -45,7 +46,11 @@ def main() -> int:
         if len(raw) > MAX_REQUEST_BYTES:
             raise InvalidDocument("Comparison request exceeds the size limit")
         request = json.loads(raw)
-        if not isinstance(request, dict) or not isinstance(request.get("enable_ocr"), bool):
+        if (
+            not isinstance(request, dict)
+            or not isinstance(request.get("enable_ocr"), bool)
+            or not isinstance(request.get("enable_semantic", False), bool)
+        ):
             raise InvalidDocument("Malformed comparison request")
         original, old_name = _decode_pdf(request.get("original"))
         revised, new_name = _decode_pdf(request.get("revised"))
@@ -57,7 +62,10 @@ def main() -> int:
             revised, document_id="revised", filename=new_name,
             enable_ocr=request["enable_ocr"],
         )
-        response = compare_documents(old_document, new_document).model_dump_json().encode("utf-8")
+        report = compare_documents(old_document, new_document)
+        if request.get("enable_semantic", False):
+            report = propose_semantic_matches(report)
+        response = report.model_dump_json().encode("utf-8")
         if len(response) > MAX_RESULT_BYTES:
             raise InvalidDocument("Comparison result exceeds the safety limit")
     except (json.JSONDecodeError, UnicodeDecodeError):

@@ -71,6 +71,7 @@ async def compare(
     original: Annotated[UploadFile, File()],
     revised: Annotated[UploadFile, File()],
     enable_ocr: Annotated[bool, Form()] = False,
+    enable_semantic: Annotated[bool, Form()] = False,
 ) -> ComparisonReport:
     try:
         a = await _read_pdf(original)
@@ -83,7 +84,8 @@ async def compare(
             # wall-clock deadline; never block the ASGI event loop.
             return await run_in_threadpool(
                 run_isolated_comparison,
-                a, b, old_name=old_name, new_name=new_name, enable_ocr=enable_ocr,
+                a, b, old_name=old_name, new_name=new_name,
+                enable_ocr=enable_ocr, enable_semantic=enable_semantic,
             )
     except InvalidDocument as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

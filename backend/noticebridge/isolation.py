@@ -18,6 +18,8 @@ from .models import ComparisonReport
 
 NATIVE_TIMEOUT_SECONDS = 45
 OCR_TIMEOUT_SECONDS = 120
+SEMANTIC_TIMEOUT_SECONDS = 110
+OCR_SEMANTIC_TIMEOUT_SECONDS = 210
 MAX_RESULT_BYTES = 64 * 1024 * 1024
 
 # Explicitly avoid forwarding unrelated service credentials or cloud tokens to
@@ -27,7 +29,7 @@ WORKER_ENV_KEYS = (
     "PATH", "PYTHONPATH", "VIRTUAL_ENV", "SYSTEMROOT", "WINDIR",
     "TESSDATA_PREFIX", "LANG", "LC_ALL", "LC_CTYPE",
     "TMPDIR", "TMP", "TEMP", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
-    "PYTHONUTF8", "PYTHONIOENCODING",
+    "PYTHONUTF8", "PYTHONIOENCODING", "NOTICEBRIDGE_LOCAL_MODEL",
 )
 
 
@@ -67,6 +69,7 @@ def run_isolated_comparison(
     old_name: str,
     new_name: str,
     enable_ocr: bool,
+    enable_semantic: bool = False,
 ) -> ComparisonReport:
     """Parse and compare both PDFs outside the API process.
 
@@ -91,11 +94,15 @@ def run_isolated_comparison(
                 "base64": base64.b64encode(revised).decode("ascii"),
             },
             "enable_ocr": enable_ocr,
+            "enable_semantic": enable_semantic,
         },
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
-    timeout = OCR_TIMEOUT_SECONDS if enable_ocr else NATIVE_TIMEOUT_SECONDS
+    if enable_semantic:
+        timeout = OCR_SEMANTIC_TIMEOUT_SECONDS if enable_ocr else SEMANTIC_TIMEOUT_SECONDS
+    else:
+        timeout = OCR_TIMEOUT_SECONDS if enable_ocr else NATIVE_TIMEOUT_SECONDS
     try:
         process = subprocess.Popen(
             [sys.executable, "-m", "noticebridge.worker_entry",
