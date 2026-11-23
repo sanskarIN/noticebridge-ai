@@ -96,23 +96,6 @@ def verify_report_provenance(
     else:
         coverage = "all_pages_have_text"
     _require(report.text_coverage == coverage, "Reported extraction coverage is inconsistent")
-    _require(
-        len(report.warnings) <= 6 * MAX_PAGES + 12,
-        "Worker report includes excessive warning messages",
-    )
-    _require(
-        all(
-            warning_supported(
-                warning, summaries,
-                ocr_requested=ocr_requested,
-                semantic_requested=semantic_requested,
-                text_coverage=coverage,
-            )
-            for warning in report.warnings
-        ),
-        "Worker warning text is not supported by the verification policy",
-    )
-
     def check_evidence(evidence: Evidence, expected_role: str | None = None) -> None:
         role = evidence.document_id
         _require(expected_role is None or role == expected_role, "Evidence has the wrong role")
@@ -385,3 +368,20 @@ def verify_report_provenance(
             report.semantic_assistance == "not_requested" and ai_proposals == 0,
             "Semantic assistance appeared without opt-in",
         )
+
+    _require(
+        len(report.warnings) <= 6 * MAX_PAGES + 12,
+        "Worker report includes excessive warning messages",
+    )
+    _require(
+        all(
+            warning_supported(
+                warning, summaries,
+                ocr_requested=ocr_requested,
+                semantic_requested=semantic_requested,
+                text_coverage=coverage,
+            )
+            for warning in report.warnings
+        ),
+        "Worker warning text is not supported by the verification policy",
+    )
