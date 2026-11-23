@@ -46,3 +46,19 @@ test('exports source-bound evidence JSON and offers Hindi explanations', async (
   expect(payload.findings[0].authority_verified).toBe(false);
   expect(payload.findings[0].original.page).toBe(1);
 });
+
+
+test('keeps experimental local AI opt-in and submits only on explicit choice', async ({ page }) => {
+  await addSources(page);
+  const aiToggle = page.getByLabel(/Suggest matches with local AI/);
+  await expect(aiToggle).not.toBeChecked();
+  await aiToggle.check();
+  const requestPromise = page.waitForRequest(request =>
+    request.url().endsWith('/api/compare') && request.method() === 'POST'
+  );
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const request = await requestPromise;
+  expect(request.postData()).toContain('name="enable_semantic"');
+  await expect(page.locator('.finding')).toHaveCount(1);
+});
+

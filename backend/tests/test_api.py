@@ -117,3 +117,28 @@ def test_display_filename_filters_bidi_and_ascii_controls():
     )
     assert safe_filename("\r\n", fallback="original.pdf") == "original.pdf"
     assert safe_filename("सूचना.pdf", fallback="original.pdf") == "सूचना.pdf"
+
+
+def test_local_ai_is_explicit_opt_in(pdf_bytes, monkeypatch):
+    import noticebridge.api as module
+
+    original_runner = module.run_isolated_comparison
+    captured: list[bool] = []
+
+    def record(*args, **kwargs):
+        captured.append(kwargs.get("enable_semantic", False))
+        # Test the API switch without contacting any optional Ollama service.
+        kwargs["enable_semantic"] = False
+        return original_runner(*args, **kwargs)
+
+    monkeypatch.setattr(module, "run_isolated_comparison", record)
+    pdf = pdf_bytes([["Application deadline: 13 December 2026"]])
+    for form, expected in [({}, False), ({"enable_semantic": "true"}, True)]:
+        response = client.post("/api/compare", data=form, files={
+            "original": ("a.pdf", pdf, "application/pdf"),
+            "revised": ("b.pdf", pdf, "application/pdf"),
+        })
+        assert response.status_code == 200
+        assert response.json()["semantic_assistance"] == "not_requested"
+        assert captured[-1] is expected
+
