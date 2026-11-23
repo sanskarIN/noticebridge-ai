@@ -260,7 +260,7 @@ test('dark theme displays readable text extraction and local AI status panels', 
   await expect(modelFeedback).toBeVisible();
 
   async function contrastRatio(selector: string): Promise<number> {
-    return page.locator(selector).evaluate((element) => {
+    return page.locator(selector).first().evaluate((element) => {
       const panel = element.closest('.coverage-report, .ai-feedback') ?? element;
       const background = getComputedStyle(panel).backgroundColor;
       const foreground = getComputedStyle(element).color;
