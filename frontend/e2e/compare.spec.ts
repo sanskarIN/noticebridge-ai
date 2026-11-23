@@ -62,9 +62,9 @@ test('keeps experimental local AI opt-in and submits only on explicit choice', a
 });
 
 
-function widePagePdf(day: number): Buffer {
+function widePagePdf(day: number, baseline = 3900): Buffer {
   // Tiny fictional native-text PDF with a deliberately large page.
-  const stream = `BT /F1 24 Tf 80 3900 Td (Deadline: ${day} December 2026) Tj ET\n`;
+  const stream = `BT /F1 24 Tf 80 ${baseline} Td (Deadline: ${day} December 2026) Tj ET\n`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -85,7 +85,7 @@ function widePagePdf(day: number): Buffer {
   return Buffer.from(pdf);
 }
 
-test('bounds physical PDF canvas pixels on a high-resolution screen', async ({ browser }) => {
+test('reveals evidence low on a PDF page and bounds the high-resolution canvas', async ({ browser }) => {
   const context = await browser.newContext({
     deviceScaleFactor: 2,
     baseURL: 'http://127.0.0.1:5173',
@@ -94,17 +94,19 @@ test('bounds physical PDF canvas pixels on a high-resolution screen', async ({ b
     const page = await context.newPage();
     await page.goto('/');
     await page.locator('#original').setInputFiles({
-      name: 'wide-original.pdf', mimeType: 'application/pdf', buffer: widePagePdf(13),
+      name: 'wide-original.pdf', mimeType: 'application/pdf', buffer: widePagePdf(13, 140),
     });
     await page.locator('#revised').setInputFiles({
-      name: 'wide-revised.pdf', mimeType: 'application/pdf', buffer: widePagePdf(14),
+      name: 'wide-revised.pdf', mimeType: 'application/pdf', buffer: widePagePdf(14, 140),
     });
     await page.getByRole('button', { name: /Compare documents/ }).click();
     await expect(page.locator('.finding')).toHaveCount(1);
     await page.getByRole('button', { name: /Open PDF page/ }).first().click();
     const canvas = page.locator('.preview-dialog canvas');
     await expect(canvas).toBeVisible();
-    await expect(page.locator('.evidence-highlight')).toBeVisible();
+    await expect(page.locator('.evidence-highlight')).toBeInViewport({ ratio: 1 });
+    const viewer = page.getByRole('region', { name: 'PDF page viewer' });
+    await expect.poll(() => viewer.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
     const dimensions = await canvas.evaluate(el => ({
       width: (el as HTMLCanvasElement).width,
       height: (el as HTMLCanvasElement).height,
@@ -131,6 +133,14 @@ test('source preview traps keyboard focus, closes on Escape and restores focus',
   await expect(dialog.getByRole('link', { name: /Open PDF in new tab/ })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(close).toBeFocused();
+  const viewer = dialog.getByRole('region', { name: 'PDF page viewer' });
+  await expect(viewer.locator('.evidence-highlight')).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(viewer).toBeFocused();
+  await page.keyboard.press('PageDown');
+  await expect.poll(() => viewer.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('link', { name: /Open PDF in new tab/ })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(launch).toBeFocused();

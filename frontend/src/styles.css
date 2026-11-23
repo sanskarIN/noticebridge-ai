@@ -110,6 +110,8 @@
   outline: 2px solid #9df2d5;
   outline-offset: 2px;
 }
+
+.pdf-stage:focus-visible { outline: 2px solid #a1f1da; outline-offset: -3px; }
 .evidence-grid.single-evidence { grid-template-columns: 1fr; }
 .finding .checklist-item { padding: 0.85rem 1.3rem; cursor: pointer; }
 .finding-header > div { min-width: 0; flex-wrap: wrap; }

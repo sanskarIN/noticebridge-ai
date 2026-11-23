@@ -108,6 +108,8 @@ report match the live worker by running
 `python backend/benchmarks/generate_showcase.py --check` from the repository
 root with the backend installed. The browser tests exercise real API runs,
 source preview and export in the API-free build.
+Passing browser CI runs also attach the tested files as the
+`noticebridge-static-showcase` build artifact.
 
 ## Generate the basic fictional PDF pair
 

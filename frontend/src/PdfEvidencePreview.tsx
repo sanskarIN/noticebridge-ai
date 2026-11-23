@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Evidence } from './comparison';
@@ -12,6 +12,7 @@ type PdfEvidence = Pick<Evidence, 'bbox' | 'page_width' | 'page_height' | 'page_
 const previewCopy = {
   rendering: 'Rendering PDF page…',
   page: 'Source PDF page',
+  viewer: 'PDF page viewer',
   uncovered: 'No text was extracted from this page. Inspect the page directly.',
   geometry: 'Page geometry could not be verified; inspect the source without an approximate highlight.',
   highlight: 'Source highlight is positioned using the PDF page transform. Verify the original text and page.',
@@ -88,6 +89,8 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence }: {
   evidence?: PdfEvidence;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const highlightRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [highlight, setHighlight] = useState<CSSProperties | null>(null);
@@ -176,14 +179,25 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence }: {
     };
   }, [file, pageNumber, evidence]);
 
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    const marker = highlightRef.current;
+    if (!highlight || !stage || !marker) return;
+    const viewport = stage.getBoundingClientRect();
+    const target = marker.getBoundingClientRect();
+    if (target.top < viewport.top + 8 || target.bottom > viewport.bottom - 8) {
+      stage.scrollTop += target.top - viewport.top - stage.clientHeight / 3;
+    }
+  }, [highlight]);
+
   return <div className="pdf-preview-body">
     {state === 'loading' && <p role="status">{t.rendering}</p>}
     {state === 'error' && <p role="alert" className="error-banner">{error}</p>}
-    <div className="pdf-stage">
+    <div ref={stageRef} className="pdf-stage" role="region" aria-label={t.viewer} tabIndex={0}>
       <div className="pdf-canvas-holder">
         <canvas ref={canvasRef} role="img" aria-label={`${t.page} ${pageNumber}`} />
         {state === 'ready' && highlight &&
-          <div className="evidence-highlight" style={highlight} aria-hidden="true" />}
+          <div ref={highlightRef} className="evidence-highlight" style={highlight} aria-hidden="true" />}
       </div>
     </div>
     {state === 'ready' && <p className="preview-help">
