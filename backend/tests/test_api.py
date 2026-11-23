@@ -214,3 +214,47 @@ def test_local_ai_is_explicit_opt_in(pdf_bytes, monkeypatch):
         assert response.json()["semantic_assistance"] == "not_requested"
         assert captured[-1] is expected
 
+
+@pytest.mark.parametrize(("provided", "expected"), [
+    ("private／folder／visible.pdf", "visible.pdf"),
+    ("C:＼\u005cprivate＼\u005cvisible.pdf", "visible.pdf"),
+    ("folder／a.pdf", "a.pdf"),
+])
+def test_unicode_compatibility_separators_are_stripped_before_display(
+    provided, expected,
+):
+    from noticebridge.api import safe_filename
+
+    assert safe_filename(provided, fallback="original.pdf") == expected
+
+
+def test_unicode_path_confusables_cannot_spoof_report_filenames(pdf_bytes):
+    response = client.post("/api/compare", files={
+        "original": (
+            "C:＼secret／old.pdf",
+            pdf_bytes([["Deadline: 13 December 2026"]]),
+            "application/pdf",
+        ),
+        "revised": (
+            "private／new.pdf",
+            pdf_bytes([["Deadline: 14 December 2026"]]),
+            "application/pdf",
+        ),
+    })
+    assert response.status_code == 200
+    payload = response.json()
+    assert [doc["filename"] for doc in payload["documents"]] == ["old.pdf", "new.pdf"]
+    for finding in payload["findings"]:
+        if finding["original"]:
+            assert finding["original"]["filename"] == "old.pdf"
+        if finding["revised"]:
+            assert finding["revised"]["filename"] == "new.pdf"
+
+
+def test_very_long_safe_filename_retains_pdf_extension():
+    from noticebridge.api import safe_filename
+
+    sanitized = safe_filename("a" * 240 + ".pdf", fallback="original.pdf")
+    assert len(sanitized) == 200
+    assert sanitized.endswith(".pdf")
+    assert sanitized.count(".pdf") == 1
