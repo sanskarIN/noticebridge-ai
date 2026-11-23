@@ -53,12 +53,12 @@ test('keeps experimental local AI opt-in and submits only on explicit choice', a
   const aiToggle = page.getByLabel(/Suggest matches with local AI/);
   await expect(aiToggle).not.toBeChecked();
   await aiToggle.check();
-  const requestPromise = page.waitForRequest(request =>
-    request.url().endsWith('/api/compare') && request.method() === 'POST'
+  const responsePromise = page.waitForResponse(response =>
+    response.url().endsWith('/api/compare') && response.request().method() === 'POST'
   );
   await page.getByRole('button', { name: /Compare documents/ }).click();
-  const request = await requestPromise;
-  expect(request.postData()).toContain('name="enable_semantic"');
+  const response = await responsePromise;
+  expect((await response.json()).semantic_assistance).toBe('no_candidates');
   await expect(page.locator('.finding')).toHaveCount(1);
 });
 
