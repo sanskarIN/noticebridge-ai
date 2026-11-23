@@ -8,7 +8,7 @@ import argparse
 import json
 import re
 from collections import Counter
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from noticebridge.compare import normalize
 from noticebridge.extract import MAX_UPLOAD_BYTES
@@ -60,9 +60,21 @@ def _manifest(path: Path) -> list[dict]:
 def _pdf(root: Path, relative: object) -> bytes:
     if not isinstance(relative, str) or not relative:
         raise ValueError("PDF path must be a nonempty relative string")
-    source = Path(relative)
-    if source.is_absolute() or ".." in source.parts or source.suffix.lower() != ".pdf":
+    # Enforce the same relative-path rules on Linux and Windows. In
+    # particular, '/tmp/x.pdf' is not considered absolute by Windows Path,
+    # while 'C:\\\\x.pdf' is not recognized as absolute by POSIX Path.
+    posix = PurePosixPath(relative)
+    windows = PureWindowsPath(relative)
+    if (
+        "\\\\" in relative
+        or posix.is_absolute()
+        or windows.root
+        or windows.drive
+        or ".." in posix.parts
+        or posix.suffix.lower() != ".pdf"
+    ):
         raise ValueError("PDF path must refer to a relative .pdf under the manifest folder")
+    source = Path(relative)
     resolved = (root / source).resolve()
     if not resolved.is_relative_to(root):
         raise ValueError("PDF path escapes the evaluation dataset folder")

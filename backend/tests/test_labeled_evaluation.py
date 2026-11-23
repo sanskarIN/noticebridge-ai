@@ -80,6 +80,8 @@ def test_duplicate_labeled_occurrences_not_collapsed(tmp_path, pdf_bytes):
 
 @pytest.mark.parametrize("file_path", [
     "../outside.pdf", "/tmp/outside.pdf", "notice.txt",
+    r"C:\\private\\outside.pdf", r"..\\outside.pdf",
+    r"\\\\server\\share\\outside.pdf",
 ])
 def test_manifest_does_not_read_outside_or_non_pdf_files(
     tmp_path, pdf_bytes, file_path

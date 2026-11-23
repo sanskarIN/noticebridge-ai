@@ -133,8 +133,10 @@ def propose_semantic_matches(report: ComparisonReport) -> ComparisonReport:
                 "स्थानीय AI ने इन अंशों का संभावित संबंध सुझाया है। "
                 "यह मिलान और आधिकारिकता सत्यापित नहीं हैं।"
             ),
-            original=original.original,
-            revised=revised.revised,
+            # Make separate evidence objects: mutation of an AI suggestion
+            # must never mutate the deterministic source it references.
+            original=original.original.model_copy(deep=True),
+            revised=revised.revised.model_copy(deep=True),
             similarity=0,
             match_method="semantic_proposal",
         ))

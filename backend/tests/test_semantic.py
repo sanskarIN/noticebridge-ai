@@ -59,6 +59,16 @@ def test_opt_in_model_pairing_remains_unverified_and_preserves_citations(
     ]
     assert unmatched_report.semantic_assistance == "not_requested"
 
+    # Proposals and deterministic citations must not share mutable objects.
+    unmatched_original = next(f.original for f in result.findings if
+                              f.status == "missing_information" and f.original)
+    unmatched_revised = next(f.revised for f in result.findings if
+                             f.status == "missing_information" and f.revised)
+    assert proposal.original is not unmatched_original
+    assert proposal.revised is not unmatched_revised
+    proposal.original.text = "Untrusted rewritten quotation"
+    assert unmatched_original.text == original_text
+
 
 @pytest.mark.parametrize("response", [
     {"pairs": [{"original_id": "invented", "revised_id": "f9999"}]},
