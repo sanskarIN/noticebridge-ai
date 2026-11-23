@@ -229,8 +229,21 @@ PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
   --min-independent-cases 20 --min-independent-distinct-pairs 20 \
   --require-distinct-independent-pairs \
   --min-independent-precision 0.90 --min-independent-recall 0.90 \
-  --max-independent-unsupported-confirmed 0
+  --max-independent-unsupported-confirmed 0 \
+  --max-independent-incomplete-cases 0 \
+  --max-independent-limited-matching-cases 0
 ~~~
+
+Evidence-pair accuracy is not enough when some pages have no usable text
+or the matcher exhausts its candidate budget. Optional
+`--max-independent-incomplete-cases N` limits cases with incomplete text
+coverage after any opted-in OCR. Optional
+`--max-independent-limited-matching-cases N` limits cases whose fuzzy
+matching was explicitly reported as limited. Set either to `0` for a
+strict release gate; use larger thresholds only with an explicit, recorded
+exception review. Both fail on an empty declared independent cohort. A
+complete text-coverage result does **not** prove OCR accuracy, source
+authenticity or completeness of a notice's meaning.
 
 These flags evaluate **only** the declared independent non-fictional
 cohort, using raw exact evidence-pair counts before rounding. Their
