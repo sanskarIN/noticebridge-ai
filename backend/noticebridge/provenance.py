@@ -196,8 +196,9 @@ def verify_report_provenance(
                 and not finding.field_changes
                 and len(evidence) == 2
                 and all(item.extraction_method == "native" for item in evidence)
-                and len({item.document_id for item in evidence}) == 1,
-                "Contradiction must have native support from one PDF",
+                and len({item.document_id for item in evidence}) == 1
+                and len({item.page for item in evidence}) == 1,
+                "Contradiction must have native support from one PDF page",
             )
             first_dates = date_tokens(evidence[0].text)
             second_dates = date_tokens(evidence[1].text)
