@@ -183,3 +183,99 @@ def test_empty_body_is_replayed_without_disconnection():
     assert body == b"ok"
     assert received == [b""]
 
+
+def test_stalled_upload_receives_408(monkeypatch):
+    monkeypatch.setattr(body_limit, "MAX_RECEIVE_SECONDS", 0.01)
+    scope = {"type": "http", "path": "/api/compare", "method": "POST", "headers": []}
+    sent = []
+    app_invocations = []
+
+    async def receive():
+        await asyncio.sleep(0.2)
+        return {"type": "http.request", "body": b"hello", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    async def inner(scope, receive, send):
+        app_invocations.append(True)
+
+    async def run():
+        guard = body_limit.CompareBodyLimit(inner)
+        await guard(scope, receive, send)
+        assert guard._active == 0
+
+    asyncio.run(run())
+    assert not app_invocations
+    assert next(x["status"] for x in sent if x["type"] == "http.response.start") == 408
+    payload = b"".join(x.get("body", b"") for x in sent)
+    assert json.loads(payload)["detail"] == "Comparison upload took too long"
+
+
+def test_concurrent_upload_ceiling_rejects_excess_and_releases_capacity(monkeypatch):
+    monkeypatch.setattr(body_limit, "MAX_ACTIVE_COMPARE_REQUESTS", 1)
+    scope = {"type": "http", "path": "/api/compare", "method": "POST", "headers": []}
+    seen = []
+    first_sent = []
+    second_sent = []
+    third_sent = []
+
+    async def inner(scope, receive, send):
+        packet = await receive()
+        seen.append(packet.get("body"))
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def run():
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        async def hanging_receive():
+            entered.set()
+            await release.wait()
+            return {"type": "http.request", "body": b"first", "more_body": False}
+
+        async def immediate_receive():
+            return {"type": "http.request", "body": b"next", "more_body": False}
+
+        async def first_send(message):
+            first_sent.append(message)
+
+        async def second_send(message):
+            second_sent.append(message)
+
+        async def third_send(message):
+            third_sent.append(message)
+
+        guard = body_limit.CompareBodyLimit(inner)
+        waiting = asyncio.create_task(guard(scope, hanging_receive, first_send))
+        await entered.wait()
+        assert guard._active == 1
+        await guard(scope, immediate_receive, second_send)
+        assert guard._active == 1
+        release.set()
+        await waiting
+        assert guard._active == 0
+        await guard(scope, immediate_receive, third_send)
+        assert guard._active == 0
+
+    asyncio.run(run())
+    statuses = [
+        next(x["status"] for x in sent if x["type"] == "http.response.start")
+        for sent in [first_sent, second_sent, third_sent]
+    ]
+    assert statuses == [200, 503, 200]
+    assert seen == [b"first", b"next"]
+    assert json.loads(b"".join(x.get("body", b"") for x in second_sent)) == {
+        "detail": "Too many simultaneous comparison uploads"
+    }
+
+
+def test_actual_upload_limit_response_stays_cache_disabled():
+    response = TestClient(app).post(
+        "/api/compare", content=b"not multipart",
+        headers={"Content-Length": str(body_limit.MAX_COMPARE_BODY_BYTES + 1)},
+    )
+    assert response.status_code == 413
+    assert response.headers["cache-control"] == "no-store"
+
