@@ -35,3 +35,10 @@
   overflow-wrap: anywhere;
 }
 
+/* Side-by-side local exports stay usable on narrow screens without overflow. */
+.export-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0}
+.export-actions .export-button{max-width:100%;white-space:normal;text-align:left;overflow-wrap:anywhere}
+@media(max-width:720px){
+  .results .section-heading{flex-direction:column;align-items:stretch}
+  .export-actions{justify-content:flex-start}
+}
