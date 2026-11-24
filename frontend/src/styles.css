@@ -52,6 +52,15 @@
 .coverage-documents li + li { margin-top: 0.5rem; }
 .coverage-documents summary { cursor: pointer; color: #a1f0dc; margin-top: 0.4rem; }
 .coverage-page-links { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-block: 0.5rem; }
+.coverage-report h3 { font-size: 1rem; margin: 0; }
+.coverage-documents > li { overflow-wrap: anywhere; }
+.coverage-page { display: flex; align-items: center; gap: 0.5rem; padding-inline-end: 0.45rem; }
+.coverage-page label { display: inline-flex; align-items: center; min-height: 2rem; gap: 0.25rem; }
+.coverage-page input { accent-color: #77ddbe; }
+.coverage-ocr-action { border-top: 1px solid #35505f; margin-top: 0.75rem; padding-top: 0.75rem; }
+.coverage-ocr-action button { max-width: 100%; }
+.coverage-ocr-action :focus-visible { outline: 2px solid #a1f0dc; outline-offset: 3px; }
+.coverage-report .error-banner { color: #ffb9ad; }
 .review-findings { margin-top: 1.75rem; }
 .review-findings h3 { margin-bottom: 0.5rem; }
 .review-progress, .review-count { color: #bacfdf; font-size: 0.875rem; }

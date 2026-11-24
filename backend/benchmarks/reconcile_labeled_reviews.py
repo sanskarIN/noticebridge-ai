@@ -123,8 +123,8 @@ def reconcile_reviews(
     return audit, {"version": 2, "cases": evaluation_cases, "label_review": audit}
 
 
-def verify_reconciled_manifest(path: Path, expected: dict, *, root: Path) -> None:
-    """Check a saved result against freshly reconciled reviews without rewriting it."""
+def verify_reconciled_manifest(path: Path, expected: dict, *, root: Path) -> str:
+    """Check a saved result and return its canonical digest without rewriting it."""
     if path.resolve().parent != root or path.suffix.lower() != ".json":
         raise ValueError("Verification requires a JSON manifest in the dataset folder")
     version, _, actual_digest = _manifest(path)
@@ -133,6 +133,7 @@ def verify_reconciled_manifest(path: Path, expected: dict, *, root: Path) -> Non
     ).encode("utf-8")
     if version != 2 or actual_digest != hashlib.sha256(canonical).hexdigest():
         raise ValueError("Saved reconciliation does not match the supplied reviews and audit")
+    return actual_digest
 
 
 def main(argv: list[str] | None = None) -> int:
