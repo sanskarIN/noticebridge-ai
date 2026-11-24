@@ -92,6 +92,17 @@ def _manifest(path: Path) -> tuple[int, list[dict], str]:
     return version, cases, manifest_sha256
 
 
+def _require_ready_for_scoring(cases: list[dict]) -> None:
+    """An explicitly unfinished review is not a negative ground-truth label.
+
+    Legacy manifests without a completion marker remain supported. A marker
+    supplied by a reviewer must be the JSON boolean true, not a truthy value.
+    """
+    for case in cases:
+        if "review_complete" in case and case["review_complete"] is not True:
+            raise ValueError(f"{case['id']}: explicitly unfinished review cannot be scored")
+
+
 def _pdf(root: Path, relative: object, expected_sha256: str | None = None) -> bytes:
     if not isinstance(relative, str) or not relative:
         raise ValueError("PDF path must be a nonempty relative string")
@@ -316,6 +327,7 @@ def evaluate_labeled(
     """
     resolved = manifest.resolve()
     version, cases, manifest_sha256 = _manifest(resolved)
+    _require_ready_for_scoring(cases)
     if require_pinned_sources and version != 2:
         raise ValueError("Pinned sources require a version-2 manifest")
     root = resolved.parent

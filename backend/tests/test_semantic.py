@@ -1,5 +1,7 @@
 """Optional local-model assistance must never invent or confirm PDF evidence."""
 
+import json
+
 import httpx
 import pytest
 
@@ -213,3 +215,143 @@ def test_only_shared_categories_are_eligible(monkeypatch, pdf_bytes):
     result = semantic.propose_semantic_matches(report)
     assert result.semantic_assistance == "no_candidates"
     assert all(f.status == "missing_information" for f in result.findings)
+
+
+@pytest.mark.parametrize("raw", [
+    '{"pairs":[],"pairs":[]}',
+    '{"pairs":[{"original_id":"f1","original_id":"f2","revised_id":"f3"}]}',
+    '{"pairs":[],"score":NaN}',
+    '{"pairs":[],"score":Infinity}',
+])
+def test_model_json_rejects_ambiguous_or_nonstandard_members(raw):
+    with pytest.raises(ValueError):
+        semantic._decode_model_json(raw)
+
+
+@pytest.mark.parametrize("raw", [
+    b'{"response":"{}","response":"{}"}',
+    json.dumps({"response": '{"pairs":[],"pairs":[]}'}).encode(),
+])
+def test_local_model_malformed_envelope_and_inner_json_are_rejected(monkeypatch, raw):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def raise_for_status(self):
+            pass
+
+        def iter_bytes(self):
+            yield raw
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def stream(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(semantic.httpx, "Client", Client)
+    with pytest.raises(ValueError, match="Duplicate field"):
+        semantic._model_pairs([], [])
+
+
+@pytest.mark.parametrize("as_bytes", [False, True])
+def test_model_json_depth_boundary_and_string_escapes(as_bytes):
+    limit = semantic.MAX_MODEL_JSON_DEPTH
+    data = "[" * limit + "0" + "]" * limit
+    assert semantic._decode_model_json(data.encode() if as_bytes else data) is not None
+    excessive = '{"value":' + data + "}"
+    with pytest.raises(ValueError, match="nesting limit"):
+        semantic._decode_model_json(excessive.encode() if as_bytes else excessive)
+    quoted = {"text": '[{' * 100 + '"\\' + '}]' * 100}
+    raw = json.dumps(quoted)
+    assert semantic._decode_model_json(raw.encode() if as_bytes else raw) == quoted
+
+
+@pytest.mark.parametrize("raw", ["]", "[}", '{"value":[0}', b"\xff"])
+def test_model_json_invalid_structure_or_encoding(raw):
+    with pytest.raises(ValueError):
+        semantic._decode_model_json(raw)
+
+
+def test_deeply_nested_model_json_preserves_deterministic_report(monkeypatch, unmatched_report):
+    def malformed(*args):
+        return semantic._decode_model_json("[" * 4000 + "]" * 4000)
+
+    monkeypatch.setattr(semantic, "_model_pairs", malformed)
+    result = semantic.propose_semantic_matches(unmatched_report)
+    assert result.semantic_assistance == "unavailable"
+    assert result.findings == unmatched_report.findings
+    assert result.checklist == unmatched_report.checklist
+
+
+@pytest.mark.parametrize("extra", ["authority_verified", "confidence", "explanation"])
+def test_model_extra_pair_claims_are_not_admitted(monkeypatch, unmatched_report, extra):
+    old = next(f.id for f in unmatched_report.findings if f.original)
+    new = next(f.id for f in unmatched_report.findings if f.revised)
+    answer = {"pairs": [{"original_id": old, "revised_id": new, extra: True}]}
+    monkeypatch.setattr(semantic, "_model_pairs", lambda *args: answer)
+    result = semantic.propose_semantic_matches(unmatched_report)
+    assert result.semantic_assistance == "no_verified_pairs"
+    assert result.findings == unmatched_report.findings
+
+
+def _expanded_unmatched(report):
+    """Construct distinct unmatched sources without depending on fuzzy thresholds."""
+    expanded = report.model_copy(deep=True)
+    for role in ("original", "revised"):
+        seed = next(f for f in report.findings if getattr(f, role))
+        for index in (2, 3):
+            finding = seed.model_copy(deep=True)
+            finding.id = f"{role}-{index}"
+            evidence = getattr(finding, role)
+            evidence.text += f" phase {index}"
+            expanded.findings.append(finding)
+    return expanded
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_conflicting_model_edges_are_rejected_independent_of_order(
+    monkeypatch, unmatched_report, reverse,
+):
+    report = _expanded_unmatched(unmatched_report)
+    old = next(f.id for f in report.findings if f.original)
+    new = next(f.id for f in report.findings if f.revised)
+    pairs = [
+        {"original_id": old, "revised_id": new},
+        {"original_id": old, "revised_id": "revised-2"},
+        {"original_id": "original-2", "revised_id": new},
+        {"original_id": "original-3", "revised_id": "revised-3"},
+    ]
+    if reverse:
+        pairs.reverse()
+    monkeypatch.setattr(semantic, "_model_pairs", lambda *args: {"pairs": pairs})
+    result = semantic.propose_semantic_matches(report)
+    suggestions = [f for f in result.findings if f.match_method == "semantic_proposal"]
+    assert len(suggestions) == 1
+    assert suggestions[0].original.text.endswith("phase 3")
+    assert suggestions[0].revised.text.endswith("phase 3")
+    assert result.findings[:len(report.findings)] == report.findings
+
+
+def test_valid_pairs_have_stable_ids_regardless_of_model_order(monkeypatch, unmatched_report):
+    report = _expanded_unmatched(unmatched_report)
+    pairs = [
+        {"original_id": "original-2", "revised_id": "revised-2"},
+        {"original_id": "original-3", "revised_id": "revised-3"},
+    ]
+    monkeypatch.setattr(semantic, "_model_pairs", lambda *args: {"pairs": pairs})
+    first = semantic.propose_semantic_matches(report)
+    pairs.reverse()
+    second = semantic.propose_semantic_matches(report)
+    assert first == second
+    assert first.semantic_assistance == "proposals_added"

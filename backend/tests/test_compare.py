@@ -296,6 +296,16 @@ def test_same_page_contradictions_remain_evidence_linked_across_multiple_pages(
     ("आवेदन शुल्क।", "fee"),
     ("सभी के लिए पात्रता आवश्यक है", "eligibility"),
     ("पात्रताहीन आवेदन मान्य नहीं", "general"),
+    ("Registration closes on 13 Dec 2026", "deadline"),
+    ("The final date for submission is 14 Dec 2026", "deadline"),
+    ("Last day to apply: 19 Dec 2026", "deadline"),
+    ("Gate closing time: 17:00", "time"),
+    ("Gate closes at 17:00", "time"),
+    ("Examination time: 18:00", "time"),
+    ("Eligibility cut-off date: 13 Dec 2026", "eligibility"),
+    ("The registration closure notice is available", "general"),
+    ("This application closesource reference is unrelated", "general"),
+    ("The gate closes atlantis exhibit", "general"),
 ])
 def test_category_matchers_use_token_boundaries(passage, expected):
     from noticebridge.compare import category_for
@@ -327,3 +337,59 @@ def test_real_fee_variants_remain_evidence_backed(pdf_bytes):
     assert finding.field_changes[0].outcome == "changed"
     assert len(report.checklist) == 1
 
+
+
+@pytest.mark.parametrize("label", [
+    "Registration closes on", "Application closes on", "Last day to apply:",
+    "Final date for submission:", "Submission closes on",
+])
+def test_english_closure_labels_support_evidence_linked_date_changes(pdf_bytes, label):
+    old, new = f"{label} 13 Dec 2026", f"{label} 14 Dec 2026"
+    report = compare_documents(*_pair(pdf_bytes, old, new))
+    (finding,) = report.findings
+    assert (finding.status, finding.category) == ("confirmed_change", "deadline")
+    assert (finding.original.text, finding.revised.text) == (old, new)
+    (delta,) = finding.field_changes
+    assert (delta.kind, delta.outcome) == ("date", "changed")
+    assert (delta.original.canonical, delta.revised.canonical) == ("2026-12-13", "2026-12-14")
+    assert not finding.authority_verified
+    assert report.checklist[0].finding_id == finding.id
+
+
+@pytest.mark.parametrize("label", [
+    "Gate closing time:", "Gate closes at", "Entry closes at",
+    "Exam starts at", "Examination time:", "Reporting starts at",
+])
+def test_english_schedule_labels_support_evidence_linked_clock_changes(pdf_bytes, label):
+    old, new = f"{label} 17:00 IST", f"{label} 18:00 IST"
+    report = compare_documents(*_pair(pdf_bytes, old, new))
+    (finding,) = report.findings
+    assert (finding.status, finding.category) == ("confirmed_change", "time")
+    assert (finding.original.text, finding.revised.text) == (old, new)
+    (delta,) = finding.field_changes
+    assert (delta.kind, delta.outcome) == ("time", "changed")
+    assert (delta.original.canonical, delta.revised.canonical) == ("17:00", "18:00")
+    assert not finding.authority_verified
+    assert report.checklist[0].finding_id == finding.id
+
+
+def test_eligibility_cutoff_is_not_a_deadline_change(pdf_bytes):
+    report = compare_documents(*_pair(
+        pdf_bytes, "Eligibility cut-off date: 13 Dec 2026",
+        "Eligibility cut-off date: 14 Dec 2026",
+    ))
+    (finding,) = report.findings
+    assert finding.category == "eligibility"
+    assert not finding.field_changes
+    assert not finding.authority_verified
+
+
+def test_gate_closing_time_keeps_shift_and_zone_scope(pdf_bytes):
+    report = compare_documents(*_pair(
+        pdf_bytes, "Gate closing time Shift 1: 17:00 IST",
+        "Gate closing time Shift 2: 18:00 UTC",
+    ))
+    assert report.findings
+    assert all(f.category == "time" for f in report.findings)
+    assert all(f.status != "confirmed_change" for f in report.findings)
+    assert not any(delta.outcome == "changed" for f in report.findings for delta in f.field_changes)

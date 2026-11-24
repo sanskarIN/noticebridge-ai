@@ -302,6 +302,41 @@ upload its JSON output to public CI logs or an issue tracker without redacting
 the previews. Truncated normalized excerpts are for triage, not substitutes
 for the full original PDF and human adjudication.
 
+## Separate opt-in local AI experiment
+
+The deterministic evaluator never calls the model. To measure incremental
+utility of semantic proposals, use this separate SHA-pinned experiment with
+Ollama running on a trusted local machine:
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_semantic.py \
+  evaluation/independent-pinned.json --run-local-model \
+  --min-independent-distinct-pairs 20 \
+  --min-independent-proposal-precision 0.90 \
+  --min-independent-miss-recovery 0.20
+~~~
+
+Opt-in sends bounded unmatched PDF excerpts to the fixed loopback endpoint.
+Do not run on private data without authorization; ensure the local server
+does not forward requests elsewhere. Both worker runs use the same bytes
+and OCR selections. Changes to deterministic findings, checklist, coverage
+metadata or warning prefix abort scoring. Proposals earn credit only for
+labeled occurrences missed by the baseline; unsupported or redundant
+proposals count against incremental precision. Recovery divides newly
+recovered gold occurrences by all baseline-missed occurrences. Undefined
+denominators remain null. JSON reports counts, source hashes, case IDs,
+model outcomes, coverage and elapsed times, not source quotes.
+
+The command exits nonzero if any model run is unavailable or no proposals
+are admitted. Independent gates use raw counts, reject undefined metrics
+and exclude fictional cases. The distinct-pair gate rejects repetitions
+and requires an independent proposal. Targets above are engineering goals,
+not measured performance. Record exact model weights and environment
+separately; a configured model name is not a weight fingerprint.
+This measures alignment, not semantic truth, issuer authority, or
+correctness of recommended actions, and does not replace the deterministic
+release gate.
+
 ## 4. Build a useful independent evaluation corpus
 
 For the December completion gate, use a permission-safe, diverse set of
@@ -317,15 +352,64 @@ human-reviewed examples with recorded provenance:
 - A frozen test split independent of development examples and the fictional
   demonstration.
 
+### Audit development/held-out split isolation
+
+Before adjusting engine thresholds or measuring a held-out corpus, compare
+the two pinned manifests:
+
+~~~sh
+python backend/benchmarks/audit_evaluation_split.py \
+  evaluation/dev/labels.json evaluation/heldout/labels.json
+~~~
+
+The audit rechecks every source hash and reports shared document bytes even
+if filenames, roles or case IDs differ. Repeated unordered PDF pairs within
+either split and any cross-split document overlap fail the check. A document
+can occur in multiple distinct pairs within one split, such as a sequence
+of amendments. The report contains fingerprints and case IDs, not source
+quotes; no extraction or model inference runs.
+
+Passing this audit proves only byte-level separation. PDFs regenerated
+with different bytes may still contain the same content. Keep related
+notice versions, issuer/event families and near-duplicates together within
+one split; manually review provenance and never tune against the final
+held-out set.
+
 ### Reconcile two independent reviews
 
-Give both reviewers the same version-2 manifest with the PDF fingerprints pinned
-and the `expected_pairs` arrays empty. Keep the reviewers' copies separate, and
-have each reviewer label the PDFs without seeing the other person's labels or the
-engine's predictions. In each finished case, set
+Generate separate blank reviewer copies from a version-2 pinned source manifest:
+
+~~~sh
+python backend/benchmarks/prepare_independent_review.py \
+  evaluation/source.json --output evaluation/review-a.json
+python backend/benchmarks/prepare_independent_review.py \
+  evaluation/source.json --output evaluation/review-b.json
+~~~
+
+The preparation tool verifies all PDF fingerprints, copies only source identity
+and OCR selection fields, strips existing quotations, predictions and audit
+metadata, and writes empty `expected_pairs` arrays with `review_complete: false`.
+It refuses to overwrite a review file. Distribute the copies independently;
+do not distribute an existing answer key or engine predictions. Have each
+reviewer label the PDFs without seeing the other person's labels. In each finished case, set
 `"label_method": "independent_human"` and `"review_complete": true`. The
 completion field distinguishes a reviewed case with zero expected pairs from an
-unreviewed case. Use pseudonymous reviewer IDs.
+unreviewed case. Both evaluators reject any explicitly incomplete case before
+starting a worker. Older manifests without the field still work for
+compatibility. Use pseudonymous reviewer IDs.
+
+Before reconciliation, check both finished copies against the same source:
+
+~~~sh
+python backend/benchmarks/prepare_independent_review.py \
+  evaluation/source.json --check evaluation/review-a.json
+python backend/benchmarks/prepare_independent_review.py \
+  evaluation/source.json --check evaluation/review-b.json
+~~~
+
+This reports only case counts and manifest fingerprints, checks source identity,
+PDF hashes and declared completion, and never scores or extracts quotations.
+It cannot prove that a person actually reviewed the PDFs independently.
 
 Run the reconciliation from the repository root. Keep the manifests in the same
 directory as each other so their relative PDF paths refer to the same dataset.

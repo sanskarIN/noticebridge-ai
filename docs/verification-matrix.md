@@ -18,7 +18,7 @@ This note documents the conservative behavior of the third engineering milestone
 12. Experimental local semantic proposals may only pair genuine original-only and revised-only evidence IDs with the same category. They are **additive**: the original deterministic missing-information findings and their review checklist remain visible. The parent API checks each proposed source against those unmatched passages, rejecting invented or reused source evidence. Proposals are always `possible_change`, never verified facts or model-generated citations. No model request happens without explicit opt-in.
 13. Before returning a worker report, the API checks the actual uploaded SHA-256s, source roles, reported filenames, page counts, evidence locations, original verification policy and checklist references. Findings and review tasks must use fixed bilingual safety-preserving templates, match scores are recomputed from cited text, and warnings must match bounded, source-page-aware templates. The check rejects unsupported official-authority or AI-confirmed claims. It does **not** independently extract the PDF a second time.
 14. Per-page text coverage is visible. Pages without extractable text are never silently treated as proven unchanged, even when the comparison found changes on other pages. `all_pages_have_text` means only that each page yielded some text, not that extraction was exhaustive.
-15. An `explicit_amendment` links one original labeled deadline or fee to a revised passage that gives a matching prior value and a replacement. The worker requires a unique label and prior value in both documents. The API recalculates the field from both quotes and requires a possible change with an uncertain outcome. Conditions, ambiguous values, and duplicate candidates stay outside the explicit link.
+15. An `explicit_amendment` links one original labeled deadline, fee or scheduled clock time to a revised passage that gives a matching prior value and a replacement. The worker requires a unique label and prior value in both documents. The API recalculates the field from both quotes and requires a possible change with an uncertain outcome. Conditions, ambiguous values, and duplicate candidates stay outside the explicit link. The supported corrigendum syntax also includes a colon-delimited label followed by `For OLD, read NEW` or `Instead of OLD, please read NEW`. Unlabeled or reverse-order correction wording stays outside explicit linking. Clock-only amendments require identical printed zone context in the original and both revised endpoints; no direction across midnight or time-zone conversion is inferred.
 
 ## How date, time and fee tokens are interpreted
 
@@ -63,7 +63,7 @@ checked against the quoted source.
 
 ## Ruled tables
 
-The extractor joins a label and a standalone date or INR amount when both fit entirely in separate cells of one native-text row. The ruling must form at least two adjacent rows with the same two columns. The original page, quote words, and source hash remain the evidence. Matching uses the same anchors and review rules as ordinary lines.
+The extractor joins a label and a standalone date or INR amount when both fit entirely in separate cells of one native-text row. For deadline and scheduled-time labels, it also supports a standalone clock with optional IST/UTC/GMT context, or a single unambiguous full date followed by a clock. Clock ranges, arbitrary prose, offset-only values, and labels containing another clock remain separate lines. The ruling must form at least two adjacent rows with the same two columns. The original page, quote words, and source hash remain the evidence. Matching uses the same anchors and review rules as ordinary lines.
 
 Borderless tables, merged cells, three-column tables, wrapped cells, scanned tables, and pages beyond the layout work budget keep the original line-level extraction. Complex layouts can still produce incomplete matches. Inspect the PDF page when layout determines how a value applies.
 
@@ -79,7 +79,7 @@ Borderless tables, merged cells, three-column tables, wrapped cells, scanned tab
 ## Automated regression suites
 
 - `backend/tests/test_extract.py`: source locations, SHA-256, malformed/scanned/password-protected/oversized-page PDFs, OCR gating/budgets/error paths, and English/Hindi OCR integration scans that skip if Tesseract language packs or fixture fonts are missing.
-- `backend/tests/test_table_rows.py`: native grid detection, rotated evidence, fallback for ambiguous layouts and budget limits, and actual deadline and fee changes through the comparison worker.
+- `backend/tests/test_table_rows.py`: native grid detection, rotated evidence, fallback for ambiguous layouts and budget limits, and actual deadline, fee and clock changes through the comparison worker.
 - `backend/tests/test_compare.py`: changed/unchanged statements, reordered lines, duplicated deadline labels, same-page versus cross-page ambiguity handling, source location and lack of authority inference.
 - `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, ambiguous and invalid dates or clock times, unsupported time ranges, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py` and `backend/tests/test_body_limit.py`: health, live multipart comparisons, multipart stream and header size enforcement, bad uploads, filename sanitization, response no-store headers.
@@ -120,3 +120,12 @@ review priorities, not proof of an official amendment or cancellation.
 - E2E UI-fixture tests for uncertain states verify rendering and prioritization,
   not extraction accuracy. Real PDF integration tests separately cover source
   passage matching.
+
+### English notice label coverage
+
+The shared classifier recognizes explicit registration/application/submission
+closure phrases and gate-closing/exam-start/reporting-start schedule phrases.
+The same label, numbered scope and printed time-zone context must still match
+before parsed values can be called changed. An eligibility cut-off date is not
+assumed to be an application deadline. These are bounded wording rules, not
+an exhaustive understanding of all official notices.

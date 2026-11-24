@@ -7,6 +7,7 @@ establishes official authority, proof of a changed fact, or match certainty.
 import json
 import os
 import re
+from collections import Counter
 
 import httpx
 
@@ -19,8 +20,50 @@ MAX_CANDIDATES = 30
 MAX_PASSAGE_CHARS = 320
 MAX_MODEL_CHARS = 16384
 MAX_MODEL_RESPONSE_BYTES = 64 * 1024
+MAX_MODEL_JSON_DEPTH = 16
 MAX_PROPOSALS = 12
 MODEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,63}$")
+
+
+def _unique_json_object(entries: list[tuple[str, object]]) -> dict:
+    result = dict(entries)
+    if len(result) != len(entries):
+        raise ValueError("Duplicate field in local model response")
+    return result
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError("Non-finite number in local model response")
+
+
+def _decode_model_json(raw: str | bytes) -> object:
+    # Bound nesting before parsing, independently of interpreter recursion limits.
+    # Braces and escaped quotes inside JSON strings do not count as nesting.
+    text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+    depth = 0
+    in_string = escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > MAX_MODEL_JSON_DEPTH:
+                raise ValueError("Local model JSON exceeds the nesting limit")
+        elif char in "]}":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("Unbalanced local model JSON")
+    # The decoder still validates grammar, including delimiter types.
+    return json.loads(
+        text, object_pairs_hook=_unique_json_object, parse_constant=_reject_json_constant,
+    )
 
 
 def _model_pairs(original: list[dict], revised: list[dict]) -> object:
@@ -54,11 +97,11 @@ def _model_pairs(original: list[dict], revised: list[dict]) -> object:
                 if len(collected) + len(part) > MAX_MODEL_RESPONSE_BYTES:
                     raise ValueError("Local model response exceeds the allowed size")
                 collected.extend(part)
-    payload = json.loads(collected)
+    payload = _decode_model_json(bytes(collected))
     raw = payload.get("response") if isinstance(payload, dict) else None
     if not isinstance(raw, str) or len(raw) > MAX_MODEL_CHARS:
         raise ValueError("Unexpected local model response")
-    return json.loads(raw)
+    return _decode_model_json(raw)
 
 
 def propose_semantic_matches(report: ComparisonReport) -> ComparisonReport:
@@ -99,37 +142,47 @@ def propose_semantic_matches(report: ComparisonReport) -> ComparisonReport:
             [{"id": f.id, "category": f.category, "text": f.revised.text}
              for f in new_items],
         )
-    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, RecursionError):
         result.semantic_assistance = "unavailable"
         result.warnings.append(
             "Local AI assistant unavailable; deterministic comparison was preserved"
         )
         return result
-    proposed = answer.get("pairs") if isinstance(answer, dict) else None
+    proposed = (
+        answer.get("pairs") if isinstance(answer, dict) and answer.keys() == {"pairs"} else None
+    )
     if not isinstance(proposed, list) or len(proposed) > MAX_PROPOSALS:
         result.semantic_assistance = "no_verified_pairs"
         result.warnings.append("Local AI output was rejected as invalid or oversized")
         return result
 
-    claimed_originals: set[str] = set()
-    claimed_revisions: set[str] = set()
-    suggestions: list[Finding] = []
-    checklists: list[ChecklistItem] = []
+    # First collect unique, source-valid edges. A conflict must not be
+    # resolved by the order in which an untrusted model happens to list IDs.
+    edges: set[tuple[str, str]] = set()
     for pair in proposed:
-        if not isinstance(pair, dict):
+        if not isinstance(pair, dict) or pair.keys() != {"original_id", "revised_id"}:
             continue
-        old_id, new_id = pair.get("original_id"), pair.get("revised_id")
+        old_id, new_id = pair["original_id"], pair["revised_id"]
         if (
             not isinstance(old_id, str) or not isinstance(new_id, str)
             or old_id not in original_ids or new_id not in revised_ids
-            or old_id in claimed_originals or new_id in claimed_revisions
         ):
             continue
-        original, revised = original_ids[old_id], revised_ids[new_id]
-        if original.category != revised.category:
+        if original_ids[old_id].category == revised_ids[new_id].category:
+            edges.add((old_id, new_id))
+    old_degrees = Counter(old_id for old_id, _ in edges)
+    new_degrees = Counter(new_id for _, new_id in edges)
+    old_order = {finding.id: index for index, finding in enumerate(old_items)}
+    new_order = {finding.id: index for index, finding in enumerate(new_items)}
+
+    suggestions: list[Finding] = []
+    checklists: list[ChecklistItem] = []
+    for old_id, new_id in sorted(
+        edges, key=lambda edge: (old_order[edge[0]], new_order[edge[1]]),
+    ):
+        if old_degrees[old_id] != 1 or new_degrees[new_id] != 1:
             continue
-        claimed_originals.add(old_id)
-        claimed_revisions.add(new_id)
+        original, revised = original_ids[old_id], revised_ids[new_id]
         new_finding_id = f"ai{len(suggestions) + 1}"
         suggestions.append(Finding(
             id=new_finding_id,
