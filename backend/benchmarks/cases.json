@@ -189,5 +189,50 @@
     "expected_field_outcomes": [
       "uncertain"
     ]
+  },
+  {
+    "id": "labeled_for_read_deadline",
+    "original": [
+      "Application deadline: 13 Dec 2026"
+    ],
+    "revised": [
+      "Application deadline: For 13 Dec 2026, read 19 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
+  },
+  {
+    "id": "labeled_instead_of_fee",
+    "original": [
+      "Paper 1 fee: INR 300"
+    ],
+    "revised": [
+      "Paper 1 fee: Instead of Rs. 300, please read Rs. 450"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
+  },
+  {
+    "id": "labeled_for_read_time",
+    "original": [
+      "Reporting time: 17:00 IST"
+    ],
+    "revised": [
+      "Reporting time: For 5 PM IST, read 18:30 IST"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
   }
 ]

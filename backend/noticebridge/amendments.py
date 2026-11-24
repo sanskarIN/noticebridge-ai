@@ -22,6 +22,8 @@ CHANGE_PREFIX = re.compile(
     r"(?P<verb>changed|revised|updated|moved|rescheduled|extended|advanced|reduced|increased)"
     r"\s+from",
 )
+# Require a colon-delimited subject; never infer the label of a free-form correction.
+CORRECTION_PREFIX = re.compile(r"(?P<label>.+?):\s*(?:for|instead of)")
 QUALIFIED_LABEL = re.compile(
     r"\b(?:(?:could|might|may|would|will|should|can)\s+(?:be|have(?:\s+been)?)"
     r"|(?:has|have|had|is|was|were)\s+not(?:\s+been)?)$"
@@ -41,6 +43,20 @@ def _normalize(text: str) -> str:
 
 def _label(text: str) -> str:
     return _normalize(text).removeprefix("the ")
+
+
+def _change_prefix(text: str) -> tuple[str, str, str] | None:
+    """Return normalized label, verb and expected connector."""
+    value = _normalize(text)
+    prefix = CHANGE_PREFIX.fullmatch(value)
+    if prefix is not None:
+        if QUALIFIED_LABEL.search(prefix["label"]) is not None:
+            return None
+        return _label(prefix["label"]), prefix["verb"], "to"
+    correction = CORRECTION_PREFIX.fullmatch(value)
+    if correction is not None and QUALIFIED_LABEL.search(correction["label"]) is None:
+        return _label(correction["label"]), "corrected", "read"
+    return None
 
 
 def _parsed(token: str, category: str) -> ParsedValue:
@@ -74,13 +90,19 @@ def _revised_clock(text: str, category: str) -> Statement | None:
     if len(clocks) != 2:
         return None
     first, second = clocks
-    prefix = CHANGE_PREFIX.fullmatch(_normalize(text[:first.start()]))
-    if prefix is None or QUALIFIED_LABEL.search(prefix["label"]) is not None:
+    prefix = _change_prefix(text[:first.start()])
+    if prefix is None:
         return None
-    if prefix["verb"] in ("reduced", "increased", "extended", "advanced"):
+    label, verb, connector = prefix
+    if verb in ("reduced", "increased", "extended", "advanced"):
         # A clock alone does not establish the direction across midnight.
         return None
-    between = re.fullmatch(r"(.*?)\s+to\s+", text[first.end():second.start()], re.IGNORECASE)
+    separator = (
+        r",?\s+(?:please\s+)?read\s+" if connector == "read" else r"\s+to\s+"
+    )
+    between = re.fullmatch(
+        r"(.*?)" + separator, text[first.end():second.start()], re.IGNORECASE,
+    )
     if between is None:
         return None
     before_zone = _zone(between[1])
@@ -90,7 +112,7 @@ def _revised_clock(text: str, category: str) -> Statement | None:
     before, after = parse_clock(first), parse_clock(second)
     if before.canonical is None or after.canonical is None or before.canonical == after.canonical:
         return None
-    return Statement((category, _label(prefix["label"]), before.canonical, before_zone), after)
+    return Statement((category, label, before.canonical, before_zone), after)
 
 
 def original_statement(text: str, category: str) -> Statement | None:
@@ -121,18 +143,19 @@ def revised_amendment(text: str, category: str) -> Statement | None:
     if len(tokens) != 2:
         return None
     before_token, after_token = tokens
-    prefix = CHANGE_PREFIX.fullmatch(_normalize(text[:before_token.start()]))
-    if (
-        prefix is None
-        or QUALIFIED_LABEL.search(prefix["label"]) is not None
-        or _normalize(text[before_token.end():after_token.start()]) != "to"
-        or text[after_token.end():].strip() not in ("", ".")
-    ):
+    prefix = _change_prefix(text[:before_token.start()])
+    if prefix is None or text[after_token.end():].strip() not in ("", "."):
+        return None
+    label, verb, connector = prefix
+    middle = _normalize(text[before_token.end():after_token.start()])
+    if connector == "read":
+        if middle.removeprefix(",").strip() not in ("read", "please read"):
+            return None
+    elif middle != "to":
         return None
     before, after = _parsed(before_token[0], category), _parsed(after_token[0], category)
     if before.canonical is None or after.canonical is None or before.canonical == after.canonical:
         return None
-    verb = prefix["verb"]
     if verb in ("extended", "advanced", "rescheduled"):
         if category != "deadline":
             return None
@@ -146,7 +169,7 @@ def revised_amendment(text: str, category: str) -> Statement | None:
         decreased = Decimal(after.canonical[4:]) < Decimal(before.canonical[4:])
         if (verb == "reduced") != decreased:
             return None
-    return Statement((category, _label(prefix["label"]), before.canonical, ""), after)
+    return Statement((category, label, before.canonical, ""), after)
 
 
 def linked_amendment(original: Statement, amendment: Statement) -> ValueChange:

@@ -60,7 +60,8 @@ def _link_amendments(
 ) -> dict[int, tuple[int, ValueChange]]:
     amendments: dict[AmendmentKey, list[tuple[int, Statement]]] = defaultdict(list)
     for index, line in enumerate(new.lines):
-        if " from " not in normalize(line.text):
+        wording = normalize(line.text)
+        if " from " not in wording and " read " not in wording:
             continue
         statement = revised_amendment(line.text, new_keys[index][0])
         if statement is not None:
