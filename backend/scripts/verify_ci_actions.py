@@ -2,8 +2,8 @@
 
 The pin allowlist is intentionally explicit: a new action or updated version
 requires a reviewed upstream tag-to-commit mapping and a code change here.
-This checks the static "- uses:" form used by this repository; it is not a
-general-purpose YAML parser or a security audit of action source code.
+This checks standard line-based "uses:" declarations, including named steps;
+it is not a general-purpose YAML parser or a security audit of action source code.
 """
 
 import re
@@ -18,8 +18,8 @@ APPROVED_ACTIONS = {
     "actions/setup-node": "949feb2413d6458794dcd2491c4babbbce0c15c1",  # v7.1.0
     "actions/upload-artifact": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",  # v7.0.2
 }
-USES_LINE = re.compile(r"^\s*-\s+uses\s*:\s*(\S+)(?:\s+#.*)?$")
-USES_START = re.compile(r"^\s*-\s+uses\s*:")
+USES_LINE = re.compile(r"^\s*(?:-\s*)?uses\s*:\s*(\S+)(?:\s+#.*)?$")
+USES_START = re.compile(r"^\s*(?:-\s*)?uses\s*:")
 PINNED_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([0-9a-f]{40})$")
 
 
