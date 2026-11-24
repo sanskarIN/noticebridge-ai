@@ -51,7 +51,7 @@ SAFE_WORKER_DOCUMENT_ERRORS = frozenset({
 })
 _OCR_PAGE_ERROR = re.compile(
     r"OCR page [1-9][0-9]? is outside the (?:original|revised) PDF "
-    r"\\([1-9][0-9]? pages\\)",
+    r"\([1-9][0-9]? pages\)",
     re.ASCII,
 )
 
