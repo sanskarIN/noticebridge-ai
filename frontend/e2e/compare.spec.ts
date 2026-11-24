@@ -655,6 +655,7 @@ test('retries selected OCR pages explicitly and preserves the previous report af
   const deadline = page.getByRole('checkbox', { name: /Verify the deadline/ });
   await deadline.check();
   const coverage = page.getByRole('region', { name: 'Text extraction coverage' });
+  await expect(coverage).toHaveCount(1);
   for (const group of await coverage.getByText('Open pages with no extracted text (1)').all()) {
     await group.click();
   }
@@ -675,6 +676,7 @@ test('retries selected OCR pages explicitly and preserves the previous report af
 
   await rerun.click();
   await expect(coverage.getByText('Selected for OCR · 2', { exact: true })).toHaveCount(2);
+  await expect(coverage).toHaveCount(1);
   await expect(coverage.getByRole('alert')).toHaveCount(0);
   await expect(deadline).toBeChecked();
   await expect(page.getByLabel('Original notice OCR pages')).toHaveValue('2');

@@ -399,12 +399,12 @@ export default function App() {
             report.semantic_assistance === 'unavailable' ? t.semanticUnavailable :
             t.semanticRejected}
         </p>}
-        <CoverageReview key={coverageKey} report={report} busy={pending} error={error}
+        <CoverageReview key={`coverage-${coverageKey}`} report={report} busy={pending} error={error}
           localAi={enableSemantic} onOpen={openSource} onSettings={openSelectedPageOcr}
           onRetry={SHOWCASE_ONLY ? undefined : retryWithOcr} />
         {report.fuzzy_matching_limited && <p className="coverage-report partial" role="status">{t.fuzzyLimited}</p>}
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
-        {report.checklist.length > 0 && <ReviewRestore key={coverageKey} report={report}
+        {report.checklist.length > 0 && <ReviewRestore key={`restore-${coverageKey}`} report={report}
           onRestore={ids => setChecked(previous => new Set([...previous, ...ids]))} />}
         {report.findings.length > 0 && <ReviewFindings
           report={report} checked={checked} onCheck={setReviewed} onOpen={openSource}
