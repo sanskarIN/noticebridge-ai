@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "cases": [
+    {
+      "id": "fictional-demo",
+      "source_kind": "fictional",
+      "issuer_group": "fictional-board",
+      "event_group": "registration-2026",
+      "original": "original.pdf",
+      "original_sha256": "11712f90b192e694094c43bcd6feabb9fcd8941a0248e5c464767bb8f4c29f77",
+      "revised": "revised.pdf",
+      "revised_sha256": "fe6e85a72fa0e96decb3c840046668599d8ea5bff4bc187af4de28b3e2310a70",
+      "label_method": "unreviewed",
+      "review_complete": false,
+      "expected_pairs": []
+    }
+  ]
+}

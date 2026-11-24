@@ -544,3 +544,11 @@ exclude legitimate OCR or hard-layout cases from real-world evaluation. A
 negative case has no positive quotation to check; this audit does not establish
 label completeness, human independence, visual truth or official authority.
 Never edit human labels merely to make the comparator's extraction agree.
+
+## Browser-based independent review workbench
+
+For manual label preparation, use the [offline workbench](../tools/review-workbench/README.md).
+It uses blank pinned manifests, local fingerprint checks, manual page/quote
+entry, resumable drafts and explicit completion before export. It is a local
+review utility, not part of the public comparison API. Keep corpus documents
+outside the served folder and verify exported labels with the backend tools.
