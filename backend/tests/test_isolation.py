@@ -282,7 +282,7 @@ def test_subprocess_bootstrap_receives_ocr_budget(monkeypatch, pdf_bytes):
 
         def communicate(self, **kwargs):
             self.stdout.write(
-                b'{"error":"invalid_document","message":"not a valid PDF"}'
+                b'{"error":"invalid_document","message":"File is not recognized as a PDF"}'
             )
             self.stdout.flush()
             return None, None
