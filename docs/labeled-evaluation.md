@@ -552,3 +552,15 @@ It uses blank pinned manifests, local fingerprint checks, manual page/quote
 entry, resumable drafts and explicit completion before export. It is a local
 review utility, not part of the public comparison API. Keep corpus documents
 outside the served folder and verify exported labels with the backend tools.
+
+### Earlier/revised date-table evidence
+
+A bounded native ruled three-column grid with an explicit activity/requirement,
+earlier-date and revised-date header can preserve the row's label and both
+printed dates as one quotation and union bounding box. It never invents a
+connector, silently removes the earlier date, or decides which column governs.
+Rows are review-only; a change in their text is not a confirmed date delta.
+The page warning asks users to inspect the actual headers. Reversed/unknown
+headings, ambiguous dates, incomplete or multiline cells, unsupported layouts
+and OCR retain their original passages. This narrow geometry rule is not a
+general table parser or an authority check.
