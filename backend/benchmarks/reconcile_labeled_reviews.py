@@ -26,7 +26,7 @@ def _load_review(path: Path, root: Path) -> tuple[dict[str, dict], str]:
 def _identity(case: dict) -> tuple:
     return (
         case["original"], case["revised"], case["original_sha256"], case["revised_sha256"],
-        case["source_kind"],
+        case["source_kind"], case.get("issuer_group"), case.get("event_group"),
         tuple(sorted(case.get("original_ocr_pages", []))),
         tuple(sorted(case.get("revised_ocr_pages", []))),
     )

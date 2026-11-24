@@ -76,6 +76,15 @@ def warning_supported(
         omitted = OMITTED_BOXES_RE.fullmatch(description)
         if omitted:
             return 1 <= page <= summary.page_count and int(omitted[1]) <= MAX_EXTRACTED_LINES
+        if description == (
+            "contains an earlier/revised date table; "
+            "both printed values are retained, verify the column headings"
+        ):
+            return (
+                1 <= page <= summary.page_count
+                and page not in summary.pages_without_text
+                and page not in summary.ocr_pages
+            )
         if page not in summary.pages_without_text:
             return False
         page_ocr_requested = ocr_requested or page in summary.ocr_override_pages

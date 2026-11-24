@@ -233,6 +233,7 @@ def extract_pdf(
             if method == "native" and not skipped_boxes and page_lines >= 2:
                 lines[page_start:] = join_ruled_value_rows(
                     page, lines[page_start:], max_quote_length=MAX_LINE_CHARACTERS,
+                    warnings=warnings,
                 )
             if skipped_boxes:
                 warnings.append(
