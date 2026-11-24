@@ -16,12 +16,12 @@ FEE = ("Application fee", "Rs. 300")
 
 def _notice(rows, *, layout="rules", rotation=0):
     with fitz.open() as document:
-        page_width = 980 if layout == "wide_three_columns" else 610
+        page_width = 980 if layout.startswith("wide_") else 610
         page = document.new_page(width=page_width, height=500)
         table_top = 60
         row_height = 38
         boundaries = [table_top + index * row_height for index in range(len(rows) + 1)]
-        if layout == "wide_three_columns":
+        if layout.startswith("wide_"):
             columns = (50, 265, 600, 950)
         elif layout == "three_columns":
             columns = (50, 265, 430, 550)
@@ -33,11 +33,11 @@ def _notice(rows, *, layout="rules", rotation=0):
             for x in columns:
                 top = boundaries[1] + 5 if layout == "partial_divider" and x == 265 else table_top
                 page.draw_line((x, top), (x, boundaries[-1]))
-        if layout in ("rectangles", "fills"):
+        if layout in ("rectangles", "fills", "wide_rectangles", "wide_fills"):
             for top, bottom in zip(boundaries[:-1], boundaries[1:], strict=True):
                 for left, right in zip(columns[:-1], columns[1:], strict=True):
                     box = (left, top, right, bottom)
-                    if layout == "fills":
+                    if layout in ("fills", "wide_fills"):
                         page.draw_rect(box, color=None, fill=(0.9, 0.9, 0.9))
                     else:
                         page.draw_rect(box)
@@ -498,17 +498,22 @@ def test_oversized_revision_quote_is_not_merged_or_warned(monkeypatch):
 COMBINED_HEADER = ("Activity", "Earlier date/time", "Revised date/time")
 
 
-def test_combined_date_and_cutoff_table_preserves_native_evidence_and_rotation():
+@pytest.mark.parametrize(("layout", "rotation"), [
+    ("wide_three_columns", 90), ("wide_rectangles", 0),
+])
+def test_combined_date_and_cutoff_table_preserves_native_evidence_and_rotation(
+    layout, rotation,
+):
     row = ("Application deadline", "2026-12-13 at 17:00 IST",
            "2026-12-19 at 18:00 IST")
     doc = extract_pdf(
-        _notice([COMBINED_HEADER, row], layout="wide_three_columns", rotation=90),
+        _notice([COMBINED_HEADER, row], layout=layout, rotation=rotation),
         document_id="revised", filename="date-clock.pdf",
     )
     assert [line.text for line in doc.lines] == [*COMBINED_HEADER, " ".join(row)]
     joined = doc.lines[-1]
     assert joined.review_only
-    assert joined.evidence.page_rotation == 90
+    assert joined.evidence.page_rotation == rotation
     assert joined.evidence.extraction_method == "native"
     assert joined.evidence.bbox[0] < 265 < 600 < joined.evidence.bbox[2]
     assert any("earlier/revised date-and-time table" in item for item in doc.warnings)
@@ -580,3 +585,33 @@ def test_combined_date_time_rejects_generic_or_reversed_headers():
         )
         assert [line.text for line in doc.lines] == [*header, *row]
         assert not any(line.review_only for line in doc.lines)
+
+
+@pytest.mark.parametrize(("layout", "header"), [
+    ("wide_fills", COMBINED_HEADER),
+    ("wide_three_columns", ("Activity", "Date", "Date")),
+])
+def test_combined_date_time_requires_stroked_explicit_grid(layout, header):
+    row = ("Application deadline", "2026-12-13 at 17:00 IST",
+           "2026-12-19 at 18:00 IST")
+    doc = extract_pdf(
+        _notice([header, row], layout=layout),
+        document_id="original", filename="not-grid.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*header, *row]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("date-and-time table" in item for item in doc.warnings)
+
+
+def test_combined_clock_cells_preserve_different_printed_utc_zones():
+    row = ("Application deadline", "2026-12-13 at 17:00 UTC+05:30",
+           "2026-12-19 at 18:00 UTC+06:00")
+    doc = extract_pdf(
+        _notice([COMBINED_HEADER, row], layout="wide_three_columns"),
+        document_id="revised", filename="mixed-zones.pdf",
+    )
+    assert doc.lines[-1].text == " ".join(row)
+    assert doc.lines[-1].review_only
+    assert "UTC+05:30" in doc.lines[-1].evidence.text
+    assert "UTC+06:00" in doc.lines[-1].evidence.text
+    assert any("date-and-time table" in item for item in doc.warnings)

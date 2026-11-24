@@ -603,3 +603,9 @@ a separate fixed page warning. An unclear date, partial clock, time range,
 reversed or generic heading, unsupported label, or missing cell is kept
 unjoined. This does **not** decide which cutoff governs or interpret timezone
 differences; humans must check the official source.
+
+
+The table grid may use continuous stroked rules or individually stroked
+rectangles. Merely filled, borderless or unspecified grids are not evidence
+of a three-column relationship. Different printed UTC offsets are preserved
+verbatim, never silently converted to a shared timezone.
