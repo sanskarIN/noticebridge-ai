@@ -1,6 +1,7 @@
 """Reconcile two human-labeled, SHA-pinned NoticeBridge evaluation manifests."""
 
 import argparse
+import hashlib
 import json
 from collections import Counter
 from pathlib import Path
@@ -122,6 +123,18 @@ def reconcile_reviews(
     return audit, {"version": 2, "cases": evaluation_cases, "label_review": audit}
 
 
+def verify_reconciled_manifest(path: Path, expected: dict, *, root: Path) -> None:
+    """Check a saved result against freshly reconciled reviews without rewriting it."""
+    if path.resolve().parent != root or path.suffix.lower() != ".json":
+        raise ValueError("Verification requires a JSON manifest in the dataset folder")
+    version, _, actual_digest = _manifest(path)
+    canonical = json.dumps(
+        expected, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    if version != 2 or actual_digest != hashlib.sha256(canonical).hexdigest():
+        raise ValueError("Saved reconciliation does not match the supplied reviews and audit")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("first", type=Path, help="First reviewer's pinned manifest")
@@ -130,13 +143,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reviewer-b", required=True, help="Pseudonymous second reviewer ID")
     parser.add_argument("--adjudication", type=Path, help="Reviewed decisions for disputed cases")
     parser.add_argument("--adjudicator", help="Pseudonymous third reviewer ID")
-    parser.add_argument("--output", type=Path, help="Create a new version-2 manifest if resolved")
+    destination = parser.add_mutually_exclusive_group()
+    destination.add_argument("--output", type=Path, help="Create a new version-2 manifest if resolved")
+    destination.add_argument(
+        "--verify", type=Path, help="Verify an existing resolved manifest without modifying it",
+    )
     args = parser.parse_args(argv)
     try:
         audit, manifest = reconcile_reviews(
             args.first, args.second, reviewer_a=args.reviewer_a, reviewer_b=args.reviewer_b,
             adjudication_path=args.adjudication, adjudicator=args.adjudicator,
         )
+        if args.verify is not None:
+            if manifest is None:
+                raise ValueError("Cannot verify a reconciled manifest with unresolved disagreements")
+            verify_reconciled_manifest(
+                args.verify, manifest, root=args.first.resolve().parent,
+            )
         if args.output is not None and manifest is not None:
             output = args.output.resolve()
             if output.parent != args.first.resolve().parent or output.suffix.lower() != ".json":

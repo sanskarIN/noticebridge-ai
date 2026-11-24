@@ -347,6 +347,26 @@ manifest retains the audit and can be passed to `evaluate_labeled.py` with
 `--require-pinned-sources`. Use the independent-corpus gate for the required
 number of distinct non-fictional pairs.
 
+Before scoring a previously reconciled manifest, verify it against the
+original review files with the same reviewer IDs and adjudication options:
+
+~~~bash
+python backend/benchmarks/reconcile_labeled_reviews.py \
+  evaluation/review-a.json evaluation/review-b.json \
+  --reviewer-a reviewer-a --reviewer-b reviewer-b \
+  --verify evaluation/labels-reconciled.json
+~~~
+
+This recomputes the reconciliation, checks the pinned PDF bytes again, and
+compares the full canonical JSON fingerprint of the saved manifest against the
+new result. It accepts changes in JSON whitespace or object key order, but
+rejects changed labels, reviewer declarations, audit fields, extra claims, and
+different input review fingerprints. Array order remains significant. For an
+adjudicated corpus, supply the same third-review options. Verification never
+rewrites the manifest; a mismatch or unresolved disagreement exits nonzero.
+This is a local consistency check, not a digital signature or an authentication
+of the reviewers. Keep the original review files in trusted storage.
+
 Review completion and reviewer roles are recorded declarations. The command
 checks that both reviews refer to the same pinned PDFs and uses the adjudicated
 labels for disputed cases. The private review manifests preserve source

@@ -149,3 +149,92 @@ def test_adjudicator_cannot_override_agreed_or_omit_disputed_cases(tmp_path, cor
     with pytest.raises(ValueError, match="cover exactly the cases"):
         reconcile_reviews(a, b, reviewer_a="A", reviewer_b="B",
                           adjudication_path=final, adjudicator="C")
+
+
+def test_verify_reconciled_manifest_accepts_reformatted_json_without_rewriting(tmp_path, corpus):
+    a = _save(tmp_path, "a", corpus)
+    b = _save(tmp_path, "b", corpus)
+    target = tmp_path / "resolved.json"
+    assert _cli(a, b, "--output", target).returncode == 0
+    payload = json.loads(target.read_bytes())
+    target.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    before = target.read_bytes()
+    result = _cli(a, b, "--verify", target)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == payload["label_review"]
+    assert target.read_bytes() == before
+    assert PAIR["original_text"] not in result.stdout
+
+
+@pytest.mark.parametrize("mutation", [
+    "labels", "audit_count", "reviewer", "fingerprint", "extra_claim", "missing_audit",
+])
+def test_verify_reconciled_manifest_rejects_tampering(tmp_path, corpus, mutation):
+    a = _save(tmp_path, "a", corpus)
+    b = _save(tmp_path, "b", corpus)
+    target = tmp_path / "resolved.json"
+    assert _cli(a, b, "--output", target).returncode == 0
+    payload = json.loads(target.read_bytes())
+    if mutation == "labels":
+        payload["cases"][0]["expected_pairs"] = []
+    elif mutation == "audit_count":
+        payload["label_review"]["pair_counts"]["both"] = 100
+    elif mutation == "reviewer":
+        payload["label_review"]["review_manifests"][0]["reviewer"] = "someone-else"
+    elif mutation == "fingerprint":
+        payload["label_review"]["review_manifests"][0]["sha256"] = "a" * 64
+    elif mutation == "extra_claim":
+        payload["officially_authenticated"] = True
+    else:
+        del payload["label_review"]
+    target.write_text(json.dumps(payload), encoding="utf-8")
+    before = target.read_bytes()
+    result = _cli(a, b, "--verify", target)
+    assert result.returncode == 2
+    assert "does not match the supplied reviews and audit" in result.stderr
+    assert PAIR["original_text"] not in result.stderr
+    assert target.read_bytes() == before
+
+
+def test_verify_checks_current_review_fingerprints_even_when_labels_agree(tmp_path, corpus):
+    a = _save(tmp_path, "a", corpus)
+    b = _save(tmp_path, "b", corpus)
+    target = tmp_path / "resolved.json"
+    assert _cli(a, b, "--output", target).returncode == 0
+    formatted = {**PAIR, "original_text": PAIR["original_text"].upper()}
+    _save(tmp_path, "b", {**corpus, "expected_pairs": [formatted]})
+    result = _cli(a, b, "--verify", target)
+    assert result.returncode == 2
+    assert "does not match the supplied reviews and audit" in result.stderr
+
+
+def test_verify_requires_fresh_adjudication_and_unchanged_decision(tmp_path, corpus):
+    a = _save(tmp_path, "a", corpus)
+    b = _save(tmp_path, "b", {**corpus, "expected_pairs": []})
+    decision = _save(tmp_path, "decision", corpus)
+    target = tmp_path / "resolved.json"
+    options = ("--adjudication", decision, "--adjudicator", "review-c")
+    assert _cli(a, b, *options, "--output", target).returncode == 0
+    assert _cli(a, b, *options, "--verify", target).returncode == 0
+    unresolved = _cli(a, b, "--verify", target)
+    assert unresolved.returncode == 2
+    assert "unresolved disagreements" in unresolved.stderr
+    _save(tmp_path, "decision", {**corpus, "expected_pairs": []})
+    result = _cli(a, b, *options, "--verify", target)
+    assert result.returncode == 2
+    assert "does not match the supplied reviews and audit" in result.stderr
+
+
+def test_verify_rejects_missing_or_outside_manifest_and_conflicting_mode(tmp_path, corpus):
+    a = _save(tmp_path, "a", corpus)
+    b = _save(tmp_path, "b", corpus)
+    target = tmp_path / "missing.json"
+    assert _cli(a, b, "--verify", target).returncode == 2
+    assert not target.exists()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    result = _cli(a, b, "--verify", outside / "labels.json")
+    assert result.returncode == 2
+    assert "in the dataset folder" in result.stderr
+    assert _cli(a, b, "--verify", target, "--output", target).returncode == 2
+    assert not target.exists()
