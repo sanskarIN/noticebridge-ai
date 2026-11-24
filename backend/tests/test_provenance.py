@@ -587,10 +587,12 @@ def test_untrusted_worker_warnings_cannot_claim_authority_or_invent_pages(
 
 
 def test_too_many_worker_warning_messages_are_rejected(source_report):
+    from noticebridge.warning_policy import MAX_REPORT_WARNINGS
+
     original, revised, report = source_report
     report.warnings = [
         "Local AI assistant unavailable; deterministic comparison was preserved"
-    ] * 500
+    ] * (MAX_REPORT_WARNINGS + 1)
     with pytest.raises(InvalidReportProvenance, match="excessive warning"):
         verify_report_provenance(
             report, original=original, revised=revised,
@@ -665,3 +667,30 @@ def test_parent_rejects_forged_confirmation_for_competing_source_values(
             forged, original=old_pdf, revised=new_pdf,
             old_name="old.pdf", new_name="new.pdf",
         )
+
+
+def test_duplicate_revision_table_warning_is_rejected(source_report):
+    original, revised, report = source_report
+    message = (
+        "original: page 1 contains an earlier/revised date-and-time table; "
+        "both printed values are retained, verify the column headings"
+    )
+    report.warnings = [message, message]
+    with pytest.raises(InvalidReportProvenance, match="repeated a revision-table warning"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+        )
+
+
+def test_native_table_warning_budget_includes_all_supported_kinds():
+    from noticebridge.extract import MAX_PAGES
+    from noticebridge.warning_policy import (
+        MAX_CROSS_PAGE_DETAILS, MAX_REPORT_WARNINGS, REVISION_TABLE_WARNINGS,
+    )
+
+    assert len(REVISION_TABLE_WARNINGS) == 4
+    assert MAX_REPORT_WARNINGS >= (
+        2 * MAX_PAGES * len(REVISION_TABLE_WARNINGS)
+        + 2 * (MAX_CROSS_PAGE_DETAILS + 1)
+    )

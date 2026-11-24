@@ -21,7 +21,12 @@ from .facts import date_tokens, field_changes
 from .matching import MIN_FUZZY_SIMILARITY, FuzzyBudget, context_similarity
 from .messages import HINDI_CATEGORY, SUMMARY_MESSAGES, review_messages
 from .models import ComparisonReport, Evidence
-from .warning_policy import warning_supported
+from .warning_policy import (
+    MAX_REPORT_WARNINGS,
+    REVISION_TABLE_WARNINGS,
+    PAGE_RE,
+    warning_supported,
+)
 
 EXPECTED_POLICY = ComparisonReport.model_fields["verification_policy"].default
 
@@ -440,7 +445,7 @@ def verify_report_provenance(
         )
 
     _require(
-        len(report.warnings) <= 6 * MAX_PAGES + 12,
+        len(report.warnings) <= MAX_REPORT_WARNINGS,
         "Worker report includes excessive warning messages",
     )
     _require(
@@ -454,4 +459,15 @@ def verify_report_provenance(
             for warning in report.warnings
         ),
         "Worker warning text is not supported by the verification policy",
+    )
+    # The extractor emits at most one warning of each native revision-table
+    # type per document page. Reject duplicate claims even within the bound.
+    revision_warnings = []
+    for warning in report.warnings:
+        page_warning = PAGE_RE.fullmatch(warning)
+        if page_warning is not None and page_warning[3] in REVISION_TABLE_WARNINGS:
+            revision_warnings.append(warning)
+    _require(
+        len(revision_warnings) == len(set(revision_warnings)),
+        "Worker repeated a revision-table warning on the same PDF page",
     )
