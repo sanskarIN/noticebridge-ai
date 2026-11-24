@@ -51,10 +51,21 @@ async function run() {
     await page.locator('#manifest').setInputFiles(example('source.json'));
     await expect(page.locator('#progress')).toHaveText('0 / 1 complete');
     const inputs = page.locator('#sources input[type=file]');
+    // Wait for each SHA-256 check to finish before moving to the next input.
+    // Rapidly setting two file controls can leave a WebCrypto digest pending
+    // on a heavily loaded CI runner. Both exact fingerprints are still required.
+    const verifySource = async (index, filename) => {
+      const panel = page.locator('#sources .source').nth(index);
+      await panel.locator('input[type=file]').setInputFiles(example(filename));
+      await expect(panel.getByText('Exact SHA-256 fingerprint matched.', { exact: true }))
+        .toHaveCount(1, { timeout: 15_000 });
+      await expect(panel.getByRole('button', { name: 'Open verified PDF' })).toBeEnabled();
+    };
+
     await inputs.nth(0).setInputFiles(example('revised.pdf'));
     await expect(page.locator('#sources .error')).toContainText('SHA-256 mismatch');
-    await inputs.nth(0).setInputFiles(example('original.pdf'));
-    await inputs.nth(1).setInputFiles(example('revised.pdf'));
+    await verifySource(0, 'original.pdf');
+    await verifySource(1, 'revised.pdf');
     await expect(page.getByText('Exact SHA-256 fingerprint matched.', { exact: true })).toHaveCount(2);
     await page.locator('#add').click();
     const quotes = page.locator('#pairs textarea');
@@ -73,8 +84,8 @@ async function run() {
     await page.locator('#resume').setInputFiles(draft);
     await expect(quotes.nth(1)).toHaveValue('Incomplete edit');
     await expect(page.locator('#complete')).toBeDisabled();
-    await inputs.nth(0).setInputFiles(example('original.pdf'));
-    await inputs.nth(1).setInputFiles(example('revised.pdf'));
+    await verifySource(0, 'original.pdf');
+    await verifySource(1, 'revised.pdf');
     await expect(page.getByText('Exact SHA-256 fingerprint matched.', { exact: true })).toHaveCount(2);
     await quotes.nth(1).fill('Application deadline: 19 December 2026');
     await page.locator('#attest').check();
