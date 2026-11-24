@@ -15,6 +15,7 @@
 | Control | Current safeguard | Remaining exposure |
 | --- | --- | --- |
 | Multipart | 10 MiB per PDF; 21 MiB aggregate request; 1 MiB in-memory spool before temporary-disk rollover. Storage open/write/seek failures now return a controlled 503 and request slots are released; disconnects close temporary upload spools | External proxy abuse, storage quotas, OS-level cleanup guarantees |
+| Cross-site browser uploads | Exact browser `Origin` allowlist for local frontend/API origins; if `Origin` is absent, reject `Sec-Fetch-Site: cross-site` and unexpected/duplicate fetch-metadata headers. Reject before consuming/spooling a POST upload. CORS remains in place for response reads | Not authentication or CSRF tokens: native clients can forge headers; older browsers without both headers may not be covered; deployed origins need explicit secure configuration |
 | Streaming | 90-second receive deadline; maximum 8 simultaneous compare requests per API process | Cross-process abuse, volumetric attacks and network rate limiting |
 | PDFs | Reject encrypted PDFs and excessive page, line or text counts | Native parser vulnerabilities, decompression bombs |
 | OCR | Explicit opt-in, 12-page limit, 16M estimated render pixels per page | Inaccurate transcription, external tool exploitation |
@@ -33,7 +34,7 @@ Temporary OS files can exist while receiving/parsing uploads or capturing worker
 - **P0 — Windows descendants:** Windows Job Object integration and a live child-process shutdown test are implemented; verify the exact commit's Windows CI, then complete an independent Windows 11 manual run, including OCR child-process cancellation. A Windows worker is launched before assignment but cannot receive PDF bytes until assignment succeeds. This is not atomic job-at-create containment.
 - **P0 — Misleading notices:** Never present upload order, OCR transcription or a local AI suggestion as proof that an issuing organization approved a change.
 - **P1 — Temporary-file retention:** Audit cleanup after normal requests, malformed PDFs, client disconnects and timeouts; use protected temp directories and storage quotas.
-- **P1 — Service resource exhaustion:** Test concurrent uploads, slow requests, oversized chunks, runaway workers and reverse-proxy controls.
+- **P1 — Service resource exhaustion:** Test concurrent uploads, slow requests, oversized chunks, runaway workers and reverse-proxy controls. The local browser-origin guard reduces drive-by website submissions; it does not block scripted HTTP clients or replace network authentication/rate limiting.
 - **P1 — Dependency drift:** npm uses a committed integrity-bearing lockfile and `npm ci`. Python 3.12 CI installs from version constraints captured from a previously successful Linux/Windows run and verifies the installed versions. Python wheel hashes, Python 3.11/3.13 and OS-specific transitive resolution, dependency advisories, and CI Action pins still require review.
 - **P1 — Model response manipulation:** Retain unverified proposals and their deterministic unmatched evidence, and test malicious instructions embedded in source text.
 - **P2 — Document geometry and OCR:** Independently evaluate rotated/cropped PDFs, Hindi OCR quality, and missing-page coverage.

@@ -202,6 +202,7 @@ def run_isolated_comparison(
             semantic_requested=enable_semantic, ocr_requested=enable_ocr,
             original_ocr_pages=original_ocr_pages, revised_ocr_pages=revised_ocr_pages,
         )
-        return report
+        # Record the actual request setting, including runs where OCR yielded no text.
+        return report.model_copy(update={"automatic_ocr": enable_ocr})
     except (ValidationError, InvalidReportProvenance) as exc:
         raise ProcessingFailed("PDF comparison worker returned invalid evidence") from exc

@@ -81,6 +81,14 @@ jobs:
       - run: python backend/scripts/verify_python_constraints.py
       - run: npm ci
         working-directory: frontend
+      # Fail fast on invalid TypeScript test syntax and config before the
+      # comparatively expensive browser and Linux dependency installation.
+      - name: Validate browser test discovery
+        run: npx playwright test --list
+        working-directory: frontend
+      - name: Validate offline showcase test discovery
+        run: npx playwright test --config playwright.showcase.config.ts --list
+        working-directory: frontend
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - run: npm run test:e2e

@@ -13,7 +13,7 @@ export type Evidence = {
 };
 
 type ParsedValue = {
-  kind: 'date' | 'amount';
+  kind: 'date' | 'amount' | 'time';
   raw: string;
   canonical: string | null;
   confidence: 'parsed' | 'ambiguous' | 'invalid';
@@ -61,6 +61,7 @@ type DocumentSummary = {
   ocr_override_pages?: number[];
   pages_with_text: number;
   pages_without_text: number[];
+  pages_with_unchecked_images?: number[];
 };
 
 export type Report = {
@@ -71,5 +72,6 @@ export type Report = {
   verification_policy: string;
   text_coverage: 'all_pages_have_text' | 'partial' | 'inconclusive';
   fuzzy_matching_limited: boolean;
+  automatic_ocr?: boolean | null;
   semantic_assistance: 'not_requested' | 'no_candidates' | 'unavailable' | 'no_verified_pairs' | 'proposals_added';
 };

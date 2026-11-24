@@ -28,7 +28,8 @@ export default {
         "ocr_pages": [],
         "ocr_override_pages": [],
         "pages_with_text": 1,
-        "pages_without_text": []
+        "pages_without_text": [],
+        "pages_with_unchecked_images": []
       },
       {
         "id": "revised",
@@ -41,7 +42,8 @@ export default {
         "ocr_pages": [],
         "ocr_override_pages": [],
         "pages_with_text": 1,
-        "pages_without_text": []
+        "pages_without_text": [],
+        "pages_with_unchecked_images": []
       }
     ],
     "findings": [
@@ -252,6 +254,7 @@ export default {
     "warnings": [],
     "text_coverage": "all_pages_have_text",
     "fuzzy_matching_limited": false,
+    "automatic_ocr": false,
     "semantic_assistance": "not_requested",
     "verification_policy": "Uploaded order does not establish authority. Verify consequential claims against the issuing organization's official publications."
   }

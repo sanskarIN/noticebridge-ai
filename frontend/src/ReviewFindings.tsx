@@ -24,6 +24,7 @@ const copy = {
   revised: 'Updated notice',
   page: 'Page',
   open: 'Open PDF page',
+  compareSources: 'Compare source pages',
   ocr: 'Machine OCR — verify transcription',
   semantic: 'Local AI suggestion — verify PDF source',
   similarity: 'text similarity (not confidence)',
@@ -45,6 +46,7 @@ const categories: Record<FindingCategory, string> = {
 const valueKinds: Record<ValueChange['kind'], string> = {
   date: 'Date',
   amount: 'Amount',
+  time: 'Time',
 };
 
 const valueOutcomes: Record<ValueChange['outcome'], string> = {
@@ -103,11 +105,12 @@ type Filters = {
 
 const DEFAULT_FILTERS: Filters = { search: '', status: 'all', category: 'all', review: 'all' };
 
-export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
+export default function ReviewFindings({ report, checked, onCheck, onOpen, onCompareSources }: {
   report: Report;
   checked: ReadonlySet<string>;
   onCheck: (id: string, selected: boolean) => void;
   onOpen: (evidence: Evidence) => void;
+  onCompareSources: (original: Evidence, revised: Evidence) => void;
 }) {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
@@ -119,10 +122,13 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
     new Map(report.checklist.map(item => [item.finding_id, item])), [report.checklist]
   );
   const reviewable = useMemo(() => new Set(checklist.keys()), [checklist]);
-  const priorities = useMemo(
+  const pendingPriorities = useMemo(
     () => reviewPriorities(report.findings, reviewable, checked),
     [report.findings, reviewable, checked],
   );
+  // The opening panel is intentionally short, but its count must make clear
+  // that additional consequential findings remain in the full review list.
+  const priorities = pendingPriorities.slice(0, 3);
   const indexed = useMemo(() => report.findings.map(finding => {
     const evidence = findingEvidence(finding);
     return { finding, evidence, quotes: evidence.map(item => normalizeSearch(item.text)) };
@@ -184,6 +190,8 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
       <div className="priority-intro">
         <h3 id="review-first-heading">Review first</h3>
         <p>Check urgent or uncertain changes against the source before acting.</p>
+        <p className="priority-remaining">Showing {priorities.length} of {pendingPriorities.length}
+          {' '}prioritized items. Review all findings below; this is not an official verification.</p>
       </div>
       <ul>{priorities.map(item =>
         <li key={item.id}>
@@ -230,6 +238,7 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
     <div className="findings-list">{shown.map(({ finding, evidence }) => {
       const task = checklist.get(finding.id);
       const changed = finding.field_changes.filter(delta => delta.outcome === 'changed');
+      const { original, revised } = finding;
       return <article className="finding" key={finding.id} id={`finding-${finding.id}`} tabIndex={-1}>
         <div className="finding-header">
           <div>
@@ -261,6 +270,8 @@ export default function ReviewFindings({ report, checked, onCheck, onOpen }: {
               : item === finding.revised ? changed.map(delta => delta.revised.raw) : []}
           />)}
         </div>
+        {original && revised && <button type="button" className="source-button compare-source-button"
+          onClick={() => onCompareSources(original, revised)}>{t.compareSources}</button>}
         {task && <label className="checklist-item">
           <input type="checkbox" checked={checked.has(finding.id)}
             onChange={event => changeReview(finding.id, event.target.checked)} />

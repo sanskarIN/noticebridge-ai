@@ -57,6 +57,10 @@ def verify_report_provenance(
         report.verification_policy == EXPECTED_POLICY,
         "Worker attempted to change the source verification policy",
     )
+    _require(
+        report.automatic_ocr is None or report.automatic_ocr == ocr_requested,
+        "Recorded automatic OCR mode differs from the requested mode",
+    )
     summaries = dict(zip(("original", "revised"), report.documents, strict=True))
     sources = {
         "original": (original, old_name),
@@ -111,6 +115,13 @@ def verify_report_provenance(
         _require(
             all(page in ocr_pages or page in empty_pages for page in selected),
             f"{role} selected OCR pages must contain OCR evidence or be uncovered",
+        )
+        unchecked_images = document.pages_with_unchecked_images
+        _require(
+            unchecked_images == sorted(set(unchecked_images))
+            and all(1 <= page <= document.page_count for page in unchecked_images)
+            and set(unchecked_images).isdisjoint(ocr_pages.union(empty_pages)),
+            f"{role} unchecked image pages must have native text and valid page numbers",
         )
         ocr_pages_by_role[role] = ocr_pages
         _require(
@@ -255,7 +266,8 @@ def verify_report_provenance(
                 and first_dates[0].canonical != second_dates[0].canonical
                 and category_for(evidence[0].text) == "deadline"
                 and category_for(evidence[1].text) == "deadline"
-                and anchor(evidence[0].text, "deadline") == anchor(evidence[1].text, "deadline"),
+                and anchor(evidence[0].text, "deadline", mask_clock=False)
+                == anchor(evidence[1].text, "deadline", mask_clock=False),
                 "Contradiction must quote distinct parsed dates under the same label",
             )
         else:

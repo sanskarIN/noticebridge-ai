@@ -14,6 +14,7 @@ const previewCopy = {
   page: 'Source PDF page',
   viewer: 'PDF page viewer',
   uncovered: 'No text was extracted from this page. Inspect the page directly.',
+  uncheckedImage: 'Inspect the image on this page for notice text that may be missing from the comparison.',
   geometry: 'Page geometry could not be verified; inspect the source without an approximate highlight.',
   highlight: 'Source highlight is positioned using the PDF page transform. Verify the original text and page.',
 };
@@ -83,10 +84,11 @@ function highlightForPage(
   };
 }
 
-export default function PdfEvidencePreview({ file, pageNumber, evidence }: {
+export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheckedImage }: {
   file: File;
   pageNumber: number;
   evidence?: PdfEvidence;
+  uncheckedImage?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -201,7 +203,7 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence }: {
       </div>
     </div>
     {state === 'ready' && <p className="preview-help">
-      {evidence ? (highlight ? t.highlight : t.geometry) : t.uncovered}
+      {evidence ? (highlight ? t.highlight : t.geometry) : uncheckedImage ? t.uncheckedImage : t.uncovered}
     </p>}
   </div>;
 }

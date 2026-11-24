@@ -40,6 +40,27 @@
     "expected_field_outcomes": ["uncertain"]
   },
   {
+    "id": "hyphen_date_to_month_first_ordinal",
+    "original": ["Application deadline: 19th-Dec-2026"],
+    "revised": ["Application deadline: December 13th, 2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["changed"]
+  },
+  {
+    "id": "spelled_date_to_hyphenated_equivalent",
+    "original": ["Application deadline: 2 September 2026"],
+    "revised": ["Application deadline: 2nd-Sept-2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["same_value"]
+  },
+  {
+    "id": "date_range_stays_uncertain",
+    "original": ["Interview booking deadline: 13th to 15th December 2026"],
+    "revised": ["Interview booking deadline: 13th to 14th December 2026"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["uncertain"]
+  },
+  {
     "id": "not_assumed_canceled",
     "original": ["Candidates must submit photo"],
     "revised": ["Exam venue will be on admit card"],
@@ -117,5 +138,26 @@
     "revised": ["Application deadline: Dec. 13, 2026"],
     "expected_status_counts": {"confirmed_change": 1},
     "expected_field_outcomes": ["changed"]
+  },
+  {
+    "id": "same_day_deadline_cutoff",
+    "original": ["Application deadline: 13 December 2026 at 5 PM IST"],
+    "revised": ["Application deadline: 13 December 2026 at 14:00 IST"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["same_value", "changed"]
+  },
+  {
+    "id": "same_reporting_time_different_style",
+    "original": ["Reporting time: 5:30 P.M. IST"],
+    "revised": ["Reporting time: 17:30 IST"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["same_value"]
+  },
+  {
+    "id": "ambiguous_interview_clock",
+    "original": ["Interview time: 9:30"],
+    "revised": ["Interview time: 10:30 AM"],
+    "expected_status_counts": {"confirmed_change": 1},
+    "expected_field_outcomes": ["uncertain"]
   }
 ]

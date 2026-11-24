@@ -21,8 +21,44 @@ def test_compare_endpoint(pdf_bytes):
     assert payload["findings"][0]["original"]["page"] == 1
     assert payload["documents"][0]["id"] == "original"
     assert payload["text_coverage"] == "all_pages_have_text"
+    assert payload["automatic_ocr"] is False
     assert payload["documents"][0]["pages_with_text"] == 1
     assert payload["documents"][0]["pages_without_text"] == []
+
+
+def test_worker_compares_printed_dates_and_preserves_ranges(pdf_bytes):
+    original = pdf_bytes([[
+        "Application deadline: 19th-Dec-2026",
+        "Interview booking deadline: 13th to 15th December 2026",
+        "Payment deadline: 22nd-Dec-2026",
+    ]])
+    revised = pdf_bytes([[
+        "Application deadline: December 13th, 2026",
+        "Interview booking deadline: 13th to 14th December 2026",
+        "Payment deadline extended from Dec. 22nd, 2026 to 23rd-Dec-2026",
+    ]])
+    response = client.post("/api/compare", files={
+        "original": ("original.pdf", original, "application/pdf"),
+        "revised": ("revised.pdf", revised, "application/pdf"),
+    })
+    assert response.status_code == 200, response.text
+    deadline, date_range, amendment = response.json()["findings"]
+    assert deadline["status"] == "confirmed_change"
+    assert deadline["original"]["page"] == deadline["revised"]["page"] == 1
+    (delta,) = deadline["field_changes"]
+    assert delta["outcome"] == "changed"
+    assert delta["original"]["raw"] == "19th-Dec-2026"
+    assert delta["revised"]["raw"] == "December 13th, 2026"
+    assert delta["revised"]["canonical"] == "2026-12-13"
+
+    (range_value,) = date_range["field_changes"]
+    assert range_value["outcome"] == "uncertain"
+    assert range_value["revised"]["canonical"] is None
+    assert range_value["revised"]["raw"] == "13th to 14th December 2026"
+
+    assert amendment["match_method"] == "explicit_amendment"
+    assert amendment["field_changes"][0]["revised"]["canonical"] == "2026-12-23"
+    assert amendment["field_changes"][0]["outcome"] == "uncertain"
 
 
 def test_bad_input_rejected(pdf_bytes):
@@ -92,6 +128,7 @@ def test_api_ocr_form_flag_is_forwarded(pdf_bytes, monkeypatch):
     })
     assert response.status_code == 200
     assert enabled == [True]
+    assert response.json()["automatic_ocr"] is True
     assert len(response.json()["documents"][0]["sha256"]) == 64
 
 
