@@ -260,3 +260,13 @@ def test_schedule_table_matching_preserves_scope(label_a, label_b, value_a, valu
     assert not any(
         delta.outcome == "changed" for f in report.findings for delta in f.field_changes
     )
+
+
+def test_gate_closing_time_cell_is_joined_without_general_identifier_cells():
+    rows = [HEADER, ("Gate closing time", "17:00 IST"), ("Reference number", "18:00")]
+    doc = extract_pdf(
+        _notice(rows), document_id="original", filename="schedule.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *HEADER, "Gate closing time 17:00 IST", "Reference number", "18:00",
+    ]

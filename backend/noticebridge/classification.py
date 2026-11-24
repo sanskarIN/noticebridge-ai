@@ -12,6 +12,8 @@ CATEGORIES = (
         "deadline",
         (
             "deadline", "last date", "closing date", "due date", "apply by",
+            "last day to apply", "last day for submission", "final date for submission",
+            "application closes", "registration closes", "submission closes",
             "अंतिम तिथि", "अंतिम तारीख",
         ),
     ),
@@ -20,7 +22,15 @@ CATEGORIES = (
         ("eligib", "ineligib", "qualification", "required degree", "पात्रता", "योग्यता"),
     ),
     ("fee", ("application fee", "fees", "fee", "payment", "शुल्क", "फीस")),
-    ("time", ("exam time", "reporting time", "interview time", "time of", "समय")),
+    (
+        "time",
+        (
+            "exam time", "reporting time", "interview time", "time of",
+            "closing time", "gate closes at", "entry closes at",
+            "exam starts at", "interview starts at", "reporting starts at",
+            "exam start time", "test start time", "examination time", "समय",
+        ),
+    ),
     ("instruction", ("must", "submit", "required", "instruction", "अनिवार्य", "जमा करें")),
 )
 

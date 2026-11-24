@@ -234,5 +234,48 @@
     "expected_field_outcomes": [
       "uncertain"
     ]
+  },
+  {
+    "id": "registration_closes_date",
+    "original": [
+      "Registration closes on 13 Dec 2026"
+    ],
+    "revised": [
+      "Registration closes on 14 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
+  },
+  {
+    "id": "gate_closing_time",
+    "original": [
+      "Gate closing time: 17:00 IST"
+    ],
+    "revised": [
+      "Gate closing time: 18:00 IST"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
+  },
+  {
+    "id": "eligibility_cutoff_not_application_deadline",
+    "original": [
+      "Eligibility cut-off date: 13 Dec 2026"
+    ],
+    "revised": [
+      "Eligibility cut-off date: 14 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": []
   }
 ]

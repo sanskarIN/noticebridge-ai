@@ -120,3 +120,12 @@ review priorities, not proof of an official amendment or cancellation.
 - E2E UI-fixture tests for uncertain states verify rendering and prioritization,
   not extraction accuracy. Real PDF integration tests separately cover source
   passage matching.
+
+### English notice label coverage
+
+The shared classifier recognizes explicit registration/application/submission
+closure phrases and gate-closing/exam-start/reporting-start schedule phrases.
+The same label, numbered scope and printed time-zone context must still match
+before parsed values can be called changed. An eligibility cut-off date is not
+assumed to be an application deadline. These are bounded wording rules, not
+an exhaustive understanding of all official notices.
