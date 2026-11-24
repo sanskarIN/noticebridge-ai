@@ -124,6 +124,15 @@ function describeClockFinding(finding: Finding): ReviewPriority | undefined {
   const clock = values.find(change => change.kind === 'time');
   if (!clock || clock.outcome === 'same_value') return undefined;
 
+  if (finding.match_method === 'explicit_amendment') {
+    return {
+      id, rank: 5, title: 'Scheduled time amendment needs verification',
+      detail: `${clock.original.raw} → ${clock.revised.raw}. ` +
+        'The updated notice states a time amendment. Verify the date, time zone and applicability with the issuer.' +
+        sourceCaution(finding),
+    };
+  }
+
   const calendar = values.find(change => change.kind === 'date');
   if (calendar?.outcome === 'changed' && clock.outcome === 'changed') {
     // Crossing a calendar date can move a cutoff by only a few minutes.
