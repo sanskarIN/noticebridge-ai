@@ -70,6 +70,22 @@ npm run test:e2e
 
 All evidence references point to source text extracted from the uploaded PDFs, including the extraction method (`native` or `ocr`) and page geometry. Both source locations are included when a passage is matched. The application has **no durable upload storage**, but FastAPI/Starlette multipart parsing **may temporarily spool uploads to local OS temporary files**. Deployments must secure temporary storage, server logs, networking, reverse proxies, and crash dumps. Do not upload private or confidential files to an untrusted hosted instance.
 
+## Offline command-line comparison
+
+For reproducible comparisons without running a browser or HTTP server,
+use the same isolated evidence engine locally:
+
+```bash
+python -m noticebridge.compare_cli original.pdf revised.pdf --output evidence.json
+python -m noticebridge.verify_report evidence.json original.pdf revised.pdf
+```
+
+The command refuses to overwrite an existing file, writes a private
+replay-verifiable report and prints only quote-free summary information.
+Optional bounded OCR is explicit; local AI proposals are unavailable in this
+deterministic CLI. See [the offline CLI guide](docs/offline-cli.md) for
+cross-platform examples, atomic filesystem requirements and limitations.
+
 ## Verify a saved evidence report
 
 After installing the backend, run the following command with the exported JSON
