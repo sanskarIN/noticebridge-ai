@@ -6,7 +6,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'rea
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
 
-type SourcePage = Pick<Evidence, 'document_id' | 'filename' | 'page'>;
+type SourcePage = Pick<Evidence, 'document_id' | 'filename' | 'page'> & { uncheckedImage?: boolean };
 type Preview = { url: string; file: File; source: SourcePage; evidence?: Evidence };
 type ComparisonSource = 'live_upload' | 'live_demo' | 'showcase';
 type CompareOptions = {
@@ -32,7 +32,7 @@ const t = {
   insufficient: 'Comparison is inconclusive because one or both PDFs have no extractable text. Enable OCR for scanned pages or supply text-based PDFs.',
   page: 'Page', verify: 'Verify against the issuing organization before acting on a deadline or eligibility change.',
   authority: 'Authority not verified', warnings: 'Processing warnings',
-  closePreview: 'Close preview', newTab: 'Open PDF in new tab',
+  closePreview: 'Close preview', newTab: 'Open PDF in new tab', pairedPreview: 'Compare source pages',
   export: 'Export evidence report (JSON)', exportCsv: 'Export review CSV',
   invalidFile: 'Select a PDF no larger than 10 MiB.',
   ocr: 'Enable local OCR for scanned pages',
@@ -49,6 +49,9 @@ const t = {
   coverageInconclusive: 'One or both PDFs yielded no text. The comparison is inconclusive.',
   coveragePages: 'pages yielded text',
   uncovered: 'Open pages with no extracted text',
+  uncheckedImages: 'Review pages with large images',
+  uncheckedImageHelp: 'These pages contain some selectable text. The large images may contain more notice text.',
+  openOcrSettings: 'Open selected-page OCR settings',
   fuzzyLimited: 'The comparison skipped some candidate pairings because the matching limit was reached. Check the source before interpreting unmatched statements.',
   previewLoading: 'Preparing PDF viewer…',
   semantic: 'Suggest matches with local AI (experimental)',
@@ -91,23 +94,26 @@ export default function App() {
   const [enableSemantic, setEnableSemantic] = useState(false);
   const [error, setError] = useState('');
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [activePreview, setPreview] = useState<Preview[] | null>(null);
+  const preview = activePreview?.length === 1 ? activePreview[0] : null;
+  const comparedSources = activePreview?.length === 2 ? activePreview : null;
   const controllerRef = useRef<AbortController | null>(null);
   const closePreviewRef = useRef<HTMLButtonElement | null>(null);
   const previewDialogRef = useRef<HTMLElement | null>(null);
   const previewReturnFocusRef = useRef<HTMLElement | null>(null);
   const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const ocrRecoveryRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
-    return () => { if (preview) URL.revokeObjectURL(preview.url); };
-  }, [preview]);
+    return () => { activePreview?.forEach(item => URL.revokeObjectURL(item.url)); };
+  }, [activePreview]);
   useEffect(() => () => controllerRef.current?.abort(), []);
   useEffect(() => {
     if (report) resultsHeadingRef.current?.focus();
   }, [report]);
 
   useEffect(() => {
-    if (!preview) return;
+    if (!activePreview) return;
     // Opening the dialog makes its opener inert before this effect runs.
     // Capture that element at click time, not after React updates the DOM.
     const previousFocus = previewReturnFocusRef.current;
@@ -150,7 +156,7 @@ export default function App() {
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
-  }, [preview]);
+  }, [activePreview]);
 
   function clearComparison() {
     // Reports are valid only for the exact pair of files AND the options used
@@ -176,15 +182,25 @@ export default function App() {
     if (role === 'original') setOriginal(file); else setRevised(file);
   }
 
-  function openSource(source: SourcePage | Evidence) {
-    const file = source.document_id === 'original' ? original : revised;
-    if (!file) return;
+  function openSource(...sources: [SourcePage | Evidence] | [Evidence, Evidence]) {
+    const selected = sources.flatMap(source => {
+      const file = source.document_id === 'original' ? original : revised;
+      return file ? [{ file, source }] : [];
+    });
+    if (selected.length !== sources.length) return;
     previewReturnFocusRef.current = document.activeElement instanceof HTMLElement ?
       document.activeElement : null;
-    setPreview({
+    setPreview(selected.map(({ file, source }) => ({
       url: URL.createObjectURL(file), file, source,
       evidence: 'bbox' in source ? source : undefined,
-    });
+    })));
+  }
+
+  function openSelectedPageOcr(role: DocumentRole) {
+    const settings = ocrRecoveryRef.current;
+    if (!settings) return;
+    settings.open = true;
+    settings.querySelector<HTMLInputElement>(`#ocr-${role}-pages`)?.focus();
   }
 
   function setReviewed(id: string, selected: boolean) {
@@ -273,11 +289,11 @@ export default function App() {
   }
 
   return <div className="app-shell">
-    <header className="topbar" inert={Boolean(preview)}>
+    <header className="topbar" inert={Boolean(activePreview)}>
       <div className="brand"><span className="brand-mark">N<span>↗</span></span><span>NoticeBridge <b>AI</b></span></div>
       <a className="repo-link" href="https://github.com/sanskarIN/noticebridge-ai">View source code</a>
     </header>
-    <main inert={Boolean(preview)}>
+    <main inert={Boolean(activePreview)}>
       <section className="hero">
         <h1>{t.title}</h1>
         <p className="hero-copy">{t.detail}</p>
@@ -314,14 +330,14 @@ export default function App() {
               </label>)}
           </div>
           <label className="ocr-option"><input type="checkbox" checked={enableOcr} onChange={(e) => { clearComparison(); setEnableOcr(e.target.checked); }} /><span><strong>{t.ocr}</strong><small>{t.ocrNote}</small></span></label>
-          <details className="ocr-recovery">
+          <details className="ocr-recovery" ref={ocrRecoveryRef}>
             <summary>{t.ocrRecovery}</summary>
             <p id="ocr-recovery-help">{t.ocrRecoveryHelp}</p>
             <div className="ocr-recovery-fields">
               {([['original', t.ocrOriginalPages], ['revised', t.ocrRevisedPages]] as const).map(([role, label]) =>
                 <label key={role}>
                   {label}
-                  <input type="text" value={ocrPages[role]} maxLength={160}
+                  <input id={`ocr-${role}-pages`} type="text" value={ocrPages[role]} maxLength={160}
                     aria-describedby="ocr-recovery-help" autoComplete="off" spellCheck={false}
                     onChange={event => {
                       clearComparison();
@@ -371,6 +387,21 @@ export default function App() {
                 </button>)}
               </div>
             </details>}
+            {!!d.pages_with_unchecked_images?.length && <details>
+              <summary>{t.uncheckedImages} ({d.pages_with_unchecked_images.length})</summary>
+              <p>{t.uncheckedImageHelp}</p>
+              <div className="coverage-page-links">
+                {d.pages_with_unchecked_images.map(page => <button
+                  className="review-button" type="button" key={page}
+                  onClick={() => openSource({
+                    document_id: d.id, filename: d.filename, page, uncheckedImage: true,
+                  })}>
+                  {t.page} {page}
+                </button>)}
+                {!SHOWCASE_ONLY && <button className="review-button" type="button"
+                  onClick={() => openSelectedPageOcr(d.id)}>{t.openOcrSettings}</button>}
+              </div>
+            </details>}
           </li>)}</ul>
         </div>
         {report.fuzzy_matching_limited && <p className="coverage-report partial" role="status">{t.fuzzyLimited}</p>}
@@ -379,6 +410,7 @@ export default function App() {
           onRestore={ids => setChecked(previous => new Set([...previous, ...ids]))} />}
         {report.findings.length > 0 && <ReviewFindings
           report={report} checked={checked} onCheck={setReviewed} onOpen={openSource}
+          onCompareSources={openSource}
         />}
         {report.warnings.length > 0 && <aside className="warnings"><h3>{t.warnings}</h3>{report.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</aside>}
       </section>}
@@ -387,12 +419,40 @@ export default function App() {
       <section ref={previewDialogRef} className="preview-dialog" role="dialog" aria-modal="true" aria-labelledby="preview-heading">
         <div className="preview-top"><strong id="preview-heading">{preview.source.filename} · {t.page} {preview.source.page}</strong><button type="button" ref={closePreviewRef} onClick={() => setPreview(null)}>{t.closePreview} ×</button></div>
         <Suspense fallback={<p role="status">{t.previewLoading}</p>}>
-          <PdfEvidencePreview file={preview.file} pageNumber={preview.source.page} evidence={preview.evidence} />
+          <PdfEvidencePreview file={preview.file} pageNumber={preview.source.page}
+            evidence={preview.evidence} uncheckedImage={preview.source.uncheckedImage} />
         </Suspense>
         {preview.evidence && <p className="preview-quote">{preview.evidence.text}</p>}
         <a href={`${preview.url}#page=${preview.source.page}`} target="_blank" rel="noopener noreferrer">{t.newTab} ↗</a>
       </section>
     </div>}
-    <footer inert={Boolean(preview)}><span>NoticeBridge AI · Open-source / Apache-2.0</span><span>Understand change. Verify evidence.</span></footer>
+    {comparedSources && <div className="preview-backdrop" role="presentation">
+      <section ref={previewDialogRef} className="preview-dialog paired-preview"
+        role="dialog" aria-modal="true" aria-labelledby="preview-heading">
+        <div className="preview-top">
+          <strong id="preview-heading">{t.pairedPreview}</strong>
+          <button type="button" ref={closePreviewRef} onClick={() => setPreview(null)}>{t.closePreview} ×</button>
+        </div>
+        <div className="preview-sources">
+          {comparedSources.map(({ source, file, evidence, url }) => {
+            const headingId = `preview-${source.document_id}-heading`;
+            return <section key={source.document_id} className="preview-source" aria-labelledby={headingId}>
+              <h3 id={headingId}>
+                {t[source.document_id]} · {source.filename} · {t.page} {source.page}
+              </h3>
+              <Suspense fallback={<p role="status">{t.previewLoading}</p>}>
+                <PdfEvidencePreview file={file} pageNumber={source.page} evidence={evidence} />
+              </Suspense>
+              {evidence && <p className="preview-quote">{evidence.text}</p>}
+              <a href={`${url}#page=${source.page}`} target="_blank" rel="noopener noreferrer"
+                aria-label={`${t.newTab} · ${t[source.document_id]}`}>
+                {t.newTab} ↗
+              </a>
+            </section>;
+          })}
+        </div>
+      </section>
+    </div>}
+    <footer inert={Boolean(activePreview)}><span>NoticeBridge AI · Open-source / Apache-2.0</span><span>Understand change. Verify evidence.</span></footer>
   </div>;
 }

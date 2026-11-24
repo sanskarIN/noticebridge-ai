@@ -147,7 +147,9 @@ fingerprints.
 Check that the backend host actually has Tesseract plus `eng` and `hin`
 language data. Results report `ocr_enabled`, the number of
 `ocr_page_count` pages, `pages_without_text_count`, per-case OCR page counts,
-processing warnings, and incomplete-case counts. If no OCR data is available,
+processing warnings, and incomplete-case counts. The separate
+`unchecked_image_page_count` and per-document page numbers flag large images on
+pages with some native text. If no OCR data is available,
 the tool does not invent transcriptions or artificially increase recall.
 Do not compare OCR-on and OCR-off evaluation results without identifying the
 different extraction mode and environment. OCR-derived possible text
@@ -231,6 +233,7 @@ PYTHONPATH=backend python backend/benchmarks/evaluate_labeled.py \
   --min-independent-precision 0.90 --min-independent-recall 0.90 \
   --max-independent-unsupported-confirmed 0 \
   --max-independent-incomplete-cases 0 \
+  --max-independent-unchecked-image-cases 0 \
   --max-independent-limited-matching-cases 0
 ~~~
 
@@ -238,10 +241,13 @@ Evidence-pair accuracy is not enough when some pages have no usable text
 or the matcher exhausts its candidate budget. Optional
 `--max-independent-incomplete-cases N` limits cases with incomplete text
 coverage after any opted-in OCR. Optional
-`--max-independent-limited-matching-cases N` limits cases whose fuzzy
-matching was explicitly reported as limited. Set either to `0` for a
-strict release gate; use larger thresholds only with an explicit, recorded
-exception review. Both fail on an empty declared independent cohort. A
+`--max-independent-unchecked-image-cases N` separately limits cases with
+image-heavy pages that may conceal unextracted text, even when every page
+has selectable text. Optional `--max-independent-limited-matching-cases N`
+limits cases whose fuzzy matching was explicitly reported as limited.
+Set all three to `0` for a strict release gate; use larger thresholds only
+with an explicit, recorded exception review. All three fail on an empty
+declared independent cohort. The image heuristic can miss some image content. A
 complete text-coverage result does **not** prove OCR accuracy, source
 authenticity or completeness of a notice's meaning.
 
@@ -310,6 +316,67 @@ human-reviewed examples with recorded provenance:
   disagreements and update adjudication separately from the benchmark outputs.
 - A frozen test split independent of development examples and the fictional
   demonstration.
+
+### Reconcile two independent reviews
+
+Give both reviewers the same version-2 manifest with the PDF fingerprints pinned
+and the `expected_pairs` arrays empty. Keep the reviewers' copies separate, and
+have each reviewer label the PDFs without seeing the other person's labels or the
+engine's predictions. In each finished case, set
+`"label_method": "independent_human"` and `"review_complete": true`. The
+completion field distinguishes a reviewed case with zero expected pairs from an
+unreviewed case. Use pseudonymous reviewer IDs.
+
+Run the reconciliation from the repository root. Keep the manifests in the same
+directory as each other so their relative PDF paths refer to the same dataset.
+
+~~~bash
+python backend/benchmarks/reconcile_labeled_reviews.py \
+  evaluation/review-a.json evaluation/review-b.json \
+  --reviewer-a reviewer-a --reviewer-b reviewer-b \
+  --output evaluation/labels-reconciled.json
+~~~
+
+The audit prints case IDs, counts, and input manifest fingerprints. It omits
+source quotations. Exact pair agreement uses the same page numbers, quote
+normalization, and occurrence counts as the evaluator. The positive pair
+agreement score is twice the number of shared pairs divided by the total number
+of pairs labeled by both reviewers, with a null score when neither labels a pair.
+
+If reviewers disagree, the command exits with status 1 and leaves the output
+path untouched. Have a third person review only the disputed cases against the
+PDFs. Their separate version-2 manifest must include every disputed case
+and its complete corrected labels, even when the correct result is an empty list.
+Mark those cases complete and rerun with
+`--adjudication evaluation/review-c.json --adjudicator reviewer-c`. The resolved
+manifest retains the audit and can be passed to `evaluate_labeled.py` with
+`--require-pinned-sources`. Use the independent-corpus gate for the required
+number of distinct non-fictional pairs.
+
+Before scoring a previously reconciled manifest, verify it against the
+original review files with the same reviewer IDs and adjudication options:
+
+~~~bash
+python backend/benchmarks/reconcile_labeled_reviews.py \
+  evaluation/review-a.json evaluation/review-b.json \
+  --reviewer-a reviewer-a --reviewer-b reviewer-b \
+  --verify evaluation/labels-reconciled.json
+~~~
+
+This recomputes the reconciliation, checks the pinned PDF bytes again, and
+compares the full canonical JSON fingerprint of the saved manifest against the
+new result. It accepts changes in JSON whitespace or object key order, but
+rejects changed labels, reviewer declarations, audit fields, extra claims, and
+different input review fingerprints. Array order remains significant. For an
+adjudicated corpus, supply the same third-review options. Verification never
+rewrites the manifest; a mismatch or unresolved disagreement exits nonzero.
+This is a local consistency check, not a digital signature or an authentication
+of the reviewers. Keep the original review files in trusted storage.
+
+Review completion and reviewer roles are recorded declarations. The command
+checks that both reviews refer to the same pinned PDFs and uses the adjudicated
+labels for disputed cases. The private review manifests preserve source
+quotations and should stay with the evaluation data.
 
 When reporting results, state sample counts, scope, version/commit, extraction
 coverage, and known failure cases. Keep exact user or applicant data private.

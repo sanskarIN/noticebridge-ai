@@ -7,7 +7,9 @@ from dataclasses import dataclass
 
 import pymupdf as fitz
 
+from .image_coverage import has_unchecked_image
 from .models import DocumentSummary, Evidence, ExtractedLine
+from .table_rows import join_ruled_value_rows
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 MAX_PAGES = 80
@@ -125,6 +127,7 @@ def extract_pdf(
     lines: list[ExtractedLine] = []
     warnings: list[str] = []
     pages_without_text: list[int] = []
+    pages_with_unchecked_images: list[int] = []
     total_lines = 0
     total_characters = 0
     ocr_pages: list[int] = []
@@ -142,6 +145,7 @@ def extract_pdf(
             )
         for index, page in enumerate(pdf):
             page_number = index + 1
+            page_start = len(lines)
             page_lines = 0
             skipped_boxes = 0
             rect = page.rect
@@ -220,8 +224,16 @@ def extract_pdf(
                     )
                     lines.append(ExtractedLine(text=text, evidence=evidence))
                     page_lines += 1
+            # Coverage uses actual native text boxes, not the synthetic union
+            # of two table cells, which may span unrelated image content.
             if method == "ocr" and page_lines:
                 ocr_pages.append(page_number)
+            elif page_lines and has_unchecked_image(page, lines[page_start:]):
+                pages_with_unchecked_images.append(page_number)
+            if method == "native" and not skipped_boxes and page_lines >= 2:
+                lines[page_start:] = join_ruled_value_rows(
+                    page, lines[page_start:], max_quote_length=MAX_LINE_CHARACTERS,
+                )
             if skipped_boxes:
                 warnings.append(
                     f"{document_id}: page {page_number} omitted {skipped_boxes} text line(s) "
@@ -256,6 +268,7 @@ def extract_pdf(
             ocr_override_pages=list(requested_pages),
             pages_with_text=index + 1 - len(pages_without_text),
             pages_without_text=pages_without_text,
+            pages_with_unchecked_images=pages_with_unchecked_images,
         ),
         lines=lines,
         warnings=warnings,

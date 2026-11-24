@@ -2,27 +2,32 @@
 
 **Understand what changed. Know what to do. Verify the evidence.**
 
-NoticeBridge AI is an open-source document comparison prototype for official notices. The current development milestone compares two PDFs and produces **evidence-linked wording differences, conservative date/fee checks, and optional bilingual OCR** rather than unverifiable AI summaries.
+NoticeBridge AI is an open-source document comparison prototype for official notices. It compares two PDFs and produces **evidence-linked wording differences, conservative date, time and fee checks, and optional bilingual OCR**.
 
 > **Prototype, not an official verification service.** Document upload order is not proof of authority. Check deadlines, eligibility, and requirements against the issuing organization's official website. A report may miss changes and must not be used as the sole basis for an important decision.
 
 ## What works now
 
 - Two-PDF upload with per-file checks (10 MiB/PDF), **total ASGI request-body cap** (20 MiB plus 1 MiB framing), PDF type, encryption, and page-count checks. Upload reception is limited to **90 seconds** and **eight concurrent compare requests per API process**, before multipart parsing.
+- A **browser-origin admission check** rejects cross-origin compare POSTs from unlisted origins before reading or spooling uploads. It accepts the two local Vite origins (`localhost:5173` and `127.0.0.1:5173`) and same-origin API requests (`localhost:8000` and `127.0.0.1:8000`); native clients without browser-origin metadata remain usable. This is not user authentication or a production internet-upload security boundary.
 - Line-level PDF text extraction with **actual 1-based page references, source coordinates, and SHA-256 file fingerprints** from PyMuPDF. The API also reports per-document pages without extractable text and overall text-coverage status: all pages yielded text, partial, or inconclusive.
+- **Evidence from simple ruled tables.** NoticeBridge compares native PDF rows with a label in one cell and a standalone date or INR amount in the next. The source highlight spans both cells in the same row.
 - **Optional local OCR** for image-only pages and selected pages with garbled or incomplete embedded text (English + Hindi). Each document reports the selected pages and the pages that yielded OCR text. A limit of 12 attempts per document and a render-pixel ceiling bound work.
+- **Mixed text and image coverage.** The results flag pages that have some selectable text but little text over a large image. Open the original page to inspect it, or use the selected-page OCR settings for that document. The JSON evidence report records the flagged page numbers.
 - **PDF.js source preview with rotation/crop/UserUnit-aware evidence highlights**, rendered locally from the selected File without a CDN. The viewer transforms each source box through the PDF.js page viewport, verifies page dimensions and rotation, and suppresses highlights when geometry does not match. Browser regressions cover 0°, 90°, 180° and 270° pages, cropping and non-default units. Rendered bitmaps remain capped at 9 million physical pixels and 4096 pixels per dimension.
 - Identical-text reconciliation, anchored value comparison, and globally ranked fuzzy proposals. Unique masked context in native text supports a matched text change. Fuzzy, duplicated-context, and OCR pairings stay possible and associated dates and fees stay uncertain. Conflicting calendar dates under the same label on one page are flagged for review.
 - A separate correction can link to its original deadline or fee when the updated quote explicitly states a prior value and a replacement, and the earlier label and value match uniquely. Each link stays in the human review queue.
-- **Structured date/fee deltas** alongside quoted evidence: canonical calendar dates and INR amounts only when syntax is unambiguous and valid. Deadline and fee matching preserves scope such as phase or paper numbers.
+- **Structured date, cutoff time and fee changes** alongside quoted evidence. A same-day deadline change from `5 PM` to `14:00` appears in **Review first** with links to both PDF quotes. The matcher preserves scope such as shift numbers and printed time-zone labels. Canonical values are emitted only for supported, unambiguous syntax.
 - Ambiguous dates like `01/02/2026` retain an `uncertain` outcome instead of assuming a date order. Supports English and Hindi written month names and Devanagari numerals.
+- Printed formats such as `13th December 2026`, `Dec. 13th, 2026`, and `13-Dec-2026` retain their exact wording in the evidence. Compact ranges such as `13–15 December 2026` stay uncertain as a single deadline value.
 - With explicit opt-in, an **experimental local Ollama model** can propose related unmatched passages. Each proposed pair references extracted source IDs in the same category and appears as a `possible_change`. The API verifies the source references before returning a proposal.
 - Human-verification checklist next to the quoted evidence, plus source-text search and finding category, status, and review filters. Long reports show 20 findings per page. Open pages with missing extracted text from the coverage panel.
+- Use **Compare source pages** on a paired finding to open both highlighted PDF pages in one dialog. The pages appear side by side on wide screens and stack on narrow screens.
 - React/TypeScript comparison workspace with an English review interface, side-by-side evidence, and a local PDF.js viewer loaded on demand. **JSON and spreadsheet-safe CSV exports** include every finding and checklist selection regardless of the active filters. CSV carries source references, fingerprints, authority status and comparison coverage.
 - Worker outputs undergo independent **structural provenance checks** in the API: the SHA-256 must match uploaded bytes, document roles and filenames cannot be swapped, evidence page references must be in range, and an AI suggestion cannot become a confirmed/official claim. This is not independent verification of the actual notice's authenticity.
 - Stateless FastAPI endpoint with **disposable subprocess PDF/OCR workers**, 45-second native and 120-second OCR wall-clock deadlines, bounded per-process concurrency, Linux address-space ceilings (2 GiB), POSIX CPU/file/open-descriptor limits, no-cache responses, Pytest regression tests, and CI configuration. Worker stdout is captured in a private temporary file and read with a 64 MiB result limit. Opt-in local Ollama responses are streamed with a 64 KiB total byte cap.
 - **Browser end-to-end tests** (Playwright/Chromium) cover live uploads, the API-free showcase, source highlighting, review priorities, and report export.
-- A reproducible **18-case fictional-notice regression benchmark** that checks specific findings and evidence backing. It is a developer safety net, not an estimate of accuracy on real official documents.
+- A reproducible **fictional-notice regression benchmark** checks specific findings and evidence backing.
 - A local-only [labeled evaluation tool](docs/labeled-evaluation.md) for evidence-pair precision/recall on operator-supplied PDFs. **Version-2 pinned-source manifests** record exact PDF SHA-256 fingerprints and declared label provenance; a non-overwriting helper preserves human labels. An explicit `--enable-ocr` option can evaluate scanned documents using local Tesseract while leaving experimental AI disabled. The report exposes OCR usage and extraction gaps. A representative, independently labeled real-world corpus does **not** yet exist.
 
 ## Local development
@@ -65,13 +70,41 @@ npm run test:e2e
 
 All evidence references point to source text extracted from the uploaded PDFs, including the extraction method (`native` or `ocr`) and page geometry. Both source locations are included when a passage is matched. The application has **no durable upload storage**, but FastAPI/Starlette multipart parsing **may temporarily spool uploads to local OS temporary files**. Deployments must secure temporary storage, server logs, networking, reverse proxies, and crash dumps. Do not upload private or confidential files to an untrusted hosted instance.
 
+## Verify a saved evidence report
+
+After installing the backend, run the following command with the exported JSON
+and the exact original and revised PDFs.
+
+```bash
+python -m noticebridge.verify_report noticebridge-evidence-report.json original.pdf revised.pdf
+```
+
+The command checks both SHA-256 fingerprints before parsing either file, then
+replays the comparison in the local worker and checks the saved findings,
+quotations, page coordinates, and coverage. Renaming a local PDF is fine when its
+bytes match the export. A failed check exits with a nonzero status.
+
+New reports record whether automatic OCR was enabled and which pages were
+selected. The verifier uses those settings by default. For an older report,
+pass `--ocr selected` if OCR was enabled only for selected pages, or
+`--ocr automatic` if the automatic OCR checkbox was enabled. Use the same
+NoticeBridge revision and OCR environment as the original comparison.
+
+Replay accepts deterministic exports with experimental AI disabled. It verifies
+the comparison engine fields without silently coercing JSON field types,
+dropping unknown engine fields, or filling in missing fields. The only legacy
+exception is an omitted automatic OCR setting. Browser export metadata
+(`review`, `comparison_source`, and `exported_at`) is outside the replay
+contract. Checklist selections express a reviewer's decisions; replay does not
+authenticate those selections, export timestamps, or the issuer's authority.
+
 ## Explicit limitations
 
 - **OCR is optional and fallible**: by default image-only PDFs produce warnings. OCR requires Tesseract and shares one limit of 12 page attempts per PDF. If a selected page yields no OCR text, it appears under pages without extracted text for manual inspection. Machine transcription may hallucinate or omit characters; OCR provenance lowers downstream confidence. There is no calibrated OCR confidence score.
 - **Experimental local AI only**: explanations are rule-based; opt-in model suggestions are not proofs of meaning, accuracy, authority or document precedence. Invalid outputs and unavailable Ollama are explicitly reported without changing deterministic findings.
 - **No verified authority resolution**: a revised filename or upload position cannot establish official precedence.
 - **No robust semantic matching yet**: the initial similarity matcher can misalign duplicate headings or rephrased statements. Check every important finding against both sources.
-- **Limited canonical value parsing**: unambiguous date/fee syntax is normalized for comparisons, but many real-world formats, time zones, and cross-lingual equivalents remain unsupported.
+- **Limited canonical value parsing**: clock comparisons use the times printed in the notice and retain any time-zone text as source context. Time-zone conversion, time ranges, and many local date or currency formats remain outside the parser.
 - **PDF.js geometry limitations**: rotated and cropped pages are now supported when page dimensions, rotation and source coordinates can be reconciled. If the geometry disagrees, the viewer deliberately omits the marker. Complex PDF transformation matrices, unusual font placement and nonstandard pages still require manual inspection.
 - **Local checklist sessions**: after reload, compare the same PDF pair and use **Restore checklist from JSON** to recover saved selections. Restore checks the source fingerprints and selected evidence before adding any selections. Protect [exports](docs/review-csv.md) that include sensitive source quotations.
 - **Ambiguous dates**: dates are parsed conservatively. A numeric date with both first and second parts ≤12 and different is not interpreted as DD/MM or MM/DD. Month-name and ISO formats are safer. Not all language/date/amount formats are recognized.
@@ -119,7 +152,7 @@ Generate two attractive **fictional** sample PDFs to demonstrate the changed-dea
 PYTHONPATH=backend python backend/benchmarks/generate_demo.py --output demo-output
 ```
 
-The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The 18-case synthetic benchmark and Chromium browser tests are separate checks.
+The generated documents have obvious "FICTIONAL" labeling and are deliberately not suitable for any actual application. Upload them in the UI, compare, click the source evidence and review the highlighted PDF source. The synthetic benchmark and Chromium browser tests are separate checks.
 
 ## Hackathon
 

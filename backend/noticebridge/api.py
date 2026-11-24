@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
-from .body_limit import CompareBodyLimit
+from .body_limit import FRONTEND_ORIGINS, CompareBodyLimit
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument, parse_ocr_selection
 from .isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 from .models import ComparisonReport
@@ -34,7 +34,7 @@ async def disable_cache(request: Request, call_next):
 app.add_middleware(CompareBodyLimit)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=FRONTEND_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )

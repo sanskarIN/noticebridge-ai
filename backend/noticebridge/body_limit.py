@@ -21,6 +21,37 @@ REPLAY_CHUNK_BYTES = 64 * 1024
 MAX_RECEIVE_SECONDS = 90
 MAX_ACTIVE_COMPARE_REQUESTS = 8
 
+# Keep the API's CORS policy and the upload guard aligned. CORS alone does
+# not prevent an attacker-controlled page from submitting a simple multipart
+# request to a developer's locally running PDF parser.
+FRONTEND_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+COMPARE_BROWSER_ORIGINS = frozenset(
+    origin.encode("ascii") for origin in (
+        *FRONTEND_ORIGINS, "http://localhost:8000", "http://127.0.0.1:8000",
+    )
+)
+SAME_SITE_FETCH_CONTEXTS = frozenset({b"same-origin", b"same-site", b"none"})
+
+
+def _permitted_browser_context(scope: dict) -> bool:
+    """Reject untrusted browser-originated uploads before spooling any bytes.
+
+    A missing Origin remains valid for curl and other native clients. Modern
+    browsers send Origin on POST requests; Sec-Fetch-Site covers the common
+    fallback where Origin is omitted. This is a browser boundary, *not*
+    authentication: non-browser clients can set arbitrary request headers.
+    """
+    headers = scope.get("headers", [])
+    origins = [value for key, value in headers if key.lower() == b"origin"]
+    sites = [value for key, value in headers if key.lower() == b"sec-fetch-site"]
+    if len(origins) > 1 or len(sites) > 1:
+        return False
+    if origins:
+        # Exact canonical browser origins only. Do not trust suffix matching,
+        # wildcards, opaque/null origins, credentials, or arbitrary loopback ports.
+        return origins[0] in COMPARE_BROWSER_ORIGINS
+    return not sites or sites[0].lower() in SAME_SITE_FETCH_CONTEXTS
+
 
 class CompareBodyLimit:
     """Pure ASGI guard for POST /api/compare, per application process."""
@@ -49,6 +80,15 @@ class CompareBodyLimit:
             or scope.get("method", "").upper() != "POST"
         ):
             await self.app(scope, receive, send)
+            return
+
+        # This check precedes Content-Length checks, temporary-file spooling,
+        # request-slot reservation and any native PDF/OCR parsing work.
+        if not _permitted_browser_context(scope):
+            await self._reject(
+                scope, receive, send,
+                status=403, detail="Browser origin is not permitted for PDF comparison",
+            )
             return
 
         lengths = [

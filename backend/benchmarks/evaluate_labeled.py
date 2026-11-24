@@ -203,6 +203,12 @@ def _score(
         "pages_without_text": sum(
             len(document.pages_without_text) for document in result.documents
         ),
+        "unchecked_image_pages": sum(
+            len(document.pages_with_unchecked_images) for document in result.documents
+        ),
+        "unchecked_image_page_numbers": {
+            document.id: document.pages_with_unchecked_images for document in result.documents
+        },
         "expected_pairs": sum(gold.values()),
         "predicted_pairs": sum(predicted.values()),
         "true_positive": sum((gold & predicted).values()),
@@ -264,6 +270,8 @@ def _cohort_summary(cases: list[dict]) -> dict:
         ),
         "ocr_page_count": sum(case["ocr_pages"] for case in cases),
         "pages_without_text_count": sum(case["pages_without_text"] for case in cases),
+        "unchecked_image_page_count": sum(case["unchecked_image_pages"] for case in cases),
+        "unchecked_image_case_count": sum(case["unchecked_image_pages"] > 0 for case in cases),
         "processing_warning_count": sum(case["processing_warnings"] for case in cases),
     }
 
@@ -346,6 +354,8 @@ def evaluate_labeled(
         "pages_without_text_count": sum(
             case["pages_without_text"] for case in results
         ),
+        "unchecked_image_page_count": sum(case["unchecked_image_pages"] for case in results),
+        "unchecked_image_case_count": sum(case["unchecked_image_pages"] > 0 for case in results),
         "pair_counts": {
             "true_positive": tp,
             "false_positive": fp,
@@ -432,6 +442,10 @@ def main() -> int:
         help="Maximum independent cases missing usable text on one or more PDF pages",
     )
     parser.add_argument(
+        "--max-independent-unchecked-image-cases", type=int,
+        help="Maximum independent cases with image-heavy pages needing manual review",
+    )
+    parser.add_argument(
         "--max-independent-limited-matching-cases", type=int,
         help="Maximum independent cases where fuzzy candidate matching hit its limit",
     )
@@ -450,6 +464,7 @@ def main() -> int:
         args.max_unsupported_confirmed,
         args.max_independent_unsupported_confirmed,
         args.max_independent_incomplete_cases,
+        args.max_independent_unchecked_image_cases,
         args.max_independent_limited_matching_cases,
     ):
         if maximum is not None and maximum < 0:
@@ -509,6 +524,7 @@ def main() -> int:
         args.min_independent_recall,
         args.max_independent_unsupported_confirmed,
         args.max_independent_incomplete_cases,
+        args.max_independent_unchecked_image_cases,
         args.max_independent_limited_matching_cases,
     ))
     # A zero-error check over zero independent cases is not evidence of safety.
@@ -541,6 +557,10 @@ def main() -> int:
     # matching silently fails elsewhere in the same documents.
     for observed, maximum in (
         (independent["incomplete_case_count"], args.max_independent_incomplete_cases),
+        (
+            independent["unchecked_image_case_count"],
+            args.max_independent_unchecked_image_cases,
+        ),
         (
             independent["fuzzy_matching_limited_case_count"],
             args.max_independent_limited_matching_cases,

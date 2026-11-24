@@ -2,11 +2,12 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 FindingStatus = Literal[
     "confirmed_change", "possible_change", "contradiction", "missing_information"
 ]
+ValueKind = Literal["date", "amount", "time"]
 
 
 class Evidence(BaseModel):
@@ -38,17 +39,18 @@ class DocumentSummary(BaseModel):
     ocr_override_pages: list[int] = Field(default_factory=list)
     pages_with_text: int = Field(default=0, ge=0)
     pages_without_text: list[int] = Field(default_factory=list)
+    pages_with_unchecked_images: list[int] = Field(default_factory=list)
 
 
 class ParsedValue(BaseModel):
-    kind: Literal["date", "amount"]
+    kind: ValueKind
     raw: str
     canonical: str | None = None
     confidence: Literal["parsed", "ambiguous", "invalid"]
 
 
 class ValueChange(BaseModel):
-    kind: Literal["date", "amount"]
+    kind: ValueKind
     original: ParsedValue
     revised: ParsedValue
     outcome: Literal["changed", "same_value", "uncertain"]
@@ -85,6 +87,8 @@ class ComparisonReport(BaseModel):
     warnings: list[str]
     text_coverage: Literal["all_pages_have_text", "partial", "inconclusive"] = "inconclusive"
     fuzzy_matching_limited: bool = False
+    # Older exports do not record whether automatic OCR was enabled.
+    automatic_ocr: StrictBool | None = None
     semantic_assistance: Literal[
         "not_requested", "no_candidates", "unavailable", "no_verified_pairs",
         "proposals_added"

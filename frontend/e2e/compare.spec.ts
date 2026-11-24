@@ -33,6 +33,7 @@ test('shows evidence and locally renders a highlighted PDF.js page', async ({ pa
 
 test('exports source-bound evidence JSON from a live upload', async ({ page }) => {
   await addSources(page);
+  await page.getByLabel('Enable local OCR for scanned pages').check();
   await page.getByRole('button', { name: /Compare documents/ }).click();
   await expect(page.locator('.finding')).toHaveCount(1);
   const promise = page.waitForEvent('download');
@@ -40,6 +41,9 @@ test('exports source-bound evidence JSON from a live upload', async ({ page }) =
   const download = await promise;
   const payload = JSON.parse(await readFile(await download.path(), 'utf8'));
   expect(payload.documents).toHaveLength(2);
+  expect(payload.automatic_ocr).toBe(true);
+  expect(payload.documents.map((document: { ocr_pages: number[] }) => document.ocr_pages))
+    .toEqual([[], []]);
   expect(payload.documents[0].sha256).toMatch(/^[0-9a-f]{64}$/);
   expect(payload.findings[0].authority_verified).toBe(false);
   expect(payload.findings[0].original.page).toBe(1);
@@ -145,6 +149,68 @@ test('source preview traps keyboard focus, closes on Escape and restores focus',
   await expect(dialog).toHaveCount(0);
   await expect(launch).toBeFocused();
   await expect(page.locator('main')).not.toHaveAttribute('inert');
+});
+
+test('compares both exact source pages and releases their browser URLs', async ({ page }) => {
+  await compareReviewFixture(
+    page, [['Application deadline: 13 December 2026', 'Candidates must bring identification']],
+    [['Riverton circular'], ['Application deadline: 11 December 2026']],
+  );
+  const finding = page.locator('.finding').filter({ hasText: '11 December 2026' });
+  const launch = finding.getByRole('button', { name: 'Compare source pages' });
+  await expect(page.locator('.finding').filter({ hasText: 'Candidates must bring identification' })
+    .getByRole('button', { name: 'Compare source pages' })).toHaveCount(0);
+  await launch.click();
+  const dialog = page.getByRole('dialog', { name: 'Compare source pages' });
+  const original = dialog.getByRole('region', { name: /Original notice.*Page 1/ });
+  const updated = dialog.getByRole('region', { name: /Updated notice.*Page 2/ });
+  const close = dialog.getByRole('button', { name: /Close preview/ });
+  await expect(close).toBeFocused();
+  for (const [pane, day] of [[original, 13], [updated, 11]] as const) {
+    await expect(pane.locator('.evidence-highlight')).toBeVisible();
+    await expect(pane.locator('.preview-quote')).toHaveText(`Application deadline: ${day} December 2026`);
+  }
+  const first = await original.boundingBox();
+  const second = await updated.boundingBox();
+  expect(first).not.toBeNull();
+  expect(second).not.toBeNull();
+  expect(second!.x).toBeGreaterThanOrEqual(first!.x + first!.width);
+  const newTabs = dialog.getByRole('link', { name: /Open PDF in new tab/ });
+  await expect(newTabs).toHaveCount(2);
+  await expect(newTabs.first()).toHaveAttribute('href', /^blob:.*#page=1$/);
+  await expect(newTabs.last()).toHaveAttribute('href', /^blob:.*#page=2$/);
+  const urls = await newTabs.evaluateAll(links => links.map(link => (link as HTMLAnchorElement).href));
+  const blobAvailability = () => page.evaluate(async values =>
+    Promise.all(values.map(url => fetch(url).then(response => response.ok, () => false))), urls);
+  expect(await blobAvailability()).toEqual([true, true]);
+
+  await page.keyboard.press('Shift+Tab');
+  await expect(newTabs.last()).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(launch).toBeFocused();
+  await expect.poll(blobAvailability).toEqual([false, false]);
+});
+
+test('stacks both highlighted PDF pages on a narrow screen', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  await page.getByRole('button', { name: 'Compare source pages' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Compare source pages' });
+  const panes = dialog.locator('.preview-source');
+  await expect(panes).toHaveCount(2);
+  await expect(dialog.locator('.evidence-highlight')).toHaveCount(2);
+  const original = await panes.first().boundingBox();
+  const updated = await panes.last().boundingBox();
+  expect(original!.x).toBeCloseTo(updated!.x, 1);
+  expect(updated!.y).toBeGreaterThanOrEqual(original!.y + original!.height);
+  expect(await dialog.evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(320);
+  await panes.last().getByRole('link').scrollIntoViewIfNeeded();
+  await expect(panes.last().getByRole('link')).toBeInViewport();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
 });
 
 test('mobile comparison stays within viewport and discloses temporary storage', async ({ browser }) => {
@@ -301,6 +367,33 @@ test('labels the exact changed date within both full source quotes', async ({ pa
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 
+test('highlights ordinal and hyphenated dates while keeping date ranges uncertain', async ({ page }) => {
+  await compareReviewFixture(page, [[
+    'Application deadline: 19th-Dec-2026',
+    'Interview booking deadline: 13th to 15th December 2026',
+  ]], [[
+    'Application deadline: December 13th, 2026',
+    'Interview booking deadline: 13th to 14th December 2026',
+  ]]);
+  const priority = page.getByRole('region', { name: 'Review first' });
+  await expect(priority.locator('strong')).toHaveText([
+    'Deadline moved 6 days earlier', 'Deadline needs verification',
+  ]);
+  await priority.getByRole('button', { name: /Inspect finding: Deadline moved/ }).click();
+  const deadline = page.locator('#finding-f1');
+  await expect(deadline.locator('mark')).toHaveText(['19th-Dec-2026', 'December 13th, 2026']);
+  await deadline.getByRole('button', { name: /Open PDF page/ }).last().click();
+  await expect(page.locator('.preview-quote')).toHaveText('Application deadline: December 13th, 2026');
+  await expect(page.locator('.evidence-highlight')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  const range = page.locator('#finding-f2');
+  await expect(range.locator('.value-outcome')).toHaveText('Date: Uncertain');
+  await expect(range.locator('mark')).toHaveCount(0);
+  await expect(range.locator('blockquote').last())
+    .toHaveText('Interview booking deadline: 13th to 14th December 2026');
+});
+
 test('exports an Excel-compatible evidence and review CSV without asserting official authority', async ({ page }) => {
   await addSources(page);
   await page.getByRole('button', { name: /Compare documents/ }).click();
@@ -391,16 +484,24 @@ test('changing OCR or local AI options invalidates stale evidence and review exp
   await expect(page.locator('.finding')).toHaveCount(1);
 });
 
-function reviewFixture(pages: string[][]): Buffer {
+type ReviewFixtureLine = string | readonly [label: string, value: string];
+
+function reviewFixture(pages: ReviewFixtureLine[][]): Buffer {
+  const textAt = (text: string, x: number, y: number) =>
+    `BT /F1 12 Tf ${x} ${y} Td (${text.replace(/[\\()]/g, '\\$&')}) Tj ET\n`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     `<< /Type /Pages /Count ${pages.length} /Kids [${pages.map((_, i) => `${i * 2 + 4} 0 R`).join(' ')}] >>`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
   ];
   for (const [index, lines] of pages.entries()) {
-    const stream = lines.map((line, row) =>
-      `BT /F1 12 Tf 40 ${754 - row * 23} Td (${line.replace(/[\\()]/g, '\\$&')}) Tj ET\n`
-    ).join('');
+    const stream = lines.map((line, row) => {
+      const y = 754 - row * 23;
+      if (typeof line === 'string') return textAt(line, 40, y);
+      const [label, value] = line;
+      return `32 ${y - 6} 218 23 re S\n250 ${y - 6} 280 23 re S\n` +
+        textAt(label, 40, y) + textAt(value, 260, y);
+    }).join('');
     objects.push(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${index * 2 + 5} 0 R >>`,
       `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}endstream`,
@@ -420,7 +521,8 @@ function reviewFixture(pages: string[][]): Buffer {
 }
 
 async function compareReviewFixture(
-  page: import('@playwright/test').Page, original: string[][], revised: string[][],
+  page: import('@playwright/test').Page,
+  original: ReviewFixtureLine[][], revised: ReviewFixtureLine[][],
 ) {
   await page.goto('/');
   for (const [role, pages] of [['original', original], ['revised', revised]] as const) {
@@ -430,6 +532,46 @@ async function compareReviewFixture(
   }
   await page.getByRole('button', { name: /Compare documents/ }).click();
 }
+
+test('keeps ruled deadline and fee cells together through review and export', async ({ page }) => {
+  await compareReviewFixture(page, [[
+    ['Requirement', 'Published value'],
+    ['Application deadline', '13 December 2026'],
+    ['Application fee', 'Rs. 300'],
+  ]], [[
+    ['Requirement', 'Published value'],
+    ['Application fee', 'Rs. 450'],
+    ['Application deadline', '11 December 2026'],
+  ]]);
+
+  const priorities = page.getByRole('region', { name: 'Review first' });
+  await expect(priorities.locator('strong')).toHaveText([
+    'Deadline moved 2 days earlier', 'Fee changed',
+  ]);
+  await priorities.getByRole('button', { name: /Inspect finding: Deadline moved/ }).click();
+  const deadline = page.locator('#finding-f1');
+  await expect(deadline.locator('blockquote')).toHaveText([
+    'Application deadline 13 December 2026', 'Application deadline 11 December 2026',
+  ]);
+  await expect(deadline.locator('mark')).toHaveText(['13 December 2026', '11 December 2026']);
+  await deadline.getByRole('button', { name: /Open PDF page/ }).last().click();
+  await expect(page.locator('.preview-quote')).toHaveText('Application deadline 11 December 2026');
+  const highlight = page.locator('.evidence-highlight');
+  await expect(highlight).toBeVisible();
+  expect(await highlight.evaluate(element => parseFloat(element.style.width))).toBeGreaterThan(40);
+  await page.keyboard.press('Escape');
+
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(report.findings).toHaveLength(2);
+  expect(report.findings[1]).toMatchObject({
+    category: 'fee',
+    original: { page: 1, text: 'Application fee Rs. 300' },
+    revised: { page: 1, text: 'Application fee Rs. 450' },
+    field_changes: [{ outcome: 'changed', revised: { canonical: 'INR 450.00' } }],
+  });
+});
 
 test('pages and filters a real comparison while exporting all findings and review selections', async ({ page }) => {
   function rows(day: number, amount: number) {
@@ -634,6 +776,11 @@ test('page-specific OCR reports a coverage gap when a selected page exceeds the 
   await expect(page.getByText(/page would exceed OCR pixel limit/)).toBeVisible();
   await expect(page.locator('.finding')).toHaveCount(1);
   await expect(page.locator('.finding')).not.toContainText('Deadline: 13 December 2026');
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(report.automatic_ocr).toBe(false);
+  expect(report.documents[0].ocr_override_pages).toEqual([1]);
   await page.getByLabel('Original notice OCR pages').fill('');
   await expect(page.locator('.results')).toHaveCount(0);
 });
@@ -678,6 +825,57 @@ test('runs the fictional demo through the live API and prioritizes the earlier d
   expect(result.review).toEqual(['f1']);
 });
 
+test('prioritizes same-date cutoff changes and displays their quoted times', async ({ page }) => {
+  await compareReviewFixture(page, [[
+    'Application deadline: 13 December 2026 at 5:00 PM IST',
+    'Reporting time: 08:00 IST',
+    'Interview time: 9:30',
+  ]], [[
+    'Application deadline: 13 December 2026 at 14:00 IST',
+    'Reporting time: 07:30 IST',
+    'Interview time: 10:30 AM',
+  ]]);
+
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText([
+    'Deadline time changed', 'Scheduled time changed', 'Scheduled time needs verification',
+  ]);
+  await first.getByRole('button', { name: 'Inspect finding: Deadline time changed' }).click();
+  const deadline = page.locator('#finding-f1');
+  await expect(deadline).toBeFocused();
+  await expect(deadline.locator('.value-outcome')).toHaveText(['Date: Same value', 'Time: Changed']);
+  await expect(deadline.locator('mark')).toHaveText(['5:00 PM', '14:00']);
+  await deadline.getByRole('button', { name: /Open PDF page/ }).last().click();
+  await expect(page.locator('.evidence-highlight')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  const interview = page.locator('#finding-f3');
+  await expect(interview.locator('.value-outcome')).toHaveText('Time: Uncertain');
+  await expect(interview.locator('mark')).toHaveCount(0);
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(report.findings[0].field_changes[1]).toMatchObject({
+    kind: 'time', outcome: 'changed',
+    original: { raw: '5:00 PM', canonical: '17:00' },
+    revised: { raw: '14:00', canonical: '14:00' },
+  });
+  expect(report.findings[0].authority_verified).toBe(false);
+});
+
+test('shows both cutoff values when the revision crosses midnight', async ({ page }) => {
+  await compareReviewFixture(
+    page, [['Application deadline: 13 December 2026 at 23:59 IST']],
+    [['Application deadline: 14 December 2026 at 00:01 IST']],
+  );
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText('Deadline date and time changed');
+  await expect(first).toContainText('13 December 2026 at 23:59 → 14 December 2026 at 00:01');
+  await expect(page.locator('.finding mark')).toHaveText([
+    '13 December 2026', '23:59', '14 December 2026', '00:01',
+  ]);
+});
+
 test('links a separate amendment to the quoted original without accepting its authority', async ({ page }) => {
   await compareReviewFixture(
     page, [['Application deadline: 19 December 2026', 'Application fee: Rs. 500']],
@@ -702,4 +900,94 @@ test('links a separate amendment to the quoted original without accepting its au
   await expect(findings.last().locator('.value-outcome')).toHaveText('Amount: Stated in amendment');
   await finding.getByRole('button', { name: /Open PDF page/ }).last().click();
   await expect(page.locator('.evidence-highlight')).toBeVisible();
+});
+
+
+test('Review first promotes unmatched deadlines without implying a revoked deadline', async ({
+  page,
+}) => {
+  await compareReviewFixture(
+    page,
+    [['Application deadline: 13 December 2026', 'Application fee: Rs. 200']],
+    [['Eligibility requirement: diploma', 'Application fee: Rs. 300']],
+  );
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText([
+    'Unmatched deadline statement', 'Fee changed', 'Unmatched eligibility statement',
+  ]);
+  await expect(first).toContainText('Do not assume it was added or withdrawn');
+  await first.getByRole('button', { name: 'Inspect finding: Unmatched deadline statement' }).click();
+  const finding = page.locator('.finding').filter({ hasText: 'Application deadline: 13 December 2026' });
+  await expect(finding).toBeFocused();
+  await expect(finding.locator('.status')).toHaveText('Unmatched statement');
+  await finding.getByRole('checkbox').check();
+  await expect(first.getByText('Unmatched deadline statement')).toHaveCount(0);
+});
+
+test('Review first includes uncertain deadline wording without a parsed field delta', async ({
+  page,
+}) => {
+  // The route controls the UI fixture, not the source extraction algorithm.
+  await page.route('**/api/compare', async route => {
+    const response = await route.fetch();
+    const report = await response.json();
+    const finding = report.findings[0];
+    finding.status = 'possible_change';
+    finding.field_changes = [];
+    finding.original.extraction_method = 'ocr';
+    await route.fulfill({ response, json: report });
+  });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText(['Possible deadline wording change']);
+  await expect(first).toContainText('without a reliably parsed date');
+  await expect(first).toContainText('OCR transcription must be checked');
+  await first.getByRole('button', { name: /Inspect finding: Possible deadline wording change/ }).click();
+  await expect(page.locator('.finding')).toBeFocused();
+});
+
+test('Review first never silently treats an uncertain fee relationship as confirmed', async ({
+  page,
+}) => {
+  await page.route('**/api/compare', async route => {
+    const response = await route.fetch();
+    const report = await response.json();
+    const finding = report.findings[0];
+    finding.category = 'fee';
+    finding.status = 'possible_change';
+    finding.field_changes = [];
+    await route.fulfill({ response, json: report });
+  });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText(['Possible fee wording change']);
+  await expect(first).not.toContainText('Fee changed');
+  await expect(first).toContainText('verify the intended requirement with the issuer');
+});
+
+
+test('Review first discloses hidden priority items and updates counts when reviewed', async ({
+  page,
+}) => {
+  await compareReviewFixture(
+    page,
+    [[
+      'Track A deadline: 13 December 2026',
+      'Track B deadline: 13 December 2026',
+      'Track C deadline: 13 December 2026',
+      'Track D deadline: 13 December 2026',
+    ]],
+    [['Eligibility requirement: diploma']],
+  );
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('li')).toHaveCount(3);
+  await expect(first).toContainText('Showing 3 of 5 prioritized items.');
+  await expect(first).toContainText('Review all findings below; this is not an official verification.');
+  await first.getByRole('button', { name: /Inspect finding: Unmatched deadline statement/ }).first().click();
+  await expect(page.locator('.finding').first()).toBeFocused();
+  await page.locator('.finding').first().getByRole('checkbox').check();
+  await expect(first).toContainText('Showing 3 of 4 prioritized items.');
+  await expect(page.locator('.finding')).toHaveCount(5);
 });

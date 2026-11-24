@@ -25,6 +25,15 @@ page selections. Both selection fields are optional multipart strings.
 Each document summary includes `ocr_override_pages` (selected pages) and
 `ocr_pages` (pages that yielded usable OCR text).
 
+If a page has native text, `pages_with_unchecked_images` can still flag it for
+inspection. A candidate image must cover at least 55% of the visible page,
+measure at least 128 pixels on each side, and have fewer than 80 alphanumeric
+characters from native text lines centered in its visible bounds. This estimate
+uses image placement and native text geometry. It can flag large illustrations
+and miss text in small or tiled images. The reviewer can open the PDF page and
+explicitly select it for OCR. Automatic OCR still processes native-text-empty
+pages within its existing limits.
+
 ## How the evidence is handled
 
 PyMuPDF renders the displayed page at 150 DPI with RGB color. Tesseract

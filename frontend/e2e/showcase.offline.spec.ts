@@ -20,11 +20,18 @@ test('static showcase opens the evidence and exports a labeled report without an
   await expect(dialog.locator('.evidence-highlight')).toBeInViewport({ ratio: 1 });
   await expect(dialog.getByRole('button', { name: /Close preview/ })).toBeInViewport({ ratio: 1 });
   await page.keyboard.press('Escape');
+  await target.getByRole('button', { name: 'Compare source pages' }).click();
+  await expect(dialog.locator('.evidence-highlight')).toHaveCount(2);
+  await expect(dialog.locator('.preview-quote')).toHaveText([
+    'Application deadline: 19 December 2026', 'Application deadline: 13 December 2026',
+  ]);
+  await page.keyboard.press('Escape');
   await target.getByRole('checkbox').check();
   const downloadReady = page.waitForEvent('download');
   await page.getByRole('button', { name: /Export evidence report/ }).click();
   const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
   expect(report.comparison_source).toBe('showcase');
+  expect(report.automatic_ocr).toBe(false);
   expect(report.review).toEqual(['f1']);
   expect(report.documents).toHaveLength(2);
   expect(apiCalls).toEqual([]);

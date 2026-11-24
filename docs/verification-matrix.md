@@ -4,7 +4,7 @@ This note documents the conservative behavior of the third engineering milestone
 
 ## Data integrity invariants
 
-1. The parser never invents a page number or bounding box. `Evidence` comes from a PDF text line or an explicitly labeled OCR-transcribed page, with original page dimensions and rotation.
+1. `Evidence` comes from native PDF text or an explicitly labeled OCR-transcribed page, with original page dimensions and rotation. In a supported ruled table, the quotation joins two native cell lines with a space and the source bounding box encloses both text boxes.
 2. Each matched finding carries the original and revised source passage, both of which can be inspected by page.
 3. Text equality is reconciled **before** variable masking. Reordering duplicate deadline statements therefore does not alone imply changed wording.
 4. A `confirmed_change` status establishes a textual difference between native passages with a unique identical context anchor, **not** that the updated document is authoritative.
@@ -20,7 +20,7 @@ This note documents the conservative behavior of the third engineering milestone
 14. Per-page text coverage is visible. Pages without extractable text are never silently treated as proven unchanged, even when the comparison found changes on other pages. `all_pages_have_text` means only that each page yielded some text, not that extraction was exhaustive.
 15. An `explicit_amendment` links one original labeled deadline or fee to a revised passage that gives a matching prior value and a replacement. The worker requires a unique label and prior value in both documents. The API recalculates the field from both quotes and requires a possible change with an uncertain outcome. Conditions, ambiguous values, and duplicate candidates stay outside the explicit link.
 
-## How date and fee tokens are interpreted
+## How date, time and fee tokens are interpreted
 
 | Input | Parser behavior |
 | --- | --- |
@@ -28,18 +28,25 @@ This note documents the conservative behavior of the third engineering milestone
 | `१३ दिसंबर २०२६` | Valid date, `2026-12-13` |
 | `2026-12-13` | Valid ISO date, `2026-12-13` |
 | `December 13, 2026` or `13 December 2026` | Explicit month and valid calendar date, `2026-12-13` |
+| `13th December 2026`, `Dec. 13th, 2026`, `13-Dec-2026` | Valid date, `2026-12-13`. The source format is kept in the quotation. |
+| `11st December 2026` | Invalid ordinal suffix, no canonical value |
+| `13–15 December 2026`, `29th November to 2nd December 2026` | Both endpoints stay in the quotation and the date value stays uncertain |
 | `13/12/2026` | Unique day-month interpretation, `2026-12-13` |
 | `01/02/2026` | **Ambiguous** (1 Feb or 2 Jan), no canonical value |
 | `31 February 2026` | **Invalid** date, no canonical value |
+| `17:30`, `5:30 p.m.`, `5:30 PM` | Equivalent clock time, `17:30` |
+| `9:30` | **Ambiguous** single-digit hour without AM/PM |
+| `24:00`, `17:99` | **Invalid** clock values, no canonical value |
+| `09:00–17:00`, `5–7 PM` | Range remains visible in the quote without a structured time delta |
 | `Rs. 1,000`, `₹1,000`, `₹10,00,000`, `१,२५० रुपये` | Valid INR amounts, decimal canonical values |
 | `Rs. 1,2,3` | Invalid grouping, no canonical value |
 
-Unrecognized date and currency syntax is ignored rather than inferred. There is no automatic time-zone calculation or locale-specific deadline extension logic.
+A structured time delta requires one recognized clock expression in each quote. It describes the times as printed. Time-zone and offset text stays in the anchor, and a differing zone makes the pairing uncertain. The comparator does not convert time zones or interpret daylight saving time.
 
 ## Matching algorithm and uncertainty
 
 1. Exact normalized text matches are resolved across the entire document pair.
-2. Remaining lines are matched using category and masked value anchors. Deadlines mask date tokens and fees mask currency amounts. Other numbers, including phase and paper numbers, remain part of the context for both categories. Only unique native-text anchors support a matched text change.
+2. Remaining lines are matched using category and masked value anchors. Deadlines mask calendar dates and single clock values. Scheduled events mask a single clock value while preserving their date and other scope. Fees mask currency amounts. Only unique native-text anchors support a matched text change.
 3. Remaining potential matches are globally ranked using token-index retrieval and context similarity. All fuzzy pairings stay possible. Fuzzy matching examines contexts up to 512 characters, at most 64 entries per token or source passage, and at most 20,000 pairs and 20 million character products per comparison. The API independently caps rescoring work.
 4. Lines without a matched counterpart in the extracted text receive `missing_information`. `fuzzy_matching_limited` exposes skipped candidate work independently of page text coverage. Exact text and exact context matching still run on all extracted lines.
 
@@ -54,7 +61,11 @@ findings. It still relies on a small English/Hindi keyword dictionary and can
 miss synonyms or contextual labels. Every important category should be manually
 checked against the quoted source.
 
-This is still **line-level**, not semantic paragraph/document understanding. Long paragraphs, table columns, hyphenated line breaks, mixed scripts, duplicate form fields, and scanned images can produce incomplete or misleading matches. Important cases require human review.
+## Ruled tables
+
+The extractor joins a label and a standalone date or INR amount when both fit entirely in separate cells of one native-text row. The ruling must form at least two adjacent rows with the same two columns. The original page, quote words, and source hash remain the evidence. Matching uses the same anchors and review rules as ordinary lines.
+
+Borderless tables, merged cells, three-column tables, wrapped cells, scanned tables, and pages beyond the layout work budget keep the original line-level extraction. Complex layouts can still produce incomplete matches. Inspect the PDF page when layout determines how a value applies.
 
 ## Security and privacy scope
 
@@ -68,8 +79,9 @@ This is still **line-level**, not semantic paragraph/document understanding. Lon
 ## Automated regression suites
 
 - `backend/tests/test_extract.py`: source locations, SHA-256, malformed/scanned/password-protected/oversized-page PDFs, OCR gating/budgets/error paths, and English/Hindi OCR integration scans that skip if Tesseract language packs or fixture fonts are missing.
+- `backend/tests/test_table_rows.py`: native grid detection, rotated evidence, fallback for ambiguous layouts and budget limits, and actual deadline and fee changes through the comparison worker.
 - `backend/tests/test_compare.py`: changed/unchanged statements, reordered lines, duplicated deadline labels, same-page versus cross-page ambiguity handling, source location and lack of authority inference.
-- `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, date ambiguity, invalid calendar dates, currency canonicalization and malformed grouping.
+- `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, ambiguous and invalid dates or clock times, unsupported time ranges, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py` and `backend/tests/test_body_limit.py`: health, live multipart comparisons, multipart stream and header size enforcement, bad uploads, filename sanitization, response no-store headers.
 - `backend/tests/test_provenance.py`: forged document hashes, swapped source roles, out-of-range evidence, false authority claims, malformed field values and AI promotion attempts.
 - `backend/tests/test_isolation.py` and `backend/tests/test_worker_limits.py`: real worker roundtrips, malformed input, timeout/forced termination behavior, invalid worker output, API failure mapping, worker bootstrap and POSIX resource-ceiling behavior.
@@ -80,8 +92,31 @@ Run with `python -m pip install -e './backend[dev]'` then `pytest -q backend/tes
 
 ## Synthetic evaluation (not representative accuracy)
 
-`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks 14 fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
+`PYTHONPATH=backend python backend/benchmarks/evaluate.py` checks fictional, author-created notice pairs. It asserts status counts, syntactic field outcomes, evidence presence, and no claims of document authority. Results from this carefully scoped corpus are **not** real-world precision, recall, or benchmark quality, and must not be presented as hackathon performance evidence. OCR is evaluated separately in the integration tests.
 
 ## Still not implemented
 
 Trustworthy amendment/issuer provenance resolution; independently evaluated semantic matching; calibrated OCR confidence; comprehensive independent pixel-level highlight validation across exotic PDFs; production-grade OS sandboxing, disk quotas and deployment authentication; persistent projects/checklists; calendar export; broad browser E2E tests; independent real-world accuracy measurements.
+
+## Consequential review-queue acceptance checks
+
+The English-only review workspace should never bury **unmatched deadlines,
+unparsed possible deadline wording, missing fees, or eligibility changes** just
+because a syntactic date or amount delta cannot be calculated. These are
+review priorities, not proof of an official amendment or cancellation.
+
+- Known native-text earlier deadlines may be labeled with a calculated day
+  difference, but only when the backend reports a confirmed text pairing and
+  two unambiguous canonical dates.
+- An explicit amendment is **possible**, not automatically official. A lone
+  deadline in either PDF must be labeled **unmatched**, not removed or added.
+- Possible deadline/fee wording differences without a parsed numeric field
+  still require human inspection; OCR-derived passages require visible
+  transcription checking before acting.
+- Eligibility, reporting-time and instruction changes should enter the
+  prioritized review queue. Existing evidence links, search filters and
+  full-report exports remain the way to examine all findings; the short
+  review queue is **not** an exhaustive result set.
+- E2E UI-fixture tests for uncertain states verify rendering and prioritization,
+  not extraction accuracy. Real PDF integration tests separately cover source
+  passage matching.
