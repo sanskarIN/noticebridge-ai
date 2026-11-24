@@ -6,7 +6,9 @@ still need OS-level sandboxing, authentication, rate limiting and monitoring.
 
 import base64
 import json
+import math
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -24,6 +26,103 @@ OCR_TIMEOUT_SECONDS = 120
 SEMANTIC_TIMEOUT_SECONDS = 110
 OCR_SEMANTIC_TIMEOUT_SECONDS = 210
 MAX_RESULT_BYTES = 64 * 1024 * 1024
+
+# A parser subprocess is a lower-trust producer. Only the known, bounded
+# document-validation strings are safe to include in a user-facing 422 response.
+# Arbitrary worker-controlled text could expose private passages through API logs.
+SAFE_WORKER_DOCUMENT_ERRORS = frozenset({
+    "Malformed comparison request",
+    "Invalid document encoding",
+    "Each PDF must be nonempty and at most 10 MiB",
+    "Comparison request exceeds the size limit",
+    "PDF must be nonempty and at most 10 MiB",
+    "File is not recognized as a PDF",
+    "Invalid document role",
+    "Malformed or unreadable PDF",
+    "Encrypted PDFs are not supported",
+    "PDF must contain 1 to 80 pages",
+    "PDF contains an excessively long text line",
+    "PDF contains too many text lines",
+    "PDF contains too much extractable text",
+    "Comparison result exceeds the safety limit",
+    "Select at most 12 OCR pages per PDF",
+    "OCR page numbers must be between 1 and 80",
+    "OCR page numbers must be unique",
+})
+_OCR_PAGE_ERROR = re.compile(
+    r"OCR page [1-9][0-9]? is outside the (?:original|revised) PDF "
+    r"\\([1-9][0-9]? pages\\)",
+    re.ASCII,
+)
+
+
+def _strict_worker_json(output: bytes) -> dict:
+    """Decode the bounded subprocess stream without ambiguous JSON semantics."""
+    def unique_members(pairs: list[tuple[str, object]]) -> dict:
+        fields = {}
+        for key, value in pairs:
+            if key in fields:
+                raise ProcessingFailed("PDF comparison worker returned duplicate JSON fields")
+            fields[key] = value
+        return fields
+
+    def nonfinite(_: str) -> None:
+        raise ProcessingFailed("PDF comparison worker returned a non-finite number")
+
+    def finite_float(raw: str) -> float:
+        value = float(raw)
+        if not math.isfinite(value):
+            raise ProcessingFailed("PDF comparison worker returned a non-finite number")
+        return value
+
+    try:
+        result = json.loads(
+            output, object_pairs_hook=unique_members,
+            parse_constant=nonfinite, parse_float=finite_float,
+        )
+    except ProcessingFailed:
+        raise
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
+        raise ProcessingFailed("PDF comparison worker returned invalid JSON") from exc
+    if type(result) is not dict:
+        raise ProcessingFailed("PDF comparison worker returned an invalid response")
+    return result
+
+
+def _same_wire_values(raw: object, expected: object) -> bool:
+    """Reject extra, missing or type-coerced claims at every nesting level."""
+    if isinstance(expected, dict):
+        return (
+            isinstance(raw, dict)
+            and raw.keys() == expected.keys()
+            and all(_same_wire_values(raw[key], value) for key, value in expected.items())
+        )
+    if isinstance(expected, list):
+        return (
+            isinstance(raw, list)
+            and len(raw) == len(expected)
+            and all(_same_wire_values(a, b) for a, b in zip(raw, expected, strict=True))
+        )
+    # Integral JSON numbers are also valid encodings of numeric float fields.
+    # Do not let bool (a subclass of int) pass through as a number.
+    if type(expected) is float:
+        return type(raw) in (int, float) and raw == expected
+    return type(raw) is type(expected) and raw == expected
+
+
+def _worker_document_error(response: dict) -> InvalidDocument:
+    """Accept only known safe parser errors; never echo arbitrary worker text."""
+    if set(response) != {"error", "message"} or response.get("error") != "invalid_document":
+        raise ProcessingFailed("PDF comparison worker returned an invalid error response")
+    message = response["message"]
+    if type(message) is not str:
+        raise ProcessingFailed("PDF comparison worker returned an invalid error response")
+    if message in SAFE_WORKER_DOCUMENT_ERRORS:
+        return InvalidDocument(message)
+    if _OCR_PAGE_ERROR.fullmatch(message):
+        return InvalidDocument("Selected OCR page is outside the PDF")
+    raise ProcessingFailed("PDF comparison worker returned an untrusted error response")
+
 
 # Explicitly avoid forwarding unrelated service credentials or cloud tokens to
 # a process parsing untrusted PDF data. Runtime libraries and Tesseract need
@@ -187,15 +286,18 @@ def run_isolated_comparison(
 
     if len(output) > MAX_RESULT_BYTES:
         raise ProcessingFailed("PDF comparison result exceeded the safety limit")
-    try:
-        result = json.loads(output)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ProcessingFailed("PDF comparison worker returned invalid JSON") from exc
-    if isinstance(result, dict) and result.get("error") == "invalid_document":
-        message = result.get("message")
-        raise InvalidDocument(message if isinstance(message, str) else "Invalid PDF document")
+    result = _strict_worker_json(output)
+    if "error" in result:
+        raise _worker_document_error(result)
+    # The worker emits the complete ComparisonReport schema, including default
+    # fields. Pydantic otherwise silently ignores unknown keys and can coerce
+    # values; neither is acceptable at the subprocess trust boundary.
+    if result.keys() != ComparisonReport.model_fields.keys():
+        raise ProcessingFailed("PDF comparison worker returned a noncanonical report")
     try:
         report = ComparisonReport.model_validate(result)
+        if not _same_wire_values(result, report.model_dump(mode="json")):
+            raise ProcessingFailed("PDF comparison worker returned a noncanonical report")
         verify_report_provenance(
             report, original=original, revised=revised,
             old_name=old_name, new_name=new_name,
