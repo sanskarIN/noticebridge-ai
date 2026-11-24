@@ -30,7 +30,7 @@ MAX_CROSS_PAGE_DETAILS = 20
 REVISION_TABLE_WARNINGS = frozenset(
     f"contains an earlier/revised {kind} table; "
     "both printed values are retained, verify the column headings"
-    for kind in ("date", "fee", "time")
+    for kind in ("date", "fee", "time", "date-and-time")
 )
 PAGE_RE = re.compile(r"^(original|revised): page ([1-9][0-9]{0,2}) (.+)$")
 OMITTED_BOXES_RE = re.compile(

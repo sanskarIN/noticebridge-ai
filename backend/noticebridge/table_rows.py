@@ -55,9 +55,19 @@ REVISION_HEADERS = {
         frozenset({"earlier time", "original time", "existing time", "previous time"}),
         frozenset({"revised time", "updated time", "new time"}),
     ),
+    # A combined date and closing clock is not interchangeable with either
+    # a date-only or time-only cell. Require explicit combined headings.
+    "date-and-time": (
+        frozenset({"earlier date/time", "original date/time",
+                   "earlier date and time", "original date and time"}),
+        frozenset({"revised date/time", "updated date/time",
+                   "revised date and time", "updated date and time"}),
+    ),
 }
-REVISION_CATEGORIES = {"date": "deadline", "fee": "fee", "time": "time"}
-REVIEW_TABLE_KINDS = ("date", "fee", "time")
+REVISION_CATEGORIES = {
+    "date": "deadline", "fee": "fee", "time": "time", "date-and-time": "deadline",
+}
+REVIEW_TABLE_KINDS = ("date", "fee", "time", "date-and-time")
 
 
 def _continuous_rules(rules: dict[float, list[Interval]]) -> dict[float, list[Interval]]:
@@ -227,6 +237,14 @@ def _revision_cell_matches(text: str, kind: str) -> bool:
             and not text[:token.start()].strip()
             and CLOCK_ZONE.fullmatch(text[token.end():]) is not None
             and parse_clock(token).canonical is not None
+        )
+    if kind == "date-and-time":
+        clock = single_clock_token(text)
+        return bool(
+            DATE_TOKEN.match(text) is not None
+            and _schedule_value(text)
+            and clock is not None
+            and parse_clock(clock).canonical is not None
         )
     return False
 

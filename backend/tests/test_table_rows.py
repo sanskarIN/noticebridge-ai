@@ -16,12 +16,18 @@ FEE = ("Application fee", "Rs. 300")
 
 def _notice(rows, *, layout="rules", rotation=0):
     with fitz.open() as document:
-        page = document.new_page(width=610, height=500)
+        page_width = 980 if layout == "wide_three_columns" else 610
+        page = document.new_page(width=page_width, height=500)
         table_top = 60
         row_height = 38
         boundaries = [table_top + index * row_height for index in range(len(rows) + 1)]
-        columns = (50, 265, 430, 550) if layout == "three_columns" else (50, 265, 460)
-        if layout in ("rules", "three_columns", "partial_divider"):
+        if layout == "wide_three_columns":
+            columns = (50, 265, 600, 950)
+        elif layout == "three_columns":
+            columns = (50, 265, 430, 550)
+        else:
+            columns = (50, 265, 460)
+        if layout in ("rules", "three_columns", "wide_three_columns", "partial_divider"):
             for y in boundaries:
                 page.draw_line((columns[0], y), (columns[-1], y))
             for x in columns:
@@ -487,3 +493,90 @@ def test_oversized_revision_quote_is_not_merged_or_warned(monkeypatch):
     assert [line.text for line in doc.lines] == [*header, *row]
     assert not any(line.review_only for line in doc.lines)
     assert not any("earlier/revised fee table" in warning for warning in doc.warnings)
+
+
+COMBINED_HEADER = ("Activity", "Earlier date/time", "Revised date/time")
+
+
+def test_combined_date_and_cutoff_table_preserves_native_evidence_and_rotation():
+    row = ("Application deadline", "2026-12-13 at 17:00 IST",
+           "2026-12-19 at 18:00 IST")
+    doc = extract_pdf(
+        _notice([COMBINED_HEADER, row], layout="wide_three_columns", rotation=90),
+        document_id="revised", filename="date-clock.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*COMBINED_HEADER, " ".join(row)]
+    joined = doc.lines[-1]
+    assert joined.review_only
+    assert joined.evidence.page_rotation == 90
+    assert joined.evidence.extraction_method == "native"
+    assert joined.evidence.bbox[0] < 265 < 600 < joined.evidence.bbox[2]
+    assert any("earlier/revised date-and-time table" in item for item in doc.warnings)
+
+
+@pytest.mark.parametrize("row", [
+    ("Application deadline", "2026-12-13", "2026-12-19"),
+    ("Application deadline", "2026-12-13 at 5:30", "2026-12-19 at 18:00"),
+    ("Application deadline", "2026-12-13 at 17:00 to 18:00",
+     "2026-12-19 at 18:00"),
+    ("Application deadline", "2026-13-13 at 17:00", "2026-12-19 at 18:00"),
+    ("Application fee", "2026-12-13 at 17:00", "2026-12-19 at 18:00"),
+    ("Application deadline", "", "2026-12-19 at 18:00"),
+])
+def test_unproved_combined_date_clock_cells_remain_independent(row):
+    doc = extract_pdf(
+        _notice([COMBINED_HEADER, row], layout="wide_three_columns"),
+        document_id="original", filename="ambiguous.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *COMBINED_HEADER, *(value for value in row if value),
+    ]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("date-and-time table" in item for item in doc.warnings)
+
+
+def test_combined_date_time_table_api_does_not_confirm_amendments():
+    old_row = ("Application deadline", "2026-12-13 at 17:00 IST",
+               "2026-12-19 at 18:00 IST")
+    new_row = ("Application deadline", "2026-12-13 at 17:00 IST",
+               "2026-12-20 at 19:00 IST")
+    original = _notice([COMBINED_HEADER, old_row], layout="wide_three_columns")
+    revised = _notice([COMBINED_HEADER, new_row], layout="wide_three_columns")
+    with TestClient(app) as client:
+        response = client.post("/api/compare", files={
+            "original": ("original.pdf", original, "application/pdf"),
+            "revised": ("revised.pdf", revised, "application/pdf"),
+        })
+    assert response.status_code == 200, response.text
+    report = response.json()
+    quoted = {
+        evidence["text"]
+        for finding in report["findings"]
+        for evidence in [
+            finding["original"], finding["revised"], *finding["supporting_evidence"],
+        ]
+        if evidence is not None
+    }
+    assert " ".join(old_row) in quoted
+    assert " ".join(new_row) in quoted
+    assert not any(f["status"] == "confirmed_change" for f in report["findings"])
+    assert not any(v["outcome"] == "changed" for f in report["findings"]
+                   for v in f["field_changes"])
+    assert sum("earlier/revised date-and-time table" in item
+               for item in report["warnings"]) == 2
+
+
+def test_combined_date_time_rejects_generic_or_reversed_headers():
+    row = ("Application deadline", "2026-12-13 at 17:00 IST",
+           "2026-12-19 at 18:00 IST")
+    for header in (
+        ("Activity", "Date", "Date"),
+        ("Activity", "Revised date/time", "Earlier date/time"),
+        ("Activity", "Earlier time", "Revised time"),
+    ):
+        doc = extract_pdf(
+            _notice([header, row], layout="wide_three_columns"),
+            document_id="revised", filename="unsupported.pdf",
+        )
+        assert [line.text for line in doc.lines] == [*header, *row]
+        assert not any(line.review_only for line in doc.lines)

@@ -590,3 +590,16 @@ Parent-side report verification independently rejects a worker claiming
 `confirmed_change` for these multi-value passages. This does not resolve
 which value is effective; inspect both source pages and the issuer's actual
 amendment context.
+
+
+### Explicit combined date and clock revision cells
+
+A native ruled three-column table can also preserve complete **date plus
+closing time** cells when its headings explicitly identify earlier and revised
+date/time columns. Each cell needs one unambiguous full date, a single parseable
+clock, and a supported printed zone (if present). Both full values and the
+source bounding box are retained in source order; the row is review-only with
+a separate fixed page warning. An unclear date, partial clock, time range,
+reversed or generic heading, unsupported label, or missing cell is kept
+unjoined. This does **not** decide which cutoff governs or interpret timezone
+differences; humans must check the official source.
