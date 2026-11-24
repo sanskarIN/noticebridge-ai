@@ -29,6 +29,7 @@ NoticeBridge AI is an open-source document comparison prototype for official not
 - **Browser end-to-end tests** (Playwright/Chromium) cover live uploads, the API-free showcase, source highlighting, review priorities, and report export.
 - A reproducible **fictional-notice regression benchmark** checks specific findings and evidence backing.
 - A local-only [labeled evaluation tool](docs/labeled-evaluation.md) for evidence-pair precision/recall on operator-supplied PDFs. **Version-2 pinned-source manifests** record exact PDF SHA-256 fingerprints and declared label provenance; a non-overwriting helper preserves human labels. An explicit `--enable-ocr` option can evaluate scanned documents using local Tesseract while leaving experimental AI disabled. The report exposes OCR usage and extraction gaps. A representative, independently labeled real-world corpus does **not** yet exist.
+- The local [release evaluation gate](docs/labeled-evaluation.md#freeze-the-deterministic-release-evaluation) verifies reconciled reviews and split isolation, then scores the held-out corpus against a recorded plan and thresholds.
 
 ## Local development
 
