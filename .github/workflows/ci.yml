@@ -32,6 +32,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends tesseract-ocr-eng tesseract-ocr-hin tesseract-ocr
           tesseract --list-langs
+      - run: python -m noticebridge.compare_cli --help
       - run: pytest -q backend/tests
       - run: ruff check backend
       - run: python backend/benchmarks/generate_showcase.py --check
@@ -47,6 +48,7 @@ jobs:
       - run: python -m pip install -c backend/constraints-py312.txt -e "./backend[dev]"
       - run: python -m pip check
       - run: python backend/scripts/verify_python_constraints.py
+      - run: python -m noticebridge.compare_cli --help
       - run: python -m pytest -q backend/tests
       - run: python -m ruff check backend
       - run: python backend/benchmarks/native_table_matrix.py --json
