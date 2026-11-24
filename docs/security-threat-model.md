@@ -22,7 +22,7 @@
 | Worker | Disposable subprocess; timeouts; restricted inherited environment; best-effort Linux/POSIX limits; Windows Job Object kill-on-close with 2 GiB memory ceiling and max eight worker-tree processes; unexpected process-I/O errors trigger kill/reap before return | Native PDF parser vulnerabilities, Windows process pre-assignment startup, full OS confinement and host CPU/disk quotas |
 | Result | Private file-backed worker stdout, parent reads at most 64 MiB + one byte | Disk usage without OS quotas |
 | Evidence | Byte SHA-256, source-page metadata, human-review gate, independent structural integrity checks, fixed bilingual explanation/checklist templates, recomputed source-text similarity, and allowlisted source-aware warning grammar | Fake issuer, altered source documents, incomplete quotation re-extraction, unsafe interpretation |
-| Local AI | Loopback-only URL, no HTTP proxy environment, 64 KiB streaming HTTP response limit, same-category source references, strict JSON member checks, conflict rejection | Prompt injection and false semantic relationships |
+| Local AI | Loopback-only URL, no HTTP proxy environment, 64 KiB streaming HTTP response limit, same-category source references, strict JSON member checks, 16-level JSON nesting cap, conflict rejection | Prompt injection and false semantic relationships |
 | Browser | Local PDF.js, bounded canvas bitmap, keyboard-accessible preview; CSV cells quoted and spreadsheet formula starters neutralized; user review-state export labeled separately from authority validation | Browser/plugin vulnerabilities, spreadsheet-specific interpretation and incomplete accessibility |
 | Response | No-store and nosniff response headers | Intermediate infrastructure logs and screenshots |
 
@@ -50,5 +50,7 @@ decisions. Duplicate identical edges are collapsed; a source with multiple
 distinct partners makes all incident edges ineligible. Unambiguous unrelated
 edges may remain as unverified proposals. Duplicate JSON members, nonstandard
 non-finite constants and extra model-supplied pair claims are not accepted.
+Both the HTTP envelope and embedded response use a 16-level JSON nesting cap,
+checked before parsing independently of the runtime recursion limit.
 These structural controls do not establish that any surviving pair is
 semantically correct.

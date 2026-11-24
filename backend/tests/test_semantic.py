@@ -228,7 +228,11 @@ def test_model_json_rejects_ambiguous_or_nonstandard_members(raw):
         semantic._decode_model_json(raw)
 
 
-def test_local_model_malformed_envelope_and_inner_json_are_rejected(monkeypatch):
+@pytest.mark.parametrize("raw", [
+    b'{"response":"{}","response":"{}"}',
+    json.dumps({"response": '{"pairs":[],"pairs":[]}'}).encode(),
+])
+def test_local_model_malformed_envelope_and_inner_json_are_rejected(monkeypatch, raw):
     class Response:
         def __enter__(self):
             return self
@@ -256,12 +260,27 @@ def test_local_model_malformed_envelope_and_inner_json_are_rejected(monkeypatch)
             return Response()
 
     monkeypatch.setattr(semantic.httpx, "Client", Client)
-    for raw in (
-        b'{"response":"{}","response":"{}"}',
-        json.dumps({"response": '{"pairs":[],"pairs":[]}'}).encode(),
-    ):
-        with pytest.raises(ValueError, match="Duplicate field"):
-            semantic._model_pairs([], [])
+    with pytest.raises(ValueError, match="Duplicate field"):
+        semantic._model_pairs([], [])
+
+
+@pytest.mark.parametrize("as_bytes", [False, True])
+def test_model_json_depth_boundary_and_string_escapes(as_bytes):
+    limit = semantic.MAX_MODEL_JSON_DEPTH
+    data = "[" * limit + "0" + "]" * limit
+    assert semantic._decode_model_json(data.encode() if as_bytes else data) is not None
+    excessive = '{"value":' + data + "}"
+    with pytest.raises(ValueError, match="nesting limit"):
+        semantic._decode_model_json(excessive.encode() if as_bytes else excessive)
+    quoted = {"text": '[{' * 100 + '"\\' + '}]' * 100}
+    raw = json.dumps(quoted)
+    assert semantic._decode_model_json(raw.encode() if as_bytes else raw) == quoted
+
+
+@pytest.mark.parametrize("raw", ["]", "[}", '{"value":[0}', b"\xff"])
+def test_model_json_invalid_structure_or_encoding(raw):
+    with pytest.raises(ValueError):
+        semantic._decode_model_json(raw)
 
 
 def test_deeply_nested_model_json_preserves_deterministic_report(monkeypatch, unmatched_report):
