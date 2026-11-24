@@ -609,3 +609,24 @@ The table grid may use continuous stroked rules or individually stroked
 rectangles. Merely filled, borderless or unspecified grids are not evidence
 of a three-column relationship. Different printed UTC offsets are preserved
 verbatim, never silently converted to a shared timezone.
+
+
+### Unlabeled source cells and review workbench
+
+If native grid reconstruction fails (for instance because a divider is missing
+or the cells are merely filled rather than ruled), individual numeric, date,
+currency and clock cells remain independent. The generic text matcher must not
+promote a changed *bare value* to a confirmed change merely because masking
+produces an otherwise unique match. A descriptive label must survive value
+normalization, and the parent report-verification boundary independently
+enforces this rule. The full raw text stays available for comparison and
+human review. This safeguards partial table extraction but does not reconstruct
+the missing relationship between cells.
+
+The browser results view now elevates native earlier/revised table warnings to a
+separate **Revision tables need source review** panel with a button to open the
+relevant original or updated PDF page. It deduplicates repeated entries and
+ignores out-of-range or OCR-page references. The panel does not determine which
+printed value is authoritative; it exists to make the necessary manual review
+discoverable. The synthetic regression matrix has 37 fictional single-line
+cases, separate from PDF geometry and browser end-to-end tests.

@@ -615,3 +615,37 @@ def test_combined_clock_cells_preserve_different_printed_utc_zones():
     assert "UTC+05:30" in doc.lines[-1].evidence.text
     assert "UTC+06:00" in doc.lines[-1].evidence.text
     assert any("date-and-time table" in item for item in doc.warnings)
+
+
+@pytest.mark.parametrize(("layout", "label", "old_cell", "new_cell"), [
+    ("partial_divider", "Application deadline", "13 December 2026", "19 December 2026"),
+    ("borderless", "Application deadline", "2026-12-13", "2026-12-19"),
+    ("fills", "Application fee", "Rs. 300", "Rs. 450"),
+    ("partial_divider", "Reporting time", "17:00 IST", "18:00 IST"),
+])
+def test_unproven_two_column_value_cells_cannot_be_confirmed_by_api(
+    layout, label, old_cell, new_cell,
+):
+    original = _notice([HEADER, (label, old_cell)], layout=layout)
+    revised = _notice([HEADER, (label, new_cell)], layout=layout)
+    with TestClient(app) as client:
+        response = client.post("/api/compare", files={
+            "original": ("original.pdf", original, "application/pdf"),
+            "revised": ("revised.pdf", revised, "application/pdf"),
+        })
+    assert response.status_code == 200, response.text
+    report = response.json()
+    source_texts = {
+        evidence["text"]
+        for finding in report["findings"]
+        for evidence in [
+            finding["original"], finding["revised"], *finding["supporting_evidence"],
+        ]
+        if evidence is not None
+    }
+    assert old_cell in source_texts
+    assert new_cell in source_texts
+    assert any(f["status"] == "possible_change" for f in report["findings"])
+    assert not any(f["status"] == "confirmed_change" for f in report["findings"])
+    assert not any(delta["outcome"] == "changed" for f in report["findings"]
+                   for delta in f["field_changes"])
