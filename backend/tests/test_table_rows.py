@@ -477,7 +477,7 @@ def test_mixed_typed_revision_sections_keep_distinct_review_warnings():
 
 
 def test_oversized_revision_quote_is_not_merged_or_warned(monkeypatch):
-    monkeypatch.setattr("noticebridge.extract.MAX_LINE_CHARACTERS", 32)
+    monkeypatch.setattr("noticebridge.extract.MAX_LINE_CHARACTERS", 30)
     header = ("Activity", "Earlier fee", "Revised fee")
     row = ("Application fee", "Rs. 300", "Rs. 450")
     doc = extract_pdf(
