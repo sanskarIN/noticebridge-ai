@@ -336,7 +336,7 @@ def test_revision_rows_are_review_only_through_api():
     (("Activity", "Earlier fee", "Revised fee"),
      ("Application fee", "Rs. 300", "Rs. 450"), "fee"),
     (("Particulars", "Existing fee", "Updated fee"),
-     ("Application fee", "₹300", "₹450"), "fee"),
+     ("Application fee", "INR 300", "INR 450"), "fee"),
     (("Activity", "Previous time", "Revised time"),
      ("Reporting time", "17:00 IST", "18:30 IST"), "time"),
     (("Schedule", "Original time", "New time"),
