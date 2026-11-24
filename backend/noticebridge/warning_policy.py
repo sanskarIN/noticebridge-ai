@@ -27,6 +27,17 @@ OCR_NOT_SCANNED = {
     "was not OCR-scanned: page would exceed OCR pixel limit",
 }
 MAX_CROSS_PAGE_DETAILS = 20
+REVISION_TABLE_WARNINGS = frozenset(
+    f"contains an earlier/revised {kind} table; "
+    "both printed values are retained, verify the column headings"
+    for kind in ("date", "fee", "time", "date-and-time")
+)
+# Each source page can have one warning per native revision-table category.
+# Cross-page review warnings and exceptional notices have separate allowances.
+MAX_REPORT_WARNINGS = (
+    2 * MAX_PAGES * len(REVISION_TABLE_WARNINGS)
+    + 2 * (MAX_CROSS_PAGE_DETAILS + 1) + 12
+)
 PAGE_RE = re.compile(r"^(original|revised): page ([1-9][0-9]{0,2}) (.+)$")
 OMITTED_BOXES_RE = re.compile(
     r"^omitted ([1-9][0-9]{0,4}) text line\(s\) with invalid source coordinates$"
@@ -76,10 +87,7 @@ def warning_supported(
         omitted = OMITTED_BOXES_RE.fullmatch(description)
         if omitted:
             return 1 <= page <= summary.page_count and int(omitted[1]) <= MAX_EXTRACTED_LINES
-        if description == (
-            "contains an earlier/revised date table; "
-            "both printed values are retained, verify the column headings"
-        ):
+        if description in REVISION_TABLE_WARNINGS:
             return (
                 1 <= page <= summary.page_count
                 and page not in summary.pages_without_text

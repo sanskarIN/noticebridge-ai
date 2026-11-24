@@ -13,6 +13,8 @@ from .facts import (
     CLOCK_TOKEN,
     CLOCK_ZONE,
     DATE_TOKEN,
+    amount_tokens,
+    parse_clock,
     parse_date,
     single_clock_token,
 )
@@ -38,6 +40,34 @@ REVISED_DATE_HEADERS = frozenset({
     "revised date", "revised dates", "extended date", "extended dates",
     "updated date", "updated dates", "new date", "new dates",
 })
+
+# Require paired, explicitly typed earlier/revised headers. A generic "old/new"
+# grid is not enough to infer which amount or clock a notice is revising.
+REVISION_HEADERS = {
+    "date": (EARLIER_DATE_HEADERS, REVISED_DATE_HEADERS),
+    "fee": (
+        frozenset({"earlier fee", "original fee", "existing fee", "previous fee",
+                   "earlier amount", "previous amount"}),
+        frozenset({"revised fee", "updated fee", "new fee", "revised amount",
+                   "updated amount", "new amount"}),
+    ),
+    "time": (
+        frozenset({"earlier time", "original time", "existing time", "previous time"}),
+        frozenset({"revised time", "updated time", "new time"}),
+    ),
+    # A combined date and closing clock is not interchangeable with either
+    # a date-only or time-only cell. Require explicit combined headings.
+    "date-and-time": (
+        frozenset({"earlier date/time", "original date/time",
+                   "earlier date and time", "original date and time"}),
+        frozenset({"revised date/time", "updated date/time",
+                   "revised date and time", "updated date and time"}),
+    ),
+}
+REVISION_CATEGORIES = {
+    "date": "deadline", "fee": "fee", "time": "time", "date-and-time": "deadline",
+}
+REVIEW_TABLE_KINDS = ("date", "fee", "time", "date-and-time")
 
 
 def _continuous_rules(rules: dict[float, list[Interval]]) -> dict[float, list[Interval]]:
@@ -180,11 +210,52 @@ def _cell_lines(row: Row, lines: list[ExtractedLine]) -> tuple[int, ...] | None:
     return tuple(index for index, _ in ordered)
 
 
-def _revision_date_rows(page: fitz.Page, lines: list[ExtractedLine]) -> list[tuple[int, ...]]:
-    """Preserve both printed date columns only below explicit native headings.
+def _revision_header_kind(label: str, earlier: str, revised: str) -> str | None:
+    if normalize(label) not in REVISION_SUBJECTS:
+        return None
+    old_heading, new_heading = normalize(earlier), normalize(revised)
+    for kind, (old_labels, new_labels) in REVISION_HEADERS.items():
+        if old_heading in old_labels and new_heading in new_labels:
+            return kind
+    return None
 
-    This is evidence grouping, not interpretation of which date governs.
-    Stop on a gap, unsupported row or changed header; never infer from position alone.
+
+def _revision_cell_matches(text: str, kind: str) -> bool:
+    """Require one full, unambiguous, typed cell rather than a value in prose."""
+    if kind == "date":
+        return DATE_TOKEN.fullmatch(text) is not None and parse_date(text).canonical is not None
+    if kind == "fee":
+        parsed = amount_tokens(text)
+        return (
+            AMOUNT_TOKEN.fullmatch(text) is not None
+            and len(parsed) == 1 and parsed[0].canonical is not None
+        )
+    if kind == "time":
+        token = single_clock_token(text)
+        return bool(
+            token is not None
+            and not text[:token.start()].strip()
+            and CLOCK_ZONE.fullmatch(text[token.end():]) is not None
+            and parse_clock(token).canonical is not None
+        )
+    if kind == "date-and-time":
+        clock = single_clock_token(text)
+        return bool(
+            DATE_TOKEN.match(text) is not None
+            and _schedule_value(text)
+            and clock is not None
+            and parse_clock(clock).canonical is not None
+        )
+    return False
+
+
+def _revision_value_rows(
+    page: fitz.Page, lines: list[ExtractedLine],
+) -> list[tuple[tuple[int, ...], str]]:
+    """Group native earlier/revised rows for review, never infer authority.
+
+    Each consecutive row inherits only a proven, explicitly typed header.
+    Stop after a grid gap, unsupported line, ambiguous cell or crossed geometry.
     """
     grids: dict[tuple[float, ...], list[Row]] = defaultdict(list)
     for row in _ruled_rows(page, column_count=3):
@@ -192,36 +263,32 @@ def _revision_date_rows(page: fitz.Page, lines: list[ExtractedLine]) -> list[tup
     result = []
     for rows in grids.values():
         previous_bottom = None
-        active = False
+        active_kind: str | None = None
         for row in sorted(rows, key=lambda cells: cells[0][1]):
             if previous_bottom != row[0][1]:
-                active = False
+                active_kind = None
             previous_bottom = row[0][3]
             indices = _cell_lines(row, lines)
             if indices is None:
-                active = False
+                active_kind = None
                 continue
             label, earlier, revised = (lines[index].text for index in indices)
-            if (
-                normalize(label) in REVISION_SUBJECTS
-                and normalize(earlier) in EARLIER_DATE_HEADERS
-                and normalize(revised) in REVISED_DATE_HEADERS
-            ):
-                active = True
+            header_kind = _revision_header_kind(label, earlier, revised)
+            if header_kind is not None:
+                active_kind = header_kind
                 continue
-            if not active:
+            if active_kind is None:
                 continue
             if (
-                category_for(label) != "deadline"
+                category_for(label) != REVISION_CATEGORIES[active_kind]
                 or DATE_TOKEN.search(label) or AMOUNT_TOKEN.search(label)
                 or CLOCK_TOKEN.search(label)
-                or not DATE_TOKEN.fullmatch(earlier) or not DATE_TOKEN.fullmatch(revised)
-                or parse_date(earlier).canonical is None
-                or parse_date(revised).canonical is None
+                or not _revision_cell_matches(earlier, active_kind)
+                or not _revision_cell_matches(revised, active_kind)
             ):
-                active = False
+                active_kind = None
                 continue
-            result.append(indices)
+            result.append((indices, active_kind))
     return result
 
 
@@ -229,7 +296,7 @@ def join_ruled_value_rows(
     page: fitz.Page, lines: list[ExtractedLine], *, max_quote_length: int,
     warnings: list[str] | None = None,
 ) -> list[ExtractedLine]:
-    """Reuse native quotes only when their bounding boxes fit two proven cells."""
+    """Reuse bounded native quotes only when their boxes fit a proven ruled grid."""
     if not 2 <= len(lines) <= MAX_PAGE_LINES:
         return lines
     ordinary_values = {
@@ -273,17 +340,17 @@ def join_ruled_value_rows(
             pairs.append((first, second))
 
     triples = [
-        indices for indices in _revision_date_rows(page, lines)
+        (indices, kind) for indices, kind in _revision_value_rows(page, lines)
         if sum(len(lines[index].text) for index in indices) + 2 <= max_quote_length
     ]
-    groups = pairs + triples
+    groups = [(pair, None) for pair in pairs] + triples
     if not groups:
         return lines
-    counts = Counter(index for group in groups for index in group)
+    counts = Counter(index for group, _ in groups for index in group)
     replacements: dict[int, ExtractedLine] = {}
     consumed: set[int] = set()
-    review_rows = False
-    for group in groups:
+    review_types: set[str] = set()
+    for group, kind in groups:
         if any(counts[index] != 1 for index in group):
             continue
         members = [lines[index] for index in group]
@@ -294,19 +361,22 @@ def join_ruled_value_rows(
             "bbox": (min(box[0] for box in boxes), min(box[1] for box in boxes),
                      max(box[2] for box in boxes), max(box[3] for box in boxes)),
         })
-        # No synthesized connector or discarded date. The joined triple
-        # carries review-only status within extraction, not a confirmed delta.
-        review_only = len(group) == 3
+        # Typed earlier/revised cells remain review-only. Neither column's
+        # printed value is promoted to a governing amendment.
         replacements[min(group)] = ExtractedLine(
-            text=text, evidence=evidence, review_only=review_only,
+            text=text, evidence=evidence, review_only=kind is not None,
         )
         consumed.update(set(group) - {min(group)})
-        review_rows |= review_only
-    if review_rows and warnings is not None:
+        if kind is not None:
+            review_types.add(kind)
+    if review_types and warnings is not None:
         source = lines[0].evidence
-        warnings.append(
-            f"{source.document_id}: page {source.page} contains an earlier/revised date table; "
-            "both printed values are retained, verify the column headings"
-        )
+        for kind in REVIEW_TABLE_KINDS:
+            if kind in review_types:
+                warnings.append(
+                    f"{source.document_id}: page {source.page} contains an earlier/revised "
+                    f"{kind} table; both printed values are retained, "
+                    "verify the column headings"
+                )
     return [replacements.get(index, line) for index, line in enumerate(lines)
             if index not in consumed]
