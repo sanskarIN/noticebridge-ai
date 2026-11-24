@@ -25,6 +25,7 @@ test('static showcase opens the evidence and exports a labeled report without an
   await page.getByRole('button', { name: /Export evidence report/ }).click();
   const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
   expect(report.comparison_source).toBe('showcase');
+  expect(report.automatic_ocr).toBe(false);
   expect(report.review).toEqual(['f1']);
   expect(report.documents).toHaveLength(2);
   expect(apiCalls).toEqual([]);

@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 FindingStatus = Literal[
     "confirmed_change", "possible_change", "contradiction", "missing_information"
@@ -85,6 +85,8 @@ class ComparisonReport(BaseModel):
     warnings: list[str]
     text_coverage: Literal["all_pages_have_text", "partial", "inconclusive"] = "inconclusive"
     fuzzy_matching_limited: bool = False
+    # Older exports do not record whether automatic OCR was enabled.
+    automatic_ocr: StrictBool | None = None
     semantic_assistance: Literal[
         "not_requested", "no_candidates", "unavailable", "no_verified_pairs",
         "proposals_added"

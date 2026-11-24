@@ -33,6 +33,7 @@ test('shows evidence and locally renders a highlighted PDF.js page', async ({ pa
 
 test('exports source-bound evidence JSON from a live upload', async ({ page }) => {
   await addSources(page);
+  await page.getByLabel('Enable local OCR for scanned pages').check();
   await page.getByRole('button', { name: /Compare documents/ }).click();
   await expect(page.locator('.finding')).toHaveCount(1);
   const promise = page.waitForEvent('download');
@@ -40,6 +41,9 @@ test('exports source-bound evidence JSON from a live upload', async ({ page }) =
   const download = await promise;
   const payload = JSON.parse(await readFile(await download.path(), 'utf8'));
   expect(payload.documents).toHaveLength(2);
+  expect(payload.automatic_ocr).toBe(true);
+  expect(payload.documents.map((document: { ocr_pages: number[] }) => document.ocr_pages))
+    .toEqual([[], []]);
   expect(payload.documents[0].sha256).toMatch(/^[0-9a-f]{64}$/);
   expect(payload.findings[0].authority_verified).toBe(false);
   expect(payload.findings[0].original.page).toBe(1);
@@ -634,6 +638,11 @@ test('page-specific OCR reports a coverage gap when a selected page exceeds the 
   await expect(page.getByText(/page would exceed OCR pixel limit/)).toBeVisible();
   await expect(page.locator('.finding')).toHaveCount(1);
   await expect(page.locator('.finding')).not.toContainText('Deadline: 13 December 2026');
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(report.automatic_ocr).toBe(false);
+  expect(report.documents[0].ocr_override_pages).toEqual([1]);
   await page.getByLabel('Original notice OCR pages').fill('');
   await expect(page.locator('.results')).toHaveCount(0);
 });
