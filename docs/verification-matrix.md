@@ -63,7 +63,7 @@ checked against the quoted source.
 
 ## Ruled tables
 
-The extractor joins a label and a standalone date or INR amount when both fit entirely in separate cells of one native-text row. The ruling must form at least two adjacent rows with the same two columns. The original page, quote words, and source hash remain the evidence. Matching uses the same anchors and review rules as ordinary lines.
+The extractor joins a label and a standalone date or INR amount when both fit entirely in separate cells of one native-text row. For deadline and scheduled-time labels, it also supports a standalone clock with optional IST/UTC/GMT context, or a single unambiguous full date followed by a clock. Clock ranges, arbitrary prose, offset-only values, and labels containing another clock remain separate lines. The ruling must form at least two adjacent rows with the same two columns. The original page, quote words, and source hash remain the evidence. Matching uses the same anchors and review rules as ordinary lines.
 
 Borderless tables, merged cells, three-column tables, wrapped cells, scanned tables, and pages beyond the layout work budget keep the original line-level extraction. Complex layouts can still produce incomplete matches. Inspect the PDF page when layout determines how a value applies.
 
@@ -79,7 +79,7 @@ Borderless tables, merged cells, three-column tables, wrapped cells, scanned tab
 ## Automated regression suites
 
 - `backend/tests/test_extract.py`: source locations, SHA-256, malformed/scanned/password-protected/oversized-page PDFs, OCR gating/budgets/error paths, and English/Hindi OCR integration scans that skip if Tesseract language packs or fixture fonts are missing.
-- `backend/tests/test_table_rows.py`: native grid detection, rotated evidence, fallback for ambiguous layouts and budget limits, and actual deadline and fee changes through the comparison worker.
+- `backend/tests/test_table_rows.py`: native grid detection, rotated evidence, fallback for ambiguous layouts and budget limits, and actual deadline, fee and clock changes through the comparison worker.
 - `backend/tests/test_compare.py`: changed/unchanged statements, reordered lines, duplicated deadline labels, same-page versus cross-page ambiguity handling, source location and lack of authority inference.
 - `backend/tests/test_facts.py`: dates in English/Hindi, Devanagari digits, ambiguous and invalid dates or clock times, unsupported time ranges, currency canonicalization and malformed grouping.
 - `backend/tests/test_api.py` and `backend/tests/test_body_limit.py`: health, live multipart comparisons, multipart stream and header size enforcement, bad uploads, filename sanitization, response no-store headers.

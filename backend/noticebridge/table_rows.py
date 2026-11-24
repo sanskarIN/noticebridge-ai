@@ -1,16 +1,24 @@
-"""Keep native date and fee cells with their labels in simple ruled tables."""
+"""Keep native date, fee and schedule cells with labels in simple ruled tables."""
 
 import math
+import re
 from collections import Counter, defaultdict
 from itertools import pairwise
 
 import pymupdf as fitz
 
-from .facts import AMOUNT_TOKEN, DATE_TOKEN
+from .classification import category_for
+from .facts import AMOUNT_TOKEN, CLOCK_TOKEN, DATE_TOKEN, parse_date, single_clock_token
 from .models import ExtractedLine
 
 MAX_PAGE_LINES = 512
 MAX_DRAWING_ITEMS = 256
+# Zone labels remain part of the original context. This is not conversion.
+CLOCK_ZONE = re.compile(
+    r"\s*(?:IST|(?:UTC|GMT)(?:\s*[+−-]\s*\d{1,2}:\d{2})?)?\s*",
+    re.IGNORECASE,
+)
+DATE_CLOCK_SEPARATOR = re.compile(r"(?:\s+(?:at\s+)?|,\s*)", re.IGNORECASE)
 
 Interval = tuple[float, float]
 Box = tuple[float, float, float, float]
@@ -119,16 +127,41 @@ def _contains(cell: Box, quote: Box) -> bool:
     )
 
 
+def _schedule_value(text: str) -> bool:
+    """Accept only a complete clock cell or a single full date plus clock.
+
+    A clock hidden in prose, range, identifier, or bare UTC offset is not a
+    standalone table value. Preserve unsupported cells as individual lines.
+    """
+    clock = single_clock_token(text)
+    if clock is None or CLOCK_ZONE.fullmatch(text[clock.end():]) is None:
+        return False
+    prefix = text[:clock.start()]
+    if not prefix.strip():
+        return True
+    date_match = DATE_TOKEN.match(prefix)
+    return bool(
+        date_match
+        and parse_date(date_match[0]).canonical is not None
+        and DATE_CLOCK_SEPARATOR.fullmatch(prefix[date_match.end():])
+    )
+
+
 def join_ruled_value_rows(
     page: fitz.Page, lines: list[ExtractedLine], *, max_quote_length: int,
 ) -> list[ExtractedLine]:
     """Reuse native quotes only when their bounding boxes fit two proven cells."""
     if not 2 <= len(lines) <= MAX_PAGE_LINES:
         return lines
-    values = {
+    ordinary_values = {
         index for index, line in enumerate(lines)
         if DATE_TOKEN.fullmatch(line.text) or AMOUNT_TOKEN.fullmatch(line.text)
     }
+    schedules = {
+        index for index, line in enumerate(lines)
+        if index not in ordinary_values and _schedule_value(line.text)
+    }
+    values = ordinary_values | schedules
     if not values or len(values) == len(lines):
         return lines
     pairs: list[tuple[int, int]] = []
@@ -149,6 +182,10 @@ def join_ruled_value_rows(
         ):
             continue
         label = lines[first].text
+        if second in schedules and (
+            category_for(label) not in ("deadline", "time") or CLOCK_TOKEN.search(label)
+        ):
+            continue
         if (
             len(label) + 1 + len(lines[second].text) <= max_quote_length
             and any(char.isalpha() for char in label)

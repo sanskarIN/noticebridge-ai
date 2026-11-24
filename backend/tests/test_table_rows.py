@@ -140,3 +140,123 @@ def test_worker_reports_changed_deadline_and_fee_in_reordered_rows():
         assert delta["outcome"] == "changed"
         assert delta["original"]["canonical"] == old
         assert delta["revised"]["canonical"] == new
+
+
+@pytest.mark.parametrize(("layout", "rotation"), [("rules", 0), ("rectangles", 90)])
+def test_clock_cells_keep_label_and_geometry(layout, rotation):
+    rows = [
+        HEADER, ("Reporting time", "5:30 PM IST"),
+        ("Application deadline", "13 December 2026 at 17:00 IST"),
+    ]
+    pdf = _notice(rows, layout=layout, rotation=rotation)
+    doc = extract_pdf(pdf, document_id="original", filename="schedule.pdf")
+    assert [line.text for line in doc.lines] == [
+        *HEADER, "Reporting time 5:30 PM IST",
+        "Application deadline 13 December 2026 at 17:00 IST",
+    ]
+    for line in doc.lines[2:]:
+        assert line.evidence.page == 1
+        assert line.evidence.page_rotation == rotation
+        assert line.evidence.extraction_method == "native"
+        assert line.evidence.bbox[0] < 265 < line.evidence.bbox[2]
+
+
+@pytest.mark.parametrize(("label", "value"), [
+    ("Reference number", "17:00"),
+    ("Reporting time", "17:00 to 18:00"),
+    ("Reporting time", "5-7 PM"),
+    ("Reporting time", "UTC+05:30"),
+    ("Reporting time", "17:00+05:30"),
+    ("Reporting time", "17:00:30"),
+    ("Reporting time", "DOC-17:00"),
+    ("Reporting time", "17:00 on request"),
+    ("Reporting time at 17:00", "18:00"),
+    ("Reporting time", "13 to 15 December 2026 at 17:00"),
+    ("Reporting time", "01/02/2026 at 17:00"),
+])
+def test_unrelated_or_ambiguous_clock_cells_remain_separate(label, value):
+    doc = extract_pdf(
+        _notice([HEADER, (label, value)]), document_id="original", filename="schedule.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*HEADER, label, value]
+
+
+@pytest.mark.parametrize("layout", ["borderless", "fills", "partial_divider"])
+def test_clock_cells_require_proven_grid_geometry(layout):
+    row = ("Reporting time", "17:00")
+    doc = extract_pdf(
+        _notice([HEADER, row], layout=layout), document_id="original", filename="schedule.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*HEADER, *row]
+
+
+@pytest.mark.parametrize(("old", "new", "outcomes"), [
+    ("5:30 PM IST", "17:30 IST", ["same_value"]),
+    ("17:30", "18:30", ["changed"]),
+    ("5:30", "17:30", ["uncertain"]),
+    ("24:00", "18:30", ["uncertain"]),
+    ("17:30 UTC+05:30", "18:30 UTC+05:30", ["changed"]),
+])
+def test_clock_table_roundtrip_through_worker(old, new, outcomes):
+    original = _notice([HEADER, ("Reporting time", old)])
+    revised = _notice([HEADER, ("Reporting time", new)])
+    with TestClient(app) as client:
+        response = client.post("/api/compare", files={
+            "original": ("original.pdf", original, "application/pdf"),
+            "revised": ("revised.pdf", revised, "application/pdf"),
+        })
+    assert response.status_code == 200, response.text
+    report = response.json()
+    (finding,) = report["findings"]
+    assert finding["status"] == "confirmed_change"
+    assert finding["category"] == "time"
+    assert finding["original"]["text"] == f"Reporting time {old}"
+    assert finding["revised"]["text"] == f"Reporting time {new}"
+    assert [delta["outcome"] for delta in finding["field_changes"]] == outcomes
+    assert not finding["authority_verified"]
+    assert finding["original"]["bbox"][0] < 265 < finding["original"]["bbox"][2]
+
+
+def test_table_date_and_cutoff_fields_both_survive_reordered_rows():
+    from noticebridge.compare import compare_documents
+
+    original = _notice([
+        HEADER, ("Application deadline", "13 December 2026 at 17:00 IST"),
+        ("Reporting time", "18:00 IST"),
+    ])
+    revised = _notice([
+        HEADER, ("Reporting time", "18:00 IST"),
+        ("Application deadline", "14 December 2026 at 16:00 IST"),
+    ])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="original.pdf"),
+        extract_pdf(revised, document_id="revised", filename="revised.pdf"),
+    )
+    (finding,) = report.findings
+    assert finding.status == "confirmed_change"
+    assert finding.category == "deadline"
+    assert [(delta.kind, delta.outcome) for delta in finding.field_changes] == [
+        ("date", "changed"), ("time", "changed"),
+    ]
+
+
+@pytest.mark.parametrize(("label_a", "label_b", "value_a", "value_b"), [
+    ("Reporting time Shift 1", "Reporting time Shift 2", "17:00 IST", "18:00 IST"),
+    ("Reporting time", "Reporting time", "17:00 IST", "18:00 UTC"),
+    ("Reporting time", "Reporting time", "13 Dec 2026 at 17:00", "14 Dec 2026 at 18:00"),
+])
+def test_schedule_table_matching_preserves_scope(label_a, label_b, value_a, value_b):
+    from noticebridge.compare import compare_documents
+
+    report = compare_documents(
+        extract_pdf(
+            _notice([HEADER, (label_a, value_a)]), document_id="original", filename="a.pdf",
+        ),
+        extract_pdf(
+            _notice([HEADER, (label_b, value_b)]), document_id="revised", filename="b.pdf",
+        ),
+    )
+    assert not any(f.status == "confirmed_change" for f in report.findings)
+    assert not any(
+        delta.outcome == "changed" for f in report.findings for delta in f.field_changes
+    )

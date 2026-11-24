@@ -1,7 +1,6 @@
 """Conservative deterministic PDF comparison. No AI inference masquerading as verification."""
 
 import re
-import unicodedata
 from collections import Counter, defaultdict, deque
 
 from .amendments import (
@@ -11,11 +10,11 @@ from .amendments import (
     original_statement,
     revised_amendment,
 )
+from .classification import SPACE, category_for, normalize
 from .extract import ExtractedDocument
 from .facts import (
     AMOUNT_TOKEN,
     DATE_TOKEN,
-    WORD_CHAR,
     date_tokens,
     field_changes,
     single_clock_token,
@@ -26,57 +25,6 @@ from .models import ChecklistItem, ComparisonReport, Evidence, Finding, ValueCha
 from .warning_policy import MAX_CROSS_PAGE_DETAILS
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
-SPACE = re.compile(r"\s+")
-
-CATEGORIES = (
-    (
-        "deadline",
-        (
-            "deadline", "last date", "closing date", "due date", "apply by",
-            "अंतिम तिथि", "अंतिम तारीख",
-        ),
-    ),
-    (
-        "eligibility",
-        ("eligib", "ineligib", "qualification", "required degree", "पात्रता", "योग्यता"),
-    ),
-    ("fee", ("application fee", "fees", "fee", "payment", "शुल्क", "फीस")),
-    ("time", ("exam time", "reporting time", "interview time", "time of", "समय")),
-    ("instruction", ("must", "submit", "required", "instruction", "अनिवार्य", "जमा करें")),
-)
-
-
-def normalize(value: str) -> str:
-    return SPACE.sub(" ", unicodedata.normalize("NFKC", value).casefold()).strip()
-
-
-# A raw substring test would classify "coffee" as a fee or "repayment" as payment evidence.
-CATEGORY_MATCHERS = tuple(
-    (
-        category,
-        tuple(
-            re.compile(
-                rf"(?<!{WORD_CHAR}){re.escape(term)}"
-                + (
-                    rf"{WORD_CHAR}*"
-                    if term in {"eligib", "ineligib"}
-                    else rf"(?!{WORD_CHAR})"
-                )
-            )
-            for term in terms
-        ),
-    )
-    for category, terms in CATEGORIES
-)
-
-
-def category_for(text: str) -> str:
-    value = normalize(text)
-    for category, expressions in CATEGORY_MATCHERS:
-        if any(expression.search(value) for expression in expressions):
-            return category
-    return "general"
-
 
 def anchor(text: str, category: str, *, mask_clock: bool = True) -> str:
     """Mask expected values while keeping dates of scheduled events and other scope."""
