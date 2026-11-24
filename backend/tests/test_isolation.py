@@ -144,6 +144,119 @@ def test_worker_failure_response_is_validated(monkeypatch, pdf_bytes):
         _run(good, good)
 
 
+
+
+def _simulate_worker_output(monkeypatch, content: bytes) -> None:
+    """Run the real parent validation against controlled subprocess stdout."""
+    import noticebridge.isolation as module
+
+    class Process:
+        returncode = 0
+
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+        def communicate(self, **kwargs):
+            self.stdout.write(content)
+            self.stdout.flush()
+            return None, None
+
+    monkeypatch.setattr(module.subprocess, "Popen", lambda *a, **kw: Process(kw["stdout"]))
+    monkeypatch.setattr(module, "_attach_windows_job", lambda _: None)
+
+
+@pytest.mark.parametrize("message", [
+    "Malformed or unreadable PDF",
+    "File is not recognized as a PDF",
+    "Encrypted PDFs are not supported",
+])
+def test_worker_preserves_only_approved_document_errors(monkeypatch, pdf_bytes, message):
+    _simulate_worker_output(
+        monkeypatch, json.dumps({"error": "invalid_document", "message": message}).encode(),
+    )
+    pdf = pdf_bytes([["Notice"]])
+    with pytest.raises(InvalidDocument, match=message):
+        _run(pdf, pdf)
+
+
+def test_worker_sanitizes_bounded_selected_ocr_page_failure(monkeypatch, pdf_bytes):
+    _simulate_worker_output(
+        monkeypatch, json.dumps({
+            "error": "invalid_document",
+            "message": "OCR page 12 is outside the revised PDF (2 pages)",
+        }).encode(),
+    )
+    pdf = pdf_bytes([["Notice"]])
+    with pytest.raises(InvalidDocument, match="Selected OCR page is outside"):
+        _run(pdf, pdf)
+
+
+@pytest.mark.parametrize("bad_output", [
+    b'{"error":"invalid_document","message":"Confidential source: applicant 123"}',
+    b'{"error":"invalid_document","message":"Malformed or unreadable PDF","extra":true}',
+    b'{"error":"invalid_document","message":"Malformed or unreadable PDF",'
+    b'"message":"Confidential source"}',
+    b'{"error":"invalid_document","message":NaN}',
+    b'{"error":"invalid_document","message":"Malformed or unreadable PDF",'
+    b'"detail":1e9999}',
+    b'{"error":"unrecognized","message":"Malformed or unreadable PDF"}',
+    b'["invalid_document"]',
+    b'{"error":"invalid_document","message":42}',
+])
+def test_worker_rejects_untrusted_error_envelopes_without_leaking_text(
+    monkeypatch, pdf_bytes, bad_output,
+):
+    _simulate_worker_output(monkeypatch, bad_output)
+    pdf = pdf_bytes([["Notice"]])
+    with pytest.raises(ProcessingFailed) as result:
+        _run(pdf, pdf)
+    assert "Confidential source" not in str(result.value)
+    assert "applicant 123" not in str(result.value)
+
+
+@pytest.mark.parametrize("mutation", [
+    "extra_root", "extra_evidence", "missing_default", "string_page",
+    "boolean_page", "duplicate_member", "nonfinite", "overflow_float",
+])
+def test_worker_report_wire_schema_rejects_coercion_and_unexpected_claims(
+    monkeypatch, pdf_bytes, mutation,
+):
+    from noticebridge.compare import compare_documents
+    from noticebridge.extract import extract_pdf
+
+    first = pdf_bytes([["Deadline: 13 December 2026"]])
+    second = pdf_bytes([["Deadline: 14 December 2026"]])
+    report = compare_documents(
+        extract_pdf(first, document_id="original", filename="original.pdf"),
+        extract_pdf(second, document_id="revised", filename="revised.pdf"),
+    )
+    payload = report.model_dump(mode="json")
+    finding = payload["findings"][0]
+    evidence = finding["original"]
+    if mutation == "extra_root":
+        payload["officially_verified"] = True
+    elif mutation == "extra_evidence":
+        evidence["issuer_verified"] = True
+    elif mutation == "missing_default":
+        del finding["authority_verified"]
+    elif mutation == "string_page":
+        evidence["page"] = "1"
+    elif mutation == "boolean_page":
+        evidence["page"] = True
+    elif mutation == "nonfinite":
+        finding["similarity"] = float("nan")
+    elif mutation == "overflow_float":
+        finding["similarity"] = float("inf")
+    output = json.dumps(payload).encode()
+    if mutation == "duplicate_member":
+        output = output.replace(
+            b'"documents":', b'"documents": [], "documents":', 1,
+        )
+    _simulate_worker_output(monkeypatch, output)
+    with pytest.raises(ProcessingFailed, match="worker returned"):
+        _run(first, second)
+
+
 def test_worker_environment_excludes_unrelated_secrets(monkeypatch):
     import noticebridge.isolation as module
 
@@ -169,7 +282,7 @@ def test_subprocess_bootstrap_receives_ocr_budget(monkeypatch, pdf_bytes):
 
         def communicate(self, **kwargs):
             self.stdout.write(
-                b'{"error":"invalid_document","message":"not a valid PDF"}'
+                b'{"error":"invalid_document","message":"File is not recognized as a PDF"}'
             )
             self.stdout.flush()
             return None, None
