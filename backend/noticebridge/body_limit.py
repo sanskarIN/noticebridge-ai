@@ -102,7 +102,8 @@ class CompareBodyLimit:
                 scope, receive, send, status=400, detail="Invalid Content-Length"
             )
             return
-        if lengths and int(lengths[0]) > MAX_COMPARE_BODY_BYTES:
+        declared_length = int(lengths[0]) if lengths else None
+        if declared_length is not None and declared_length > MAX_COMPARE_BODY_BYTES:
             await self._reject(
                 scope, receive, send, status=413, detail="Comparison upload is too large"
             )
@@ -122,12 +123,16 @@ class CompareBodyLimit:
             )
             return
         try:
-            await self._buffer_and_dispatch(scope, receive, send)
+            await self._buffer_and_dispatch(
+                scope, receive, send, declared_length=declared_length,
+            )
         finally:
             with self._active_lock:
                 self._active -= 1
 
-    async def _buffer_and_dispatch(self, scope, receive, send) -> None:
+    async def _buffer_and_dispatch(
+        self, scope, receive, send, *, declared_length: int | None,
+    ) -> None:
         try:
             upload_spool = SpooledTemporaryFile(
                 mode="w+b", max_size=IN_MEMORY_SPOOL_BYTES
@@ -176,7 +181,11 @@ class CompareBodyLimit:
                     )
                     return
                 try:
-                    spool.write(body)
+                    # File-like objects can report a short write without raising.
+                    # Never pass a truncated request to the multipart parser.
+                    written = spool.write(body)
+                    if written != len(body):
+                        raise OSError("Incomplete temporary upload write")
                 except OSError:
                     await self._reject(
                         scope, receive, send,
@@ -185,6 +194,15 @@ class CompareBodyLimit:
                     return
                 if not message.get("more_body", False):
                     break
+
+            # Reject framing mismatches before handing the body to Starlette.
+            # This is an integrity check, not a substitute for the actual-byte cap.
+            if declared_length is not None and declared_length != total:
+                await self._reject(
+                    scope, receive, send,
+                    status=400, detail="Content-Length does not match received bytes",
+                )
+                return
 
             try:
                 spool.seek(0)

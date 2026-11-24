@@ -14,7 +14,7 @@
 
 | Control | Current safeguard | Remaining exposure |
 | --- | --- | --- |
-| Multipart | 10 MiB per PDF; 21 MiB aggregate request; 1 MiB in-memory spool before temporary-disk rollover. Storage open/write/seek failures now return a controlled 503 and request slots are released; disconnects close temporary upload spools | External proxy abuse, storage quotas, OS-level cleanup guarantees |
+| Multipart | 10 MiB per PDF; 21 MiB aggregate request; 1 MiB in-memory spool before temporary-disk rollover. Storage open/write/seek and short-write failures return a controlled 503 and request slots are released; declared Content-Length mismatches return 400 before PDF parsing; disconnects close temporary upload spools | External proxy abuse, storage quotas, OS-level cleanup guarantees |
 | Cross-site browser uploads | Exact browser `Origin` allowlist for local frontend/API origins; if `Origin` is absent, reject `Sec-Fetch-Site: cross-site` and unexpected/duplicate fetch-metadata headers. Reject before consuming/spooling a POST upload. CORS remains in place for response reads | Not authentication or CSRF tokens: native clients can forge headers; older browsers without both headers may not be covered; deployed origins need explicit secure configuration |
 | Streaming | 90-second receive deadline; maximum 8 simultaneous compare requests per API process | Cross-process abuse, volumetric attacks and network rate limiting |
 | PDFs | Reject encrypted PDFs and excessive page, line or text counts | Native parser vulnerabilities, decompression bombs |

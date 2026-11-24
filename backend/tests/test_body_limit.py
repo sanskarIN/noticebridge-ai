@@ -235,6 +235,72 @@ def test_falsely_small_content_length_cannot_bypass_limit(monkeypatch):
     assert received == []
 
 
+@pytest.mark.parametrize(("payload", "declared"), [
+    (b"abc", b"2"),
+    (b"abc", b"4"),
+    (b"", b"1"),
+])
+def test_declared_content_length_mismatch_fails_before_parsing(payload, declared):
+    status, body, received = _exercise(
+        chunks=[payload], headers=[(b"Content-Length", declared)],
+    )
+    assert status == 400
+    assert json.loads(body)["detail"] == "Content-Length does not match received bytes"
+    assert received == []
+
+
+def test_chunked_request_still_accepts_no_declared_content_length():
+    status, body, received = _exercise(chunks=[b"abc", b"def"])
+    assert (status, body, received) == (200, b"ok", [b"abcdef"])
+
+
+@pytest.mark.parametrize("written", [0, 2, None])
+def test_partial_temporary_write_is_rejected_and_slot_released(monkeypatch, written):
+    sent = []
+    spools = []
+    reached_parser = []
+
+    class ShortWriteSpool:
+        def __init__(self):
+            self.closed = False
+            spools.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            self.closed = True
+
+        def write(self, data):
+            return written
+
+        def seek(self, offset):
+            pytest.fail("Incomplete request must not be replayed")
+
+    async def receive():
+        return {"type": "http.request", "body": b"example", "more_body": False}
+
+    async def send(packet):
+        sent.append(packet)
+
+    async def inner(scope, receive, send):
+        reached_parser.append(True)
+
+    monkeypatch.setattr(
+        body_limit, "SpooledTemporaryFile", lambda **kwargs: ShortWriteSpool(),
+    )
+    guard = body_limit.CompareBodyLimit(inner)
+    scope = {"type": "http", "method": "POST", "path": "/api/compare", "headers": []}
+    asyncio.run(guard(scope, receive, send))
+    assert guard._active == 0
+    assert spools and all(spool.closed for spool in spools)
+    assert not reached_parser
+    assert next(x["status"] for x in sent if x["type"] == "http.response.start") == 503
+    assert json.loads(b"".join(
+        x.get("body", b"") for x in sent if x["type"] == "http.response.body"
+    ))["detail"] == "Temporary upload storage is unavailable"
+
+
 def test_exact_body_limit_is_allowed(monkeypatch):
     monkeypatch.setattr(body_limit, "MAX_COMPARE_BODY_BYTES", 7)
     status, body, received = _exercise(
