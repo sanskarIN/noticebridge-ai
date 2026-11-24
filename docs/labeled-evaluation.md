@@ -354,13 +354,39 @@ human-reviewed examples with recorded provenance:
 
 ### Reconcile two independent reviews
 
-Give both reviewers the same version-2 manifest with the PDF fingerprints pinned
-and the `expected_pairs` arrays empty. Keep the reviewers' copies separate, and
-have each reviewer label the PDFs without seeing the other person's labels or the
-engine's predictions. In each finished case, set
+Generate separate blank reviewer copies from a version-2 pinned source manifest:
+
+~~~sh
+python backend/benchmarks/prepare_independent_review.py \
+  evaluation/source.json --output evaluation/review-a.json
+python backend/benchmarks/prepare_independent_review.py \
+  evaluation/source.json --output evaluation/review-b.json
+~~~
+
+The preparation tool verifies all PDF fingerprints, copies only source identity
+and OCR selection fields, strips existing quotations, predictions and audit
+metadata, and writes empty `expected_pairs` arrays with `review_complete: false`.
+It refuses to overwrite a review file. Distribute the copies independently;
+do not distribute an existing answer key or engine predictions. Have each
+reviewer label the PDFs without seeing the other person's labels. In each finished case, set
 `"label_method": "independent_human"` and `"review_complete": true`. The
 completion field distinguishes a reviewed case with zero expected pairs from an
-unreviewed case. Use pseudonymous reviewer IDs.
+unreviewed case. Both evaluators reject any explicitly incomplete case before
+starting a worker. Older manifests without the field still work for
+compatibility. Use pseudonymous reviewer IDs.
+
+Before reconciliation, check both finished copies against the same source:
+
+~~~sh
+python backend/benchmarks/prepare_independent_review.py \
+  evaluation/source.json --check evaluation/review-a.json
+python backend/benchmarks/prepare_independent_review.py \
+  evaluation/source.json --check evaluation/review-b.json
+~~~
+
+This reports only case counts and manifest fingerprints, checks source identity,
+PDF hashes and declared completion, and never scores or extracts quotations.
+It cannot prove that a person actually reviewed the PDFs independently.
 
 Run the reconciliation from the repository root. Keep the manifests in the same
 directory as each other so their relative PDF paths refer to the same dataset.

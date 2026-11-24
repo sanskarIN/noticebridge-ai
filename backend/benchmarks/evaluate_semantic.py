@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 from time import perf_counter
 
-from evaluate_labeled import _key, _manifest, _pdf, _ratio
+from evaluate_labeled import _key, _manifest, _pdf, _ratio, _require_ready_for_scoring
 
 from noticebridge.compare import normalize
 from noticebridge.isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
@@ -165,6 +165,7 @@ def evaluate_semantic(manifest: Path, *, enable_ocr: bool = False) -> dict:
         raise ValueError("Invalid local model name")
     manifest = manifest.resolve()
     version, cases, digest = _manifest(manifest)
+    _require_ready_for_scoring(cases)
     if version != 2:
         raise ValueError("Semantic evaluation requires a version-2 SHA-pinned manifest")
     results = []
