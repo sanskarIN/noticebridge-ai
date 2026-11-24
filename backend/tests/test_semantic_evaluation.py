@@ -2,8 +2,11 @@
 
 import hashlib
 import json
+import os
 import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from threading import Thread
 
 import pytest
 
@@ -176,3 +179,73 @@ def test_explicit_model_opt_in_required(dataset, worker):
         evaluation.main([str(dataset)])
     assert error.value.code == 2
     assert not worker
+
+
+@pytest.mark.skipif(
+    os.environ.get("GITHUB_ACTIONS") != "true",
+    reason="Fixed loopback test port must not interfere with a developer's local model",
+)
+def test_real_isolated_workers_with_controlled_loopback_model(dataset, monkeypatch):
+    """Exercise worker isolation, the actual HTTP transport and provenance checks."""
+    requests = []
+    malformed = False
+
+    class ModelHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            requests.append((self.path, payload))
+            if malformed:
+                # Duplicate envelope keys are rejected rather than interpreted
+                # according to the JSON decoder's last-member-wins behavior.
+                response = b'{"response":"{}","response":"{}"}'
+            else:
+                excerpts = json.loads(payload["prompt"].split("\n", 1)[1])
+                pairs = [{
+                    "original_id": excerpts["original"][0]["id"],
+                    "revised_id": excerpts["revised"][0]["id"],
+                }]
+                response = json.dumps({"response": json.dumps({"pairs": pairs})}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        def log_message(self, *args):
+            pass
+
+    # CI is an isolated host. Never contact another process if the port is taken.
+    try:
+        server = HTTPServer(("127.0.0.1", 11434), ModelHandler)
+    except OSError:
+        pytest.skip("Local test model port is occupied")
+    monkeypatch.setenv("NOTICEBRIDGE_LOCAL_MODEL", "noticebridge-ci-fixture")
+    with server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = evaluation.evaluate_semantic(dataset)
+            assert result["overall"]["recovered_pair_count"] == 1
+            assert result["overall"]["outcomes"]["proposals_added"] == 1
+            assert len(requests) == 1
+            path, payload = requests[0]
+            assert path == "/api/generate"
+            assert payload["model"] == "noticebridge-ci-fixture"
+            assert payload["stream"] is False
+            excerpts = json.loads(payload["prompt"].split("\n", 1)[1])
+            assert excerpts["original"][0]["text"] == PAIR["original_text"]
+            assert excerpts["revised"][0]["text"] == PAIR["revised_text"]
+            assert all(
+                set(entry) == {"id", "category", "text"}
+                for role in ("original", "revised") for entry in excerpts[role]
+            )
+
+            malformed = True
+            failed = evaluation.evaluate_semantic(dataset)
+            assert failed["overall"]["outcomes"]["unavailable"] == 1
+            assert failed["overall"]["baseline"] == failed["overall"]["assisted"]
+            assert failed["overall"]["proposal_count"] == 0
+            assert len(requests) == 2
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)

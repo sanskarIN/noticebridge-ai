@@ -10,7 +10,6 @@ from time import perf_counter
 from evaluate_labeled import _key, _manifest, _pdf, _ratio
 
 from noticebridge.compare import normalize
-from noticebridge.extract import InvalidDocument
 from noticebridge.isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 from noticebridge.models import ComparisonReport
 from noticebridge.semantic import DEFAULT_MODEL, MODEL_PATTERN
@@ -214,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Minimum independent distinct-pair count must be positive")
     try:
         report = evaluate_semantic(args.manifest, enable_ocr=args.enable_ocr)
-    except (OSError, ValueError, InvalidDocument, ProcessingFailed, ProcessingTimedOut) as exc:
+    except (OSError, ValueError, ProcessingFailed, ProcessingTimedOut) as exc:
         parser.error(str(exc))
     print(json.dumps(report, indent=2, ensure_ascii=False))
     overall = report["overall"]
