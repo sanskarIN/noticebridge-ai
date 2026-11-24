@@ -34,6 +34,18 @@ and miss text in small or tiled images. The reviewer can open the PDF page and
 explicitly select it for OCR. Automatic OCR still processes native-text-empty
 pages within its existing limits.
 
+After a live comparison, open **Text extraction coverage** and expand a page
+group. Use **Page** to inspect the PDF and its **OCR** checkbox to select it.
+Selections are local until you choose **Compare again with OCR**. The rerun
+uploads both PDFs and combines the new choices with any previously selected
+pages, within the 12-page limit per PDF. Use the form settings to remove an
+earlier choice or rerun a page that already had a selected OCR attempt.
+
+The previous report remains available during processing and after a request
+error. On success, checklist marks carry forward only for the same finding
+IDs with unchanged evidence and review instructions on the same PDF pair.
+Previously enabled automatic OCR and local AI options apply to the rerun.
+
 ## How the evidence is handled
 
 PyMuPDF renders the displayed page at 150 DPI with RGB color. Tesseract

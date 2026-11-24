@@ -52,6 +52,39 @@ function sameFinding(saved: Record<string, unknown>, current: Finding): boolean 
     sameItems(saved.field_changes, current.field_changes, sameValueChange);
 }
 
+function sameDocument(value: unknown, current: Report['documents'][number]): boolean {
+  const source = record(value);
+  return source?.id === current.id && source.sha256 === current.sha256;
+}
+
+/** Carry review state forward only when the same finding and checklist item survive a retry. */
+export function carryReviewSelections(
+  previous: Report, current: Report, checked: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const retained = new Set<string>();
+  if (!checked.size || !sameItems(previous.documents, current.documents, sameDocument)) {
+    return retained;
+  }
+  const findings = new Map(previous.findings.map(finding => [finding.id, finding]));
+  const checklist = new Map(previous.checklist.map(item => [item.finding_id, item]));
+  const currentChecklist = new Map(current.checklist.map(item => [item.finding_id, item]));
+  for (const finding of current.findings) {
+    const id = finding.id;
+    if (!checked.has(id)) continue;
+    const old = findings.get(id);
+    const before = checklist.get(id);
+    const after = currentChecklist.get(id);
+    if (old && before && after && sameFinding(old, finding) &&
+      old.summary_en === finding.summary_en && old.summary_hi === finding.summary_hi &&
+      old.authority_verified === finding.authority_verified && old.similarity === finding.similarity &&
+      before.description_en === after.description_en && before.description_hi === after.description_hi &&
+      before.requires_human_verification === after.requires_human_verification) {
+      retained.add(id);
+    }
+  }
+  return retained;
+}
+
 /** Restore user selections only. The current comparison supplies all evidence and findings. */
 export function restoreReviewSelections(input: unknown, report: Report): ReviewRestore {
   const saved = record(input);
@@ -59,10 +92,7 @@ export function restoreReviewSelections(input: unknown, report: Report): ReviewR
       !Array.isArray(saved.review) || !saved.review.every(id => typeof id === 'string')) {
     return { error: 'invalid' };
   }
-  if (!sameItems(saved.documents, report.documents, (value, current) => {
-    const source = record(value);
-    return source?.id === current.id && source.sha256 === current.sha256;
-  })) {
+  if (!sameItems(saved.documents, report.documents, sameDocument)) {
     return { error: 'differentSources' };
   }
 
