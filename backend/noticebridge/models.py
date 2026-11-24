@@ -25,6 +25,8 @@ class Evidence(BaseModel):
 class ExtractedLine(BaseModel):
     text: str
     evidence: Evidence
+    # Internal extraction signal; not a public evidence assertion.
+    review_only: bool = False
 
 
 class DocumentSummary(BaseModel):

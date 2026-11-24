@@ -159,5 +159,123 @@
     "revised": ["Interview time: 10:30 AM"],
     "expected_status_counts": {"confirmed_change": 1},
     "expected_field_outcomes": ["uncertain"]
+  },
+  {
+    "id": "explicit_reporting_time_amendment",
+    "original": [
+      "Reporting time: 17:00 IST"
+    ],
+    "revised": [
+      "Reporting time hereby revised from 5 PM IST to 18:30 IST"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
+  },
+  {
+    "id": "hereby_deadline_extension",
+    "original": [
+      "Application deadline: 13 Dec 2026"
+    ],
+    "revised": [
+      "Application deadline is hereby extended from 13 Dec 2026 to 14 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
+  },
+  {
+    "id": "labeled_for_read_deadline",
+    "original": [
+      "Application deadline: 13 Dec 2026"
+    ],
+    "revised": [
+      "Application deadline: For 13 Dec 2026, read 19 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
+  },
+  {
+    "id": "labeled_instead_of_fee",
+    "original": [
+      "Paper 1 fee: INR 300"
+    ],
+    "revised": [
+      "Paper 1 fee: Instead of Rs. 300, please read Rs. 450"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
+  },
+  {
+    "id": "labeled_for_read_time",
+    "original": [
+      "Reporting time: 17:00 IST"
+    ],
+    "revised": [
+      "Reporting time: For 5 PM IST, read 18:30 IST"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
+  },
+  {
+    "id": "registration_closes_date",
+    "original": [
+      "Registration closes on 13 Dec 2026"
+    ],
+    "revised": [
+      "Registration closes on 14 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
+  },
+  {
+    "id": "gate_closing_time",
+    "original": [
+      "Gate closing time: 17:00 IST"
+    ],
+    "revised": [
+      "Gate closing time: 18:00 IST"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
+  },
+  {
+    "id": "eligibility_cutoff_not_application_deadline",
+    "original": [
+      "Eligibility cut-off date: 13 Dec 2026"
+    ],
+    "revised": [
+      "Eligibility cut-off date: 14 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": []
   }
 ]

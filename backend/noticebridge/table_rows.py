@@ -1,20 +1,43 @@
-"""Keep native date and fee cells with their labels in simple ruled tables."""
+"""Keep native date, fee and schedule cells with labels in simple ruled tables."""
 
 import math
+import re
 from collections import Counter, defaultdict
 from itertools import pairwise
 
 import pymupdf as fitz
 
-from .facts import AMOUNT_TOKEN, DATE_TOKEN
+from .classification import category_for, normalize
+from .facts import (
+    AMOUNT_TOKEN,
+    CLOCK_TOKEN,
+    CLOCK_ZONE,
+    DATE_TOKEN,
+    parse_date,
+    single_clock_token,
+)
 from .models import ExtractedLine
 
 MAX_PAGE_LINES = 512
 MAX_DRAWING_ITEMS = 256
+# Zone labels remain part of the original context. This is not conversion.
+DATE_CLOCK_SEPARATOR = re.compile(r"(?:\s+(?:at\s+)?|,\s*)", re.IGNORECASE)
 
 Interval = tuple[float, float]
 Box = tuple[float, float, float, float]
-Row = tuple[Box, Box]
+Row = tuple[Box, ...]
+REVISION_SUBJECTS = frozenset({
+    "activity", "activities", "event", "events", "requirement", "particulars",
+    "description", "schedule", "details",
+})
+EARLIER_DATE_HEADERS = frozenset({
+    "earlier date", "earlier dates", "original date", "original dates",
+    "existing date", "existing dates", "previous date", "previous dates",
+})
+REVISED_DATE_HEADERS = frozenset({
+    "revised date", "revised dates", "extended date", "extended dates",
+    "updated date", "updated dates", "new date", "new dates",
+})
 
 
 def _continuous_rules(rules: dict[float, list[Interval]]) -> dict[float, list[Interval]]:
@@ -31,7 +54,7 @@ def _continuous_rules(rules: dict[float, list[Interval]]) -> dict[float, list[In
     return result
 
 
-def _ruled_rows(page: fitz.Page) -> set[Row]:
+def _ruled_rows(page: fitz.Page, *, column_count: int = 2) -> set[Row]:
     try:
         paths = page.get_cdrawings()
     except (RuntimeError, ValueError):
@@ -95,18 +118,20 @@ def _ruled_rows(page: fitz.Page) -> set[Row]:
                 and any(a < bottom and top < b for a, b in spans)
             ]
             if (
-                len(columns) != 3
+                len(columns) != column_count + 1
                 or (columns[0][0], columns[-1][0]) != (left, right)
                 or any(not any(a <= top and bottom <= b for a, b in spans)
                        for _, spans in columns)
             ):
                 previous = None
                 continue
-            divider = columns[1][0]
-            row = ((left, top, divider, bottom), (divider, top, right, bottom))
-            # A second adjacent row with the same columns distinguishes a grid
-            # from an isolated pair of decorative boxes.
-            if previous is not None and previous[0][2] == divider:
+            row = tuple(
+                (a[0], top, b[0], bottom) for a, b in pairwise(columns)
+            )
+            # Adjacent rows must have identical column boundaries.
+            if previous is not None and tuple(cell[2] for cell in previous) == tuple(
+                cell[2] for cell in row
+            ):
                 rows.update((previous, row))
             previous = row
     return rows
@@ -119,19 +144,106 @@ def _contains(cell: Box, quote: Box) -> bool:
     )
 
 
+def _schedule_value(text: str) -> bool:
+    """Accept only a complete clock cell or a single full date plus clock.
+
+    A clock hidden in prose, range, identifier, or bare UTC offset is not a
+    standalone table value. Preserve unsupported cells as individual lines.
+    """
+    clock = single_clock_token(text)
+    if clock is None or CLOCK_ZONE.fullmatch(text[clock.end():]) is None:
+        return False
+    prefix = text[:clock.start()]
+    if not prefix.strip():
+        return True
+    date_match = DATE_TOKEN.match(prefix)
+    return bool(
+        date_match
+        and parse_date(date_match[0]).canonical is not None
+        and DATE_CLOCK_SEPARATOR.fullmatch(prefix[date_match.end():])
+    )
+
+
+def _cell_lines(row: Row, lines: list[ExtractedLine]) -> tuple[int, ...] | None:
+    """Exactly one contained native line per cell; reject extra crossing text."""
+    candidates = [
+        (index, box)
+        for index, line in enumerate(lines)
+        if (box := line.evidence.bbox)[0] < row[-1][2] and row[0][0] < box[2]
+        and box[1] < row[0][3] and row[0][1] < box[3]
+    ]
+    if len(candidates) != len(row):
+        return None
+    ordered = sorted(candidates, key=lambda entry: entry[1][0])
+    if not all(_contains(cell, box) for cell, (_, box) in zip(row, ordered, strict=True)):
+        return None
+    return tuple(index for index, _ in ordered)
+
+
+def _revision_date_rows(page: fitz.Page, lines: list[ExtractedLine]) -> list[tuple[int, ...]]:
+    """Preserve both printed date columns only below explicit native headings.
+
+    This is evidence grouping, not interpretation of which date governs.
+    Stop on a gap, unsupported row or changed header; never infer from position alone.
+    """
+    grids: dict[tuple[float, ...], list[Row]] = defaultdict(list)
+    for row in _ruled_rows(page, column_count=3):
+        grids[(row[0][0], *(cell[2] for cell in row))].append(row)
+    result = []
+    for rows in grids.values():
+        previous_bottom = None
+        active = False
+        for row in sorted(rows, key=lambda cells: cells[0][1]):
+            if previous_bottom != row[0][1]:
+                active = False
+            previous_bottom = row[0][3]
+            indices = _cell_lines(row, lines)
+            if indices is None:
+                active = False
+                continue
+            label, earlier, revised = (lines[index].text for index in indices)
+            if (
+                normalize(label) in REVISION_SUBJECTS
+                and normalize(earlier) in EARLIER_DATE_HEADERS
+                and normalize(revised) in REVISED_DATE_HEADERS
+            ):
+                active = True
+                continue
+            if not active:
+                continue
+            if (
+                category_for(label) != "deadline"
+                or DATE_TOKEN.search(label) or AMOUNT_TOKEN.search(label)
+                or CLOCK_TOKEN.search(label)
+                or not DATE_TOKEN.fullmatch(earlier) or not DATE_TOKEN.fullmatch(revised)
+                or parse_date(earlier).canonical is None
+                or parse_date(revised).canonical is None
+            ):
+                active = False
+                continue
+            result.append(indices)
+    return result
+
+
 def join_ruled_value_rows(
     page: fitz.Page, lines: list[ExtractedLine], *, max_quote_length: int,
+    warnings: list[str] | None = None,
 ) -> list[ExtractedLine]:
     """Reuse native quotes only when their bounding boxes fit two proven cells."""
     if not 2 <= len(lines) <= MAX_PAGE_LINES:
         return lines
-    values = {
+    ordinary_values = {
         index for index, line in enumerate(lines)
         if DATE_TOKEN.fullmatch(line.text) or AMOUNT_TOKEN.fullmatch(line.text)
     }
+    schedules = {
+        index for index, line in enumerate(lines)
+        if index not in ordinary_values and _schedule_value(line.text)
+    }
+    values = ordinary_values | schedules
     if not values or len(values) == len(lines):
         return lines
-    pairs: list[tuple[int, int]] = []
+    pairs: list[tuple[int, ...]] = []
     for left, right in _ruled_rows(page):
         in_row = [
             (index, box)
@@ -149,6 +261,10 @@ def join_ruled_value_rows(
         ):
             continue
         label = lines[first].text
+        if second in schedules and (
+            category_for(label) not in ("deadline", "time") or CLOCK_TOKEN.search(label)
+        ):
+            continue
         if (
             len(label) + 1 + len(lines[second].text) <= max_quote_length
             and any(char.isalpha() for char in label)
@@ -156,23 +272,41 @@ def join_ruled_value_rows(
         ):
             pairs.append((first, second))
 
-    if not pairs:
+    triples = [
+        indices for indices in _revision_date_rows(page, lines)
+        if sum(len(lines[index].text) for index in indices) + 2 <= max_quote_length
+    ]
+    groups = pairs + triples
+    if not groups:
         return lines
-    counts = Counter(index for pair in pairs for index in pair)
+    counts = Counter(index for group in groups for index in group)
     replacements: dict[int, ExtractedLine] = {}
     consumed: set[int] = set()
-    for first, second in pairs:
-        if counts[first] != 1 or counts[second] != 1:
+    review_rows = False
+    for group in groups:
+        if any(counts[index] != 1 for index in group):
             continue
-        a, b = lines[first], lines[second]
-        x0, y0, _, y1 = a.evidence.bbox
-        _, value_y0, value_x1, value_y1 = b.evidence.bbox
-        text = f"{a.text} {b.text}"
-        evidence = a.evidence.model_copy(update={
+        members = [lines[index] for index in group]
+        boxes = [member.evidence.bbox for member in members]
+        text = " ".join(member.text for member in members)
+        evidence = members[0].evidence.model_copy(update={
             "text": text,
-            "bbox": (x0, min(y0, value_y0), value_x1, max(y1, value_y1)),
+            "bbox": (min(box[0] for box in boxes), min(box[1] for box in boxes),
+                     max(box[2] for box in boxes), max(box[3] for box in boxes)),
         })
-        replacements[min(first, second)] = ExtractedLine(text=text, evidence=evidence)
-        consumed.add(max(first, second))
+        # No synthesized connector or discarded date. The joined triple
+        # carries review-only status within extraction, not a confirmed delta.
+        review_only = len(group) == 3
+        replacements[min(group)] = ExtractedLine(
+            text=text, evidence=evidence, review_only=review_only,
+        )
+        consumed.update(set(group) - {min(group)})
+        review_rows |= review_only
+    if review_rows and warnings is not None:
+        source = lines[0].evidence
+        warnings.append(
+            f"{source.document_id}: page {source.page} contains an earlier/revised date table; "
+            "both printed values are retained, verify the column headings"
+        )
     return [replacements.get(index, line) for index, line in enumerate(lines)
             if index not in consumed]

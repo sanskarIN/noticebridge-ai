@@ -991,3 +991,68 @@ test('Review first discloses hidden priority items and updates counts when revie
   await expect(first).toContainText('Showing 3 of 4 prioritized items.');
   await expect(page.locator('.finding')).toHaveCount(5);
 });
+
+
+test('reviews and exports a scheduled-time amendment without claiming verification', async ({ page }) => {
+  await compareReviewFixture(page, [
+    ['Reporting time Shift 1: 17:00 IST'],
+  ], [
+    ['Reporting time Shift 1 hereby revised from 5 PM IST to 18:30 IST'],
+  ]);
+  const first = page.getByRole('region', { name: 'Review first' });
+  const button = first.getByRole('button', {
+    name: 'Inspect finding: Scheduled time amendment needs verification',
+  });
+  await expect(button).toBeVisible();
+  await expect(first).toContainText('17:00 → 18:30');
+  await expect(first).toContainText('time zone and applicability');
+  await button.click();
+  const finding = page.locator('.finding');
+  await expect(finding).toHaveCount(1);
+  await expect(finding).toBeFocused();
+  await expect(finding.locator('.status')).toHaveText('Possible change');
+  await expect(finding.locator('.match-score')).toHaveText('Explicit amendment wording');
+  await expect(finding.locator('.value-outcome')).toHaveText('Time: Stated in amendment');
+  await expect(finding.locator('mark')).toHaveCount(0);
+  await finding.getByRole('button', { name: 'Compare source pages' }).click();
+  await expect(page.locator('.evidence-highlight')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  const downloadReady = page.waitForEvent('download');
+  await page.getByRole('button', { name: /Export evidence report/ }).click();
+  const report = JSON.parse(await readFile(await (await downloadReady).path(), 'utf8'));
+  expect(report.findings[0]).toMatchObject({
+    category: 'time', status: 'possible_change', authority_verified: false,
+    match_method: 'explicit_amendment',
+    field_changes: [{
+      kind: 'time', outcome: 'uncertain',
+      original: { raw: '17:00', canonical: '17:00' },
+      revised: { raw: '18:30', canonical: '18:30' },
+    }],
+  });
+});
+
+test('retains date and cutoff time together in ruled table source quotes', async ({ page }) => {
+  await compareReviewFixture(page, [[
+    ['Requirement', 'Published value'],
+    ['Application deadline', '13 December 2026 at 17:00 IST'],
+    ['Reporting time', '18:00 IST'],
+  ]], [[
+    ['Requirement', 'Published value'],
+    ['Reporting time', '18:00 IST'],
+    ['Application deadline', '14 December 2026 at 16:00 IST'],
+  ]]);
+  const first = page.getByRole('region', { name: 'Review first' });
+  await expect(first.locator('strong')).toHaveText('Deadline date and time changed');
+  const finding = page.locator('.finding');
+  await expect(finding).toHaveCount(1);
+  await expect(finding.locator('.value-outcome')).toHaveText(['Date: Changed', 'Time: Changed']);
+  await expect(finding.locator('blockquote')).toHaveText([
+    'Application deadline 13 December 2026 at 17:00 IST',
+    'Application deadline 14 December 2026 at 16:00 IST',
+  ]);
+  await expect(finding.locator('mark')).toHaveText([
+    '13 December 2026', '17:00', '14 December 2026', '16:00',
+  ]);
+  await finding.getByRole('button', { name: 'Compare source pages' }).click();
+  await expect(page.locator('.evidence-highlight')).toHaveCount(2);
+});

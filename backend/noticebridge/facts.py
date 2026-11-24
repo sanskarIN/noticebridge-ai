@@ -88,6 +88,10 @@ CLOCK_TOKEN = re.compile(
     rf")(?!{WORD_CHAR}|[:：./]\d)",
     re.IGNORECASE,
 )
+CLOCK_ZONE = re.compile(
+    r"\s*(?:IST|(?:UTC|GMT)(?:\s*[+−-]\s*\d{1,2}:\d{2})?)?\s*",
+    re.IGNORECASE,
+)
 RANGE_CONNECTOR = r"(?:[-–—]|\bto)"
 CLOCK_RANGE_PREFIX = re.compile(
     rf"(?<!{WORD_CHAR})\d{{1,2}}\s*{RANGE_CONNECTOR}\s*$", re.IGNORECASE,
@@ -170,7 +174,7 @@ def single_clock_token(text: str) -> re.Match[str] | None:
     return clock
 
 
-def _parse_clock(token: re.Match[str]) -> ParsedValue:
+def parse_clock(token: re.Match[str]) -> ParsedValue:
     raw = token["clock"]
     hour = int(token["hour"])
     minute = int(token["minute"] or "0")
@@ -230,7 +234,7 @@ def field_changes(
     if category in ("deadline", "time"):
         old_clock, new_clock = single_clock_token(original), single_clock_token(revised)
         if old_clock is not None and new_clock is not None:
-            token_sets.append(("time", [_parse_clock(old_clock)], [_parse_clock(new_clock)]))
+            token_sets.append(("time", [parse_clock(old_clock)], [parse_clock(new_clock)]))
     changes: list[ValueChange] = []
     for kind, old, new in token_sets:
         # A paragraph with several dates cannot be reliably aligned token by token.
