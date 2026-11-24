@@ -270,3 +270,63 @@ def test_gate_closing_time_cell_is_joined_without_general_identifier_cells():
     assert [line.text for line in doc.lines] == [
         *HEADER, "Gate closing time 17:00 IST", "Reference number", "18:00",
     ]
+
+
+REVISION_HEADER = ("Activity", "Earlier date", "Revised date")
+
+
+def test_three_column_revision_keeps_all_printed_cells_and_geometry():
+    row = ("Application deadline", "13 December 2026", "19 December 2026")
+    doc = extract_pdf(
+        _notice([REVISION_HEADER, row], layout="three_columns", rotation=90),
+        document_id="revised", filename="revision.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*REVISION_HEADER, " ".join(row)]
+    assert doc.lines[-1].review_only
+    evidence = doc.lines[-1].evidence
+    assert evidence.page_rotation == 90
+    assert evidence.bbox[0] < 265 < 430 < evidence.bbox[2]
+    assert any("verify the column headings" in warning for warning in doc.warnings)
+
+
+@pytest.mark.parametrize("header,row", [
+    (("Activity", "Revised date", "Earlier date"),
+     ("Application deadline", "13 December 2026", "19 December 2026")),
+    (("Activity", "Date", "Date"),
+     ("Application deadline", "13 December 2026", "19 December 2026")),
+    (REVISION_HEADER, ("Application deadline", "01/02/2026", "19 December 2026")),
+    (REVISION_HEADER, ("Reference number", "13 December 2026", "19 December 2026")),
+    (REVISION_HEADER, ("Application deadline", "", "19 December 2026")),
+])
+def test_unproven_revision_rows_keep_individual_cells(header, row):
+    doc = extract_pdf(
+        _notice([header, row], layout="three_columns"),
+        document_id="revised", filename="revision.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*header, *(value for value in row if value)]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("verify the column headings" in warning for warning in doc.warnings)
+
+
+def test_revision_rows_are_review_only_through_api():
+    old = _notice([
+        REVISION_HEADER, ("Application deadline", "13 December 2026", "19 December 2026"),
+    ], layout="three_columns")
+    new = _notice([
+        REVISION_HEADER, ("Application deadline", "13 December 2026", "20 December 2026"),
+    ], layout="three_columns")
+    with TestClient(app) as client:
+        response = client.post("/api/compare", files={
+            "original": ("original.pdf", old, "application/pdf"),
+            "revised": ("revised.pdf", new, "application/pdf"),
+        })
+    assert response.status_code == 200, response.text
+    report = response.json()
+    (finding,) = report["findings"]
+    assert finding["status"] == "possible_change"
+    assert finding["category"] == "deadline"
+    assert finding["original"]["text"] == "Application deadline 13 December 2026 19 December 2026"
+    assert finding["revised"]["text"] == "Application deadline 13 December 2026 20 December 2026"
+    assert not finding["authority_verified"]
+    assert all(delta["outcome"] != "changed" for delta in finding["field_changes"])
+    assert sum("verify the column headings" in warning for warning in report["warnings"]) == 2

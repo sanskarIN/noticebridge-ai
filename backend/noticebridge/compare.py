@@ -188,6 +188,7 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         # text with a unique exact context anchor can support confirmation.
         strong = (
             unique_context
+            and not original.review_only and not revised.review_only
             and original.evidence.extraction_method == "native"
             and revised.evidence.extraction_method == "native"
         )
