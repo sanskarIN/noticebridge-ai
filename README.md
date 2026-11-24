@@ -86,8 +86,12 @@ pass `--ocr selected` if OCR was enabled only for selected pages, or
 NoticeBridge revision and OCR environment as the original comparison.
 
 Replay accepts deterministic exports with experimental AI disabled. It verifies
-the comparison engine fields. Checklist selections express a reviewer's
-decisions, and the issuer's authority must be confirmed separately.
+the comparison engine fields without silently coercing JSON field types,
+dropping unknown engine fields, or filling in missing fields. The only legacy
+exception is an omitted automatic OCR setting. Browser export metadata
+(`review`, `comparison_source`, and `exported_at`) is outside the replay
+contract. Checklist selections express a reviewer's decisions; replay does not
+authenticate those selections, export timestamps, or the issuer's authority.
 
 ## Explicit limitations
 

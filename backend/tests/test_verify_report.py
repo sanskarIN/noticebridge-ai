@@ -172,3 +172,68 @@ def test_cli_rejects_invalid_saved_reports_without_echoing_the_payload(
         verify_report.main([str(saved), "unused.pdf", "unused.pdf"])
     assert result.value.code == 1
     assert error in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("mutation", [
+    "numeric_string", "boolean_page", "float_page", "string_boolean",
+    "extra_nested", "extra_root", "missing_authority", "missing_coverage",
+    "missing_evidence", "missing_checklist", "string_similarity",
+])
+def test_replay_loader_rejects_silent_schema_normalization(sources, tmp_path, mutation):
+    payload = _compare(*sources).model_dump(mode="json")
+    finding = payload["findings"][0]
+    evidence = finding["original"]
+    if mutation == "numeric_string":
+        evidence["page"] = "1"
+    elif mutation == "boolean_page":
+        evidence["page"] = True
+    elif mutation == "float_page":
+        evidence["page"] = 1.0
+    elif mutation == "string_boolean":
+        finding["authority_verified"] = "false"
+    elif mutation == "extra_nested":
+        evidence["issuer_verified"] = True
+    elif mutation == "extra_root":
+        payload["officially_verified"] = True
+    elif mutation == "missing_authority":
+        del finding["authority_verified"]
+    elif mutation == "missing_coverage":
+        del payload["documents"][0]["pages_without_text"]
+    elif mutation == "missing_evidence":
+        del evidence["extraction_method"]
+    elif mutation == "missing_checklist":
+        del payload["checklist"]
+    else:
+        finding["similarity"] = str(finding["similarity"])
+
+    saved = tmp_path / "modified.json"
+    saved.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ReplayError, match="does not contain a valid evidence report"):
+        verify_report._load_report(saved)
+
+
+def test_loader_accepts_integral_json_numbers_in_float_fields(sources, tmp_path):
+    report = _compare(*sources)
+    payload = report.model_dump(mode="json")
+
+    def browser_numbers(value):
+        if isinstance(value, dict):
+            return {key: browser_numbers(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [browser_numbers(item) for item in value]
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        return value
+
+    saved = tmp_path / "browser.json"
+    saved.write_text(json.dumps(browser_numbers(payload)), encoding="utf-8")
+    assert verify_report._load_report(saved) == report
+
+
+def test_loader_rejects_overflowing_json_float(sources, tmp_path):
+    payload = _compare(*sources).model_dump(mode="json")
+    saved = tmp_path / "overflow.json"
+    data = json.dumps(payload)
+    saved.write_text(data[:-1] + ', "review": [1e9999]}', encoding="utf-8")
+    with pytest.raises(ReplayError, match="non-finite JSON number"):
+        verify_report._load_report(saved)

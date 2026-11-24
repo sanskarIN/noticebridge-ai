@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Literal
 
@@ -49,19 +50,65 @@ def _reject_nonfinite(_: str) -> None:
     raise ReplayError("The saved report contains a non-finite JSON number.")
 
 
+def _finite_float(token: str) -> float:
+    value = float(token)
+    if not math.isfinite(value):
+        raise ReplayError("The saved report contains a non-finite JSON number.")
+    return value
+
+
+def _same_engine_json(raw: object, canonical: object) -> bool:
+    """Reject omitted fields, extra claims and type coercion, at every depth."""
+    if isinstance(canonical, dict):
+        return (
+            isinstance(raw, dict)
+            and raw.keys() == canonical.keys()
+            and all(_same_engine_json(raw[key], value) for key, value in canonical.items())
+        )
+    if isinstance(canonical, list):
+        return (
+            isinstance(raw, list)
+            and len(raw) == len(canonical)
+            and all(_same_engine_json(a, b) for a, b in zip(raw, canonical, strict=True))
+        )
+    # JSON has one number type; the browser writes integral floats as integers.
+    # Booleans must never be treated as numeric values.
+    if type(canonical) is float:
+        return type(raw) in (int, float) and raw == canonical
+    return type(raw) is type(canonical) and raw == canonical
+
+
 def _load_report(path: Path) -> ComparisonReport:
     data = _read_bounded(path, MAX_SAVED_REPORT_BYTES, "saved report")
     try:
-        raw = json.loads(data, object_pairs_hook=_unique_object, parse_constant=_reject_nonfinite)
+        raw = json.loads(
+            data, object_pairs_hook=_unique_object, parse_constant=_reject_nonfinite,
+            parse_float=_finite_float,
+        )
     except ReplayError:
         raise
     except (ValueError, RecursionError) as exc:
         raise ReplayError("The saved report is not valid JSON.") from exc
     try:
-        return ComparisonReport.model_validate(raw)
+        report = ComparisonReport.model_validate(raw)
     except ValidationError as exc:
         # Pydantic errors can echo source paragraphs in a malformed report.
         raise ReplayError("The saved report does not contain a valid evidence report.") from exc
+
+    # Only the three browser envelope fields are outside the replay contract.
+    # Do not silently discard unknown engine claims or synthesize missing fields
+    # from Pydantic defaults. Pre-OCR-mode exports may omit automatic_ocr.
+    engine = {
+        key: value for key, value in raw.items()
+        if key not in ("review", "comparison_source", "exported_at")
+    }
+    engine.setdefault("automatic_ocr", None)
+    if not _same_engine_json(engine, report.model_dump(mode="json")):
+        raise ReplayError(
+            "The saved report does not contain a valid evidence report. "
+            "Engine fields must match the supported export schema exactly."
+        )
+    return report
 
 
 def verify_saved_report(
