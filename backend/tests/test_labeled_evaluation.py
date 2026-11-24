@@ -898,6 +898,7 @@ def test_independent_limited_matching_gate_isolated_from_aggregate(
 
 @pytest.mark.parametrize("flag", [
     "--max-independent-incomplete-cases",
+    "--max-independent-unchecked-image-cases",
     "--max-independent-limited-matching-cases",
 ])
 def test_independent_coverage_gates_fail_on_empty_cohort_and_invalid_arguments(

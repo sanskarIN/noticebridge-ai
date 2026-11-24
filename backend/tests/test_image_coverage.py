@@ -1,5 +1,6 @@
 """Use generated scanned bodies and real source PDFs to exercise coverage reporting."""
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -136,3 +137,73 @@ def test_labeled_evaluation_reports_image_pages_per_role_and_cohort(tmp_path):
     assert result["unchecked_image_page_count"] == 1
     assert result["cases"][0]["unchecked_image_page_numbers"] == {"original": [1], "revised": []}
     assert result["cohorts"]["by_label_method"]["unrecorded"]["unchecked_image_page_count"] == 1
+
+
+def test_table_join_cannot_hide_unchecked_image_region():
+    with fitz.open() as picture:
+        page = picture.new_page(width=400, height=770)
+        page.insert_text((20, 500), "Scanned instructions", fontsize=20)
+        image = page.get_pixmap().tobytes("png")
+    labels = [
+        "Application deadline phase one",
+        "Application deadline phase two",
+        "Application deadline phase three",
+        "Application deadline phase four",
+    ]
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=612, height=792)
+        page.insert_image((200, 10, 600, 780), stream=image, keep_proportion=False)
+        for index in range(5):
+            y = 60 + index * 38
+            page.draw_line((20, y), (590, y))
+        for x in (20, 200, 590):
+            page.draw_line((x, 60), (x, 212))
+        for index, label in enumerate(labels):
+            y = 77 + index * 38
+            page.insert_text((30, y), label, fontsize=8)
+            page.insert_text((420, y), "13 December 2026", fontsize=8)
+        data = pdf.tobytes()
+
+    result = extract_pdf(data, document_id="original", filename="mixed-table.pdf")
+    assert [line.text for line in result.lines] == [
+        f"{label} 13 December 2026" for label in labels
+    ]
+    assert result.summary.pages_without_text == []
+    assert result.summary.pages_with_unchecked_images == [1]
+
+
+def test_independent_image_coverage_gate_fails_despite_selectable_text(tmp_path):
+    old = _mixed_notice(13)
+    new = _mixed_notice(11)
+    for name, data in (("original.pdf", old), ("revised.pdf", new)):
+        (tmp_path / name).write_bytes(data)
+    manifest = tmp_path / "labels.json"
+    # Fictional fixtures exercise the declared cohort gate; this is not
+    # an independently labeled real-world measurement.
+    case = {
+        "id": "image-body", "source_kind": "consented", "label_method": "independent_human",
+        "original": "original.pdf", "revised": "revised.pdf",
+        "original_sha256": hashlib.sha256(old).hexdigest(),
+        "revised_sha256": hashlib.sha256(new).hexdigest(), "expected_pairs": [],
+    }
+    manifest.write_text(json.dumps({"version": 2, "cases": [case]}), encoding="utf-8")
+    script = Path(__file__).resolve().parents[1] / "benchmarks" / "evaluate_labeled.py"
+    command = [
+        sys.executable, str(script), str(manifest),
+        "--max-independent-incomplete-cases", "0",
+        "--max-independent-unchecked-image-cases",
+    ]
+    strict = subprocess.run(
+        [*command, "0"], capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert strict.returncode == 1, strict.stderr
+    report = json.loads(strict.stdout)
+    independent = report["cohorts"]["declared_independent_nonfictional"]
+    assert independent["incomplete_case_count"] == 0
+    assert independent["unchecked_image_case_count"] == 1
+    assert independent["unchecked_image_page_count"] == 2
+    assert report["unchecked_image_case_count"] == 1
+    allowed = subprocess.run(
+        [*command, "1"], capture_output=True, text=True, check=False, timeout=30,
+    )
+    assert allowed.returncode == 0, allowed.stderr

@@ -224,14 +224,16 @@ def extract_pdf(
                     )
                     lines.append(ExtractedLine(text=text, evidence=evidence))
                     page_lines += 1
-            if method == "native" and not skipped_boxes and page_lines >= 2:
-                lines[page_start:] = join_ruled_value_rows(
-                    page, lines[page_start:], max_quote_length=MAX_LINE_CHARACTERS,
-                )
+            # Coverage uses actual native text boxes, not the synthetic union
+            # of two table cells, which may span unrelated image content.
             if method == "ocr" and page_lines:
                 ocr_pages.append(page_number)
             elif page_lines and has_unchecked_image(page, lines[page_start:]):
                 pages_with_unchecked_images.append(page_number)
+            if method == "native" and not skipped_boxes and page_lines >= 2:
+                lines[page_start:] = join_ruled_value_rows(
+                    page, lines[page_start:], max_quote_length=MAX_LINE_CHARACTERS,
+                )
             if skipped_boxes:
                 warnings.append(
                     f"{document_id}: page {page_number} omitted {skipped_boxes} text line(s) "
