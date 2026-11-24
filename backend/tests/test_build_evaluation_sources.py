@@ -11,6 +11,7 @@ sys.path.insert(0, str(BENCHMARKS))
 from audit_evaluation_split import audit_split  # noqa: E402
 from build_evaluation_sources import build_sources, main  # noqa: E402
 from evaluate_labeled import _manifest, _require_ready_for_scoring  # noqa: E402
+from pin_labeled_dataset import pin_dataset  # noqa: E402
 from prepare_independent_review import check_review, prepare_review  # noqa: E402
 
 
@@ -137,3 +138,32 @@ def test_cli_reports_counts_not_quotes(register, capsys):
     raw = capsys.readouterr().out
     assert json.loads(raw)["declared_event_group_count"] == 1
     assert "Fictional old text" not in raw
+
+
+def test_legacy_label_pinning_is_not_a_source_intake_shortcut(register):
+    path = register.with_name("source-v1.json")
+    _write(path, {"version": 1, "cases": [{
+        "id": "sample", "original": "old.pdf", "revised": "new.pdf", "expected_pairs": [],
+    }]})
+    output = register.with_name("source.json")
+    with pytest.raises(ValueError, match="label method"):
+        pin_dataset(path, output=output, source_kind="fictional", label_method="unreviewed")
+    assert not output.exists()
+
+
+def test_intake_does_not_accept_extra_top_level_annotations(register):
+    payload = json.loads(register.read_bytes())
+    payload["label_review"] = {"completed": True}
+    _write(register, payload)
+    with pytest.raises(ValueError, match="Source register"):
+        build_sources(register, output=register.with_name("source.json"))
+
+
+def test_group_fields_must_appear_together_in_pinned_manifests(register):
+    source = register.with_name("source.json")
+    build_sources(register, output=source)
+    payload = json.loads(source.read_bytes())
+    del payload["cases"][0]["event_group"]
+    _write(source, payload)
+    with pytest.raises(ValueError, match="must occur together"):
+        _manifest(source)

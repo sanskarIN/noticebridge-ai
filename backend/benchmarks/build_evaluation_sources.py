@@ -9,8 +9,14 @@ import hashlib
 import json
 from pathlib import Path
 
-from evaluate_labeled import CASE_ID, MAX_CASES, MAX_MANIFEST_BYTES, SOURCE_KINDS
-from evaluate_labeled import _pdf, _unique_object
+from evaluate_labeled import (
+    CASE_ID,
+    MAX_CASES,
+    MAX_MANIFEST_BYTES,
+    SOURCE_KINDS,
+    _pdf,
+    _unique_object,
+)
 
 from noticebridge.extract import validate_ocr_pages
 

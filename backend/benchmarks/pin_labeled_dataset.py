@@ -12,6 +12,8 @@ from pathlib import Path
 
 from evaluate_labeled import LABEL_METHODS, SOURCE_KINDS, _manifest, _pdf
 
+REVIEWED_LABEL_METHODS = LABEL_METHODS - {"unreviewed"}
+
 
 def pin_dataset(
     manifest: Path,
@@ -21,7 +23,7 @@ def pin_dataset(
     label_method: str,
 ) -> Path:
     """Create a non-overwriting v2 manifest with byte-pinned PDF pairs."""
-    if source_kind not in SOURCE_KINDS or label_method not in LABEL_METHODS:
+    if source_kind not in SOURCE_KINDS or label_method not in REVIEWED_LABEL_METHODS:
         raise ValueError("Source category and label method must be explicitly declared")
     source = manifest.resolve()
     version, cases, _ = _manifest(source)
@@ -61,7 +63,7 @@ def main() -> int:
         help="New file next to the manifest; defaults to labels-pinned.json",
     )
     parser.add_argument("--source-kind", required=True, choices=sorted(SOURCE_KINDS))
-    parser.add_argument("--label-method", required=True, choices=sorted(LABEL_METHODS))
+    parser.add_argument("--label-method", required=True, choices=sorted(REVIEWED_LABEL_METHODS))
     args = parser.parse_args()
     output = args.output or args.manifest.with_name(
         args.manifest.stem + "-pinned.json"
