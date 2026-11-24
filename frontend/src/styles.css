@@ -218,3 +218,31 @@
     padding-inline-end: 4px;
   }
 }
+
+
+/* Surface native review-only revision tables above findings. */
+.table-review-panel {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid #675e36;
+  border-left: 4px solid #c0a258;
+  border-radius: 0.75rem;
+  background: #24271f;
+  color: #f1e8cb;
+}
+.table-review-panel h3 { margin: 0 0 0.45rem; font-size: 1rem; }
+.table-review-panel p { margin: 0; line-height: 1.6; font-size: 0.875rem; }
+.table-review-panel ul { list-style: none; margin: 0.8rem 0 0; padding: 0; }
+.table-review-panel li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid #625b3c;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.table-review-panel li > span { min-width: 0; }
+.table-review-panel .review-button { flex-shrink: 0; }

@@ -277,5 +277,67 @@
       "confirmed_change": 1
     },
     "expected_field_outcomes": []
+  },
+  {
+    "id": "competing_application_dates_review_only",
+    "original": [
+      "Application deadline: 13 December 2026 or 19 December 2026"
+    ],
+    "revised": [
+      "Application deadline: 13 December 2026 or 20 December 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": []
+  },
+  {
+    "id": "competing_fee_amounts_review_only",
+    "original": [
+      "Application fee: Rs. 300 or Rs. 450"
+    ],
+    "revised": [
+      "Application fee: Rs. 300 or Rs. 500"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": []
+  },
+  {
+    "id": "unlabeled_date_cell_cannot_confirm_change",
+    "original": [
+      "13 December 2026"
+    ],
+    "revised": [
+      "19 December 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    }
+  },
+  {
+    "id": "unlabeled_fee_cell_cannot_confirm_change",
+    "original": [
+      "Rs. 300"
+    ],
+    "revised": [
+      "Rs. 450"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    }
+  },
+  {
+    "id": "unlabeled_cutoff_cell_cannot_confirm_change",
+    "original": [
+      "2026-12-13 at 17:00 IST"
+    ],
+    "revised": [
+      "2026-12-19 at 18:00 IST"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    }
   }
 ]

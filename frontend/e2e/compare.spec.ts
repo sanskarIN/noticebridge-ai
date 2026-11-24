@@ -1056,3 +1056,62 @@ test('retains date and cutoff time together in ruled table source quotes', async
   await finding.getByRole('button', { name: 'Compare source pages' }).click();
   await expect(page.locator('.evidence-highlight')).toHaveCount(2);
 });
+
+
+test('revision table warnings surface review-only source-page actions', async ({ page }) => {
+  // Exercise UI using allowlisted warnings independently of backend PDF geometry.
+  await page.route('**/api/compare', async route => {
+    const response = await route.fetch();
+    const report = await response.json();
+    const message = 'original: page 1 contains an earlier/revised date-and-time table; ' +
+      'both printed values are retained, verify the column headings';
+    report.warnings.push(
+      message, message,
+      'revised: page 1 contains an earlier/revised fee table; ' +
+        'both printed values are retained, verify the column headings',
+      'original: page 99 contains an earlier/revised date table; ' +
+        'both printed values are retained, verify the column headings',
+      'Unrecognized earlier/revised table claim',
+    );
+    await route.fulfill({ response, json: report });
+  });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const panel = page.getByRole('region', { name: 'Revision tables need source review' });
+  await expect(panel).toBeVisible();
+  await expect(panel.getByText(/not confirmed amendments/i)).toBeVisible();
+  await expect(panel.getByRole('button', { name: /Open original notice page 1/ })).toHaveCount(1);
+  await expect(panel.getByRole('button', { name: /Open revised notice page 1/ })).toHaveCount(1);
+  await expect(panel.getByRole('button')).toHaveCount(2);
+  await panel.getByRole('button', { name: /Open original notice page 1/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.locator('.evidence-highlight')).toHaveCount(0);
+  await expect(page.getByRole('dialog').getByText('original.pdf · Page 1')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+
+test('revision table review panel stays inside the mobile viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.route('**/api/compare', async route => {
+    const response = await route.fetch();
+    const report = await response.json();
+    report.warnings.push(
+      'revised: page 1 contains an earlier/revised date-and-time table; ' +
+        'both printed values are retained, verify the column headings',
+    );
+    await route.fulfill({ response, json: report });
+  });
+  await addSources(page);
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const panel = page.getByRole('region', { name: 'Revision tables need source review' });
+  await expect(panel).toBeVisible();
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
+  await panel.getByRole('button', { name: /Open revised notice page 1/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+});

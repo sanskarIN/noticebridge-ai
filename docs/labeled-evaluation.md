@@ -564,3 +564,69 @@ The page warning asks users to inspect the actual headers. Reversed/unknown
 headings, ambiguous dates, incomplete or multiline cells, unsupported layouts
 and OCR retain their original passages. This narrow geometry rule is not a
 general table parser or an authority check.
+
+
+### Explicit earlier/revised fee and clock tables
+
+The same bounded, native three-column evidence grouping also accepts explicitly
+paired **earlier/revised fee** and **earlier/revised time** headings. Fees must be
+complete, parseable INR cells under a fee label; clocks must be single, parseable
+times (with any printed zone retained) under a reporting/exam-time label. A
+generic old/new table, inferred unit, numeric-only fee, ambiguous clock, range,
+crossed cell or missing value is not silently joined. Each grouped row keeps
+both printed values and source geometry, remains **review-only**, and produces a
+page warning. No fee adjustment, timezone conversion, effective cutoff,
+precedence, or official authority is inferred. This remains a deliberately
+narrow English-header native-text rule, not OCR table understanding.
+
+
+### Multi-value comparison confirmation guard
+
+A uniquely matched masked label can still quote several date, fee or clock
+candidates (for example, two proposed application deadlines). In those cases
+the engine retains a `possible_change` rather than asserting that an
+individual field is confirmed, even when native text matches by context.
+Parent-side report verification independently rejects a worker claiming
+`confirmed_change` for these multi-value passages. This does not resolve
+which value is effective; inspect both source pages and the issuer's actual
+amendment context.
+
+
+### Explicit combined date and clock revision cells
+
+A native ruled three-column table can also preserve complete **date plus
+closing time** cells when its headings explicitly identify earlier and revised
+date/time columns. Each cell needs one unambiguous full date, a single parseable
+clock, and a supported printed zone (if present). Both full values and the
+source bounding box are retained in source order; the row is review-only with
+a separate fixed page warning. An unclear date, partial clock, time range,
+reversed or generic heading, unsupported label, or missing cell is kept
+unjoined. This does **not** decide which cutoff governs or interpret timezone
+differences; humans must check the official source.
+
+
+The table grid may use continuous stroked rules or individually stroked
+rectangles. Merely filled, borderless or unspecified grids are not evidence
+of a three-column relationship. Different printed UTC offsets are preserved
+verbatim, never silently converted to a shared timezone.
+
+
+### Unlabeled source cells and review workbench
+
+If native grid reconstruction fails (for instance because a divider is missing
+or the cells are merely filled rather than ruled), individual numeric, date,
+currency and clock cells remain independent. The generic text matcher must not
+promote a changed *bare value* to a confirmed change merely because masking
+produces an otherwise unique match. A descriptive label must survive value
+normalization, and the parent report-verification boundary independently
+enforces this rule. The full raw text stays available for comparison and
+human review. This safeguards partial table extraction but does not reconstruct
+the missing relationship between cells.
+
+The browser results view now elevates native earlier/revised table warnings to a
+separate **Revision tables need source review** panel with a button to open the
+relevant original or updated PDF page. It deduplicates repeated entries and
+ignores out-of-range or OCR-page references. The panel does not determine which
+printed value is authoritative; it exists to make the necessary manual review
+discoverable. The synthetic regression matrix has 37 fictional single-line
+cases, separate from PDF geometry and browser end-to-end tests.

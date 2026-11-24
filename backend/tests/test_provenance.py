@@ -587,10 +587,12 @@ def test_untrusted_worker_warnings_cannot_claim_authority_or_invent_pages(
 
 
 def test_too_many_worker_warning_messages_are_rejected(source_report):
+    from noticebridge.warning_policy import MAX_REPORT_WARNINGS
+
     original, revised, report = source_report
     report.warnings = [
         "Local AI assistant unavailable; deterministic comparison was preserved"
-    ] * 500
+    ] * (MAX_REPORT_WARNINGS + 1)
     with pytest.raises(InvalidReportProvenance, match="excessive warning"):
         verify_report_provenance(
             report, original=original, revised=revised,
@@ -632,3 +634,91 @@ def test_real_cross_page_deadline_warnings_remain_supported(pdf_bytes):
         old_name="old.pdf", new_name="new.pdf",
     )
 
+
+
+@pytest.mark.parametrize(("original", "revised"), [
+    ("Application deadline: 13 December 2026 or 19 December 2026",
+     "Application deadline: 13 December 2026 or 20 December 2026"),
+    ("Application fee: Rs. 300 or Rs. 450",
+     "Application fee: Rs. 300 or Rs. 500"),
+])
+def test_parent_rejects_forged_confirmation_for_competing_source_values(
+    pdf_bytes, original, revised,
+):
+    old_pdf = pdf_bytes([[original]])
+    new_pdf = pdf_bytes([[revised]])
+    old_doc = extract_pdf(old_pdf, document_id="original", filename="old.pdf")
+    new_doc = extract_pdf(new_pdf, document_id="revised", filename="new.pdf")
+    report = compare_documents(old_doc, new_doc)
+    (finding,) = report.findings
+    assert finding.status == "possible_change"
+    verify_report_provenance(
+        report, original=old_pdf, revised=new_pdf,
+        old_name="old.pdf", new_name="new.pdf",
+    )
+
+    forged = report.model_copy(deep=True)
+    forged.findings[0].status = "confirmed_change"
+    forged.findings[0].summary_en, forged.findings[0].summary_hi = (
+        SUMMARY_MESSAGES["confirmed_change"]
+    )
+    with pytest.raises(InvalidReportProvenance, match="competing source values"):
+        verify_report_provenance(
+            forged, original=old_pdf, revised=new_pdf,
+            old_name="old.pdf", new_name="new.pdf",
+        )
+
+
+def test_duplicate_revision_table_warning_is_rejected(source_report):
+    original, revised, report = source_report
+    message = (
+        "original: page 1 contains an earlier/revised date-and-time table; "
+        "both printed values are retained, verify the column headings"
+    )
+    report.warnings = [message, message]
+    with pytest.raises(InvalidReportProvenance, match="repeated a revision-table warning"):
+        verify_report_provenance(
+            report, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+        )
+
+
+def test_native_table_warning_budget_includes_all_supported_kinds():
+    from noticebridge.extract import MAX_PAGES
+    from noticebridge.warning_policy import (
+        MAX_CROSS_PAGE_DETAILS,
+        MAX_REPORT_WARNINGS,
+        REVISION_TABLE_WARNINGS,
+    )
+
+    assert len(REVISION_TABLE_WARNINGS) == 4
+    assert MAX_REPORT_WARNINGS >= (
+        2 * MAX_PAGES * len(REVISION_TABLE_WARNINGS)
+        + 2 * (MAX_CROSS_PAGE_DETAILS + 1)
+    )
+
+
+@pytest.mark.parametrize(("original", "revised"), [
+    ("13 December 2026", "19 December 2026"),
+    ("Rs. 300", "Rs. 450"),
+    ("17:00 IST", "18:00 IST"),
+])
+def test_parent_rejects_worker_confirming_unlabeled_cell_values(
+    pdf_bytes, original, revised,
+):
+    original_pdf, revised_pdf = pdf_bytes([[original]]), pdf_bytes([[revised]])
+    report = compare_documents(
+        extract_pdf(original_pdf, document_id="original", filename="old.pdf"),
+        extract_pdf(revised_pdf, document_id="revised", filename="new.pdf"),
+    )
+    pair = next(f for f in report.findings if f.original and f.revised)
+    assert pair.status == "possible_change"
+    forged = report.model_copy(deep=True)
+    confirmed = next(f for f in forged.findings if f.original and f.revised)
+    confirmed.status = "confirmed_change"
+    confirmed.summary_en, confirmed.summary_hi = SUMMARY_MESSAGES["confirmed_change"]
+    with pytest.raises(InvalidReportProvenance, match="unlabeled value"):
+        verify_report_provenance(
+            forged, original=original_pdf, revised=revised_pdf,
+            old_name="old.pdf", new_name="new.pdf",
+        )
