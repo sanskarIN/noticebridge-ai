@@ -34,6 +34,9 @@ def _blank_case(case: dict) -> dict:
     for field in OPTIONAL_SOURCE_FIELDS:
         if field in case:
             result[field] = sorted(case[field])
+    for field in ("issuer_group", "event_group"):
+        if field in case:
+            result[field] = case[field]
     result.update(
         label_method="independent_human", expected_pairs=[], review_complete=False,
     )
