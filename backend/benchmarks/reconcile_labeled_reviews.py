@@ -144,7 +144,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--adjudication", type=Path, help="Reviewed decisions for disputed cases")
     parser.add_argument("--adjudicator", help="Pseudonymous third reviewer ID")
     destination = parser.add_mutually_exclusive_group()
-    destination.add_argument("--output", type=Path, help="Create a new version-2 manifest if resolved")
+    destination.add_argument(
+        "--output", type=Path, help="Create a new version-2 manifest if resolved",
+    )
     destination.add_argument(
         "--verify", type=Path, help="Verify an existing resolved manifest without modifying it",
     )
@@ -156,7 +158,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.verify is not None:
             if manifest is None:
-                raise ValueError("Cannot verify a reconciled manifest with unresolved disagreements")
+                raise ValueError(
+                    "Cannot verify a reconciled manifest with unresolved disagreements"
+                )
             verify_reconciled_manifest(
                 args.verify, manifest, root=args.first.resolve().parent,
             )
