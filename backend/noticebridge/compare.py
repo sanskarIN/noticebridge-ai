@@ -27,6 +27,26 @@ from .models import ChecklistItem, ComparisonReport, Evidence, Finding, ValueCha
 from .warning_policy import MAX_CROSS_PAGE_DETAILS
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
+VALUE_CONNECTORS = re.compile(
+    r"\b(?:at|to|or|and|through|until|ist|utc|gmt|am|pm)\b",
+    re.IGNORECASE,
+)
+
+
+def has_descriptive_context(text: str) -> bool:
+    """Bare values and ranges cannot establish the subject of a change.
+
+    If a malformed or unruled table leaves isolated date, amount or clock
+    cells, masking those tokens would otherwise create a false exact match.
+    Strip only recognizable value syntax; an actual descriptive label must
+    survive to permit automatic text confirmation in the generic category.
+    """
+    remainder = DATE_TOKEN.sub(" ", text)
+    remainder = AMOUNT_TOKEN.sub(" ", remainder)
+    remainder = CLOCK_TOKEN.sub(" ", remainder)
+    remainder = NUMBER.sub(" ", remainder)
+    remainder = VALUE_CONNECTORS.sub(" ", remainder)
+    return any(char.isalpha() for char in remainder)
 
 
 def has_competing_values(text: str, category: str) -> bool:
@@ -208,6 +228,13 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
             and not original.review_only and not revised.review_only
             and not has_competing_values(original.text, category)
             and not has_competing_values(revised.text, category)
+            and (
+                category != "general"
+                or (
+                    has_descriptive_context(original.text)
+                    and has_descriptive_context(revised.text)
+                )
+            )
             and original.evidence.extraction_method == "native"
             and revised.evidence.extraction_method == "native"
         )

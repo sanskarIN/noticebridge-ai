@@ -1,164 +1,354 @@
 [
   {
     "id": "unchanged_notice",
-    "original": ["Eligibility: Class 12", "Application fee: Rs 100"],
-    "revised": ["Eligibility: Class 12", "Application fee: Rs 100"],
+    "original": [
+      "Eligibility: Class 12",
+      "Application fee: Rs 100"
+    ],
+    "revised": [
+      "Eligibility: Class 12",
+      "Application fee: Rs 100"
+    ],
     "expected_status_counts": {}
   },
   {
     "id": "reordered_requirements",
-    "original": ["Eligibility: Class 12", "Application fee: Rs 100"],
-    "revised": ["Application fee: Rs 100", "Eligibility: Class 12"],
+    "original": [
+      "Eligibility: Class 12",
+      "Application fee: Rs 100"
+    ],
+    "revised": [
+      "Application fee: Rs 100",
+      "Eligibility: Class 12"
+    ],
     "expected_status_counts": {}
   },
   {
     "id": "confirmed_calendar_date_change",
-    "original": ["Application deadline: 13 December 2026"],
-    "revised": ["Application deadline: 14 December 2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["changed"]
+    "original": [
+      "Application deadline: 13 December 2026"
+    ],
+    "revised": [
+      "Application deadline: 14 December 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
   },
   {
     "id": "confirmed_fee_change",
-    "original": ["Application fee: Rs. 500"],
-    "revised": ["Application fee: Rs. 750"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["changed"]
+    "original": [
+      "Application fee: Rs. 500"
+    ],
+    "revised": [
+      "Application fee: Rs. 750"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
   },
   {
     "id": "same_date_different_style",
-    "original": ["Deadline: 13 December 2026"],
-    "revised": ["Deadline: 13/12/2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["same_value"]
+    "original": [
+      "Deadline: 13 December 2026"
+    ],
+    "revised": [
+      "Deadline: 13/12/2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "same_value"
+    ]
   },
   {
     "id": "ambiguous_numeric_date",
-    "original": ["Deadline: 01/02/2026"],
-    "revised": ["Deadline: 02/01/2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["uncertain"]
+    "original": [
+      "Deadline: 01/02/2026"
+    ],
+    "revised": [
+      "Deadline: 02/01/2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
   },
   {
     "id": "hyphen_date_to_month_first_ordinal",
-    "original": ["Application deadline: 19th-Dec-2026"],
-    "revised": ["Application deadline: December 13th, 2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["changed"]
+    "original": [
+      "Application deadline: 19th-Dec-2026"
+    ],
+    "revised": [
+      "Application deadline: December 13th, 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
   },
   {
     "id": "spelled_date_to_hyphenated_equivalent",
-    "original": ["Application deadline: 2 September 2026"],
-    "revised": ["Application deadline: 2nd-Sept-2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["same_value"]
+    "original": [
+      "Application deadline: 2 September 2026"
+    ],
+    "revised": [
+      "Application deadline: 2nd-Sept-2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "same_value"
+    ]
   },
   {
     "id": "date_range_stays_uncertain",
-    "original": ["Interview booking deadline: 13th to 15th December 2026"],
-    "revised": ["Interview booking deadline: 13th to 14th December 2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["uncertain"]
+    "original": [
+      "Interview booking deadline: 13th to 15th December 2026"
+    ],
+    "revised": [
+      "Interview booking deadline: 13th to 14th December 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
   },
   {
     "id": "not_assumed_canceled",
-    "original": ["Candidates must submit photo"],
-    "revised": ["Exam venue will be on admit card"],
-    "expected_status_counts": {"missing_information": 2}
+    "original": [
+      "Candidates must submit photo"
+    ],
+    "revised": [
+      "Exam venue will be on admit card"
+    ],
+    "expected_status_counts": {
+      "missing_information": 2
+    }
   },
   {
     "id": "add_new_guidance",
-    "original": ["Eligibility: Class 12"],
-    "revised": ["Eligibility: Class 12", "Candidates must bring identification"],
-    "expected_status_counts": {"missing_information": 1}
+    "original": [
+      "Eligibility: Class 12"
+    ],
+    "revised": [
+      "Eligibility: Class 12",
+      "Candidates must bring identification"
+    ],
+    "expected_status_counts": {
+      "missing_information": 1
+    }
   },
   {
     "id": "duplicate_headings_ambiguous",
-    "original": ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
-    "revised": ["Deadline: 15 December 2026", "Deadline: 16 December 2026"],
-    "expected_status_counts": {"possible_change": 2, "contradiction": 2},
-    "expected_field_outcomes": ["uncertain", "uncertain"]
+    "original": [
+      "Deadline: 13 December 2026",
+      "Deadline: 14 December 2026"
+    ],
+    "revised": [
+      "Deadline: 15 December 2026",
+      "Deadline: 16 December 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 2,
+      "contradiction": 2
+    },
+    "expected_field_outcomes": [
+      "uncertain",
+      "uncertain"
+    ]
   },
   {
     "id": "numbered_deadline_scope",
-    "original": ["Phase 1 deadline: 13 December 2026", "Phase 2 deadline: 18 December 2026"],
-    "revised": ["Phase 2 deadline: 18 December 2026", "Phase 1 deadline: 14 December 2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["changed"]
+    "original": [
+      "Phase 1 deadline: 13 December 2026",
+      "Phase 2 deadline: 18 December 2026"
+    ],
+    "revised": [
+      "Phase 2 deadline: 18 December 2026",
+      "Phase 1 deadline: 14 December 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
   },
   {
     "id": "numbered_fee_scope",
-    "original": ["Paper 1 fee: Rs. 200"],
-    "revised": ["Paper 2 fee: Rs. 500"],
-    "expected_status_counts": {"possible_change": 1},
-    "expected_field_outcomes": ["uncertain"]
+    "original": [
+      "Paper 1 fee: Rs. 200"
+    ],
+    "revised": [
+      "Paper 2 fee: Rs. 500"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
   },
   {
     "id": "unchanged_duplicate_headers_reordered",
-    "original": ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
-    "revised": ["Deadline: 14 December 2026", "Deadline: 13 December 2026"],
-    "expected_status_counts": {"contradiction": 2}
+    "original": [
+      "Deadline: 13 December 2026",
+      "Deadline: 14 December 2026"
+    ],
+    "revised": [
+      "Deadline: 14 December 2026",
+      "Deadline: 13 December 2026"
+    ],
+    "expected_status_counts": {
+      "contradiction": 2
+    }
   },
   {
     "id": "calendar_conflict_in_original",
-    "original": ["Deadline: 13 December 2026", "Deadline: 14 December 2026"],
-    "revised": ["Deadline: 13 December 2026"],
-    "expected_status_counts": {"missing_information": 1, "contradiction": 1}
+    "original": [
+      "Deadline: 13 December 2026",
+      "Deadline: 14 December 2026"
+    ],
+    "revised": [
+      "Deadline: 13 December 2026"
+    ],
+    "expected_status_counts": {
+      "missing_information": 1,
+      "contradiction": 1
+    }
   },
   {
     "id": "unrelated_detailed_rephrasing",
-    "original": ["Please attach a passport photograph when applying"],
-    "revised": ["Candidates should upload their recent photo on the portal"],
-    "expected_status_counts": {"missing_information": 2}
+    "original": [
+      "Please attach a passport photograph when applying"
+    ],
+    "revised": [
+      "Candidates should upload their recent photo on the portal"
+    ],
+    "expected_status_counts": {
+      "missing_information": 2
+    }
   },
   {
     "id": "separate_deadline_amendment",
-    "original": ["Application deadline: 19 Dec 2026"],
-    "revised": ["Application deadline revised from 19 Dec 2026 to 13 Dec 2026"],
-    "expected_status_counts": {"possible_change": 1},
-    "expected_field_outcomes": ["uncertain"]
+    "original": [
+      "Application deadline: 19 Dec 2026"
+    ],
+    "revised": [
+      "Application deadline revised from 19 Dec 2026 to 13 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
   },
   {
     "id": "separate_fee_amendment",
-    "original": ["Application fee: Rs. 500"],
-    "revised": ["Application fee reduced from Rs. 500 to Rs. 350"],
-    "expected_status_counts": {"possible_change": 1},
-    "expected_field_outcomes": ["uncertain"]
+    "original": [
+      "Application fee: Rs. 500"
+    ],
+    "revised": [
+      "Application fee reduced from Rs. 500 to Rs. 350"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
   },
   {
     "id": "day_first_to_month_first_same_date",
-    "original": ["Application deadline: 13 December 2026"],
-    "revised": ["Application deadline: December 13, 2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["same_value"]
+    "original": [
+      "Application deadline: 13 December 2026"
+    ],
+    "revised": [
+      "Application deadline: December 13, 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "same_value"
+    ]
   },
   {
     "id": "day_first_to_month_first_changed_date",
-    "original": ["Application deadline: 19 December 2026"],
-    "revised": ["Application deadline: Dec. 13, 2026"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["changed"]
+    "original": [
+      "Application deadline: 19 December 2026"
+    ],
+    "revised": [
+      "Application deadline: Dec. 13, 2026"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "changed"
+    ]
   },
   {
     "id": "same_day_deadline_cutoff",
-    "original": ["Application deadline: 13 December 2026 at 5 PM IST"],
-    "revised": ["Application deadline: 13 December 2026 at 14:00 IST"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["same_value", "changed"]
+    "original": [
+      "Application deadline: 13 December 2026 at 5 PM IST"
+    ],
+    "revised": [
+      "Application deadline: 13 December 2026 at 14:00 IST"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "same_value",
+      "changed"
+    ]
   },
   {
     "id": "same_reporting_time_different_style",
-    "original": ["Reporting time: 5:30 P.M. IST"],
-    "revised": ["Reporting time: 17:30 IST"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["same_value"]
+    "original": [
+      "Reporting time: 5:30 P.M. IST"
+    ],
+    "revised": [
+      "Reporting time: 17:30 IST"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "same_value"
+    ]
   },
   {
     "id": "ambiguous_interview_clock",
-    "original": ["Interview time: 9:30"],
-    "revised": ["Interview time: 10:30 AM"],
-    "expected_status_counts": {"confirmed_change": 1},
-    "expected_field_outcomes": ["uncertain"]
+    "original": [
+      "Interview time: 9:30"
+    ],
+    "revised": [
+      "Interview time: 10:30 AM"
+    ],
+    "expected_status_counts": {
+      "confirmed_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
   },
   {
     "id": "explicit_reporting_time_amendment",
@@ -303,5 +493,41 @@
       "possible_change": 1
     },
     "expected_field_outcomes": []
+  },
+  {
+    "id": "unlabeled_date_cell_cannot_confirm_change",
+    "original": [
+      "13 December 2026"
+    ],
+    "revised": [
+      "19 December 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    }
+  },
+  {
+    "id": "unlabeled_fee_cell_cannot_confirm_change",
+    "original": [
+      "Rs. 300"
+    ],
+    "revised": [
+      "Rs. 450"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    }
+  },
+  {
+    "id": "unlabeled_cutoff_cell_cannot_confirm_change",
+    "original": [
+      "2026-12-13 at 17:00 IST"
+    ],
+    "revised": [
+      "2026-12-19 at 18:00 IST"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    }
   }
 ]

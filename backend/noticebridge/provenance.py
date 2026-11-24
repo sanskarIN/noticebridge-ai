@@ -9,7 +9,13 @@ import hashlib
 import math
 
 from .amendments import linked_amendment, original_statement, revised_amendment
-from .compare import anchor, category_for, has_competing_values, normalize
+from .compare import (
+    anchor,
+    category_for,
+    has_competing_values,
+    has_descriptive_context,
+    normalize,
+)
 from .extract import (
     MAX_EXTRACTED_LINES,
     MAX_LINE_CHARACTERS,
@@ -303,6 +309,14 @@ def verify_report_provenance(
                 not has_competing_values(finding.original.text, finding.category)
                 and not has_competing_values(finding.revised.text, finding.category),
                 "Confirmed change has competing source values requiring review",
+            )
+            _require(
+                finding.category != "general"
+                or (
+                    has_descriptive_context(finding.original.text)
+                    and has_descriptive_context(finding.revised.text)
+                ),
+                "Confirmed change cites an unlabeled value without source context",
             )
 
         if finding.match_method == "semantic_proposal":

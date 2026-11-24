@@ -696,3 +696,29 @@ def test_native_table_warning_budget_includes_all_supported_kinds():
         2 * MAX_PAGES * len(REVISION_TABLE_WARNINGS)
         + 2 * (MAX_CROSS_PAGE_DETAILS + 1)
     )
+
+
+@pytest.mark.parametrize(("original", "revised"), [
+    ("13 December 2026", "19 December 2026"),
+    ("Rs. 300", "Rs. 450"),
+    ("17:00 IST", "18:00 IST"),
+])
+def test_parent_rejects_worker_confirming_unlabeled_cell_values(
+    pdf_bytes, original, revised,
+):
+    original_pdf, revised_pdf = pdf_bytes([[original]]), pdf_bytes([[revised]])
+    report = compare_documents(
+        extract_pdf(original_pdf, document_id="original", filename="old.pdf"),
+        extract_pdf(revised_pdf, document_id="revised", filename="new.pdf"),
+    )
+    pair = next(f for f in report.findings if f.original and f.revised)
+    assert pair.status == "possible_change"
+    forged = report.model_copy(deep=True)
+    confirmed = next(f for f in forged.findings if f.original and f.revised)
+    confirmed.status = "confirmed_change"
+    confirmed.summary_en, confirmed.summary_hi = SUMMARY_MESSAGES["confirmed_change"]
+    with pytest.raises(InvalidReportProvenance, match="unlabeled value"):
+        verify_report_provenance(
+            forged, original=original_pdf, revised=revised_pdf,
+            old_name="old.pdf", new_name="new.pdf",
+        )
