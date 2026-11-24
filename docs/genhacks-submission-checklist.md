@@ -3,13 +3,13 @@
 **Work-in-progress planning document; NOT a submitted Devpost entry.**
 Engineering completion target: 20 December 2026, final review and materials: 21–25 December 2026.
 
-## Verified organizer sources (checked 23 November 2026)
+## Verified organizer sources (rechecked 24 November 2026)
 
 - Official overview: https://genhacks-open.devpost.com/
 - Rules: https://genhacks-open.devpost.com/rules
 - Schedule: https://genhacks-open.devpost.com/details/dates
 
-**Time conflict:** The official rules and schedule currently list **26 December 2026 at 5:00 PM EST** (27 December, 03:30 IST). The event overview's body text also says submissions close **26 December at 12:00 AM Eastern** (26 December, 10:30 IST). These instructions contradict each other. The safest project policy is to prepare and, only with owner authorization, submit by **25 December**. Recheck the Devpost submission form and ask the organizer to clarify the discrepancy if necessary. Do not promise a later cutoff.
+**Current deadline evidence (24 November 2026):** The official overview, Rules and Schedule pages now all state **26 December 2026 at 5:00 PM EST** (**27 December at 03:30 IST**). The previously observed midnight wording in the overview is no longer displayed on these pages. Treat dates as subject to organizer changes: verify the live Devpost submission form during the submission week. The project retains **25 December 2026** as a conservative internal target; publication and submission require explicit owner approval.
 
 Rules describe a hackathon project started after the November 1 opening; participants must be students age 13 or older. Individual eligibility, registration, and team details have not been independently established here. Do not enter invented identity or team information.
 
