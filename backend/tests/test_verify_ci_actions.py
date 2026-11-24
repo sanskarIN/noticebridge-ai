@@ -1,7 +1,7 @@
 """Enforce immutable, approved GitHub Action references in every workflow."""
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -41,9 +41,9 @@ def test_valid_allowlist_and_version_comments(tmp_path):
     ("actions/checkout@v7", "full lowercase commit SHA"),
     ("actions/checkout@main", "full lowercase commit SHA"),
     ("actions/checkout@3d3c42e", "full lowercase commit SHA"),
-    ("actions/checkout@"+("a" * 40), "differs from the reviewed"),
-    ("other/fork@"+("a" * 40), "unreviewed GitHub Action"),
-    ("./.github/actions/custom@"+("a" * 40), "full lowercase commit SHA"),
+    ("actions/checkout@" + ("a" * 40), "differs from the reviewed"),
+    ("other/fork@" + ("a" * 40), "unreviewed GitHub Action"),
+    ("./.github/actions/custom@" + ("a" * 40), "full lowercase commit SHA"),
 ])
 def test_floating_modified_and_unreviewed_action_references_fail(
     tmp_path, broken, message,
@@ -58,6 +58,15 @@ def test_floating_modified_and_unreviewed_action_references_fail(
 def test_duplicate_action_references_are_checked(tmp_path):
     lines = _approved_lines()
     lines.append("    - uses: actions/setup-node@v7")
+    _workflow(tmp_path, lines)
+    with pytest.raises(ValueError, match="full lowercase commit SHA"):
+        check_workflows(tmp_path)
+
+
+def test_named_step_uses_without_dash_cannot_bypass_pin_guard(tmp_path):
+    lines = _approved_lines()
+    lines.append("  - name: Pull unreviewed code")
+    lines.append("    uses: actions/checkout@v7")
     _workflow(tmp_path, lines)
     with pytest.raises(ValueError, match="full lowercase commit SHA"):
         check_workflows(tmp_path)
