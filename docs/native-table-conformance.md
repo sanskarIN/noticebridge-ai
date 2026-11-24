@@ -17,6 +17,7 @@ From the repository root, with backend development dependencies installed:
 python backend/benchmarks/native_table_matrix.py
 python backend/benchmarks/native_table_matrix.py --json
 python backend/benchmarks/native_table_matrix.py --case date_iso
+python backend/benchmarks/native_table_matrix.py --sequence fee_then_time_header_switch
 pytest -q backend/tests/test_native_table_matrix.py
 ```
 
@@ -26,7 +27,10 @@ The original and revised documents differ in one printed cell. No outside
 network, local AI service, OCR language pack, real notice file or applicant
 information is required. The runner does not save the generated PDFs.
 
-The matrix covers stroked-grid and individually stroked rectangle tables,
+The matrix includes 34 single-row cases and 11 multi-row cases (45 total),
+including consecutive table rows, changed typed headings, interrupted
+inheritance, repeated header recovery, and unruled multi-row fallbacks.
+It covers stroked-grid and individually stroked rectangle tables,
 0/90/180/270-degree page rotations, valid earlier/revised date, fee, time and
 date-with-clock columns, and printed UTC offsets. It also includes misleading
 or incomplete conditions: fill-only and borderless grids, a broken divider,

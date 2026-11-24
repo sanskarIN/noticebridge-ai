@@ -17,12 +17,18 @@ from native_table_matrix import (  # noqa: E402
     HEADERS,
     MAX_CASES,
     SCENARIOS,
+    SEQUENCES,
+    SequenceScenario,
     check_case,
+    check_sequence,
     main,
     render_pdf,
+    render_rows_pdf,
     run_matrix,
+    run_sequence_matrix,
     scenario,
     validate_cases,
+    validate_sequences,
 )
 
 
@@ -224,3 +230,139 @@ def test_identical_source_values_do_not_generate_a_change_claim():
     result = check_case(identical)
     assert result["pass"], result
     assert result["findings_by_status"] == {}
+
+
+@pytest.mark.parametrize("case", SEQUENCES, ids=[case.id for case in SEQUENCES])
+def test_multiple_rows_preserve_source_order_and_bounded_warning_types(case):
+    result = check_sequence(case)
+    assert result["id"] == case.id
+    assert result["pass"], result
+    assert result["errors"] == []
+    assert result["expected_review_type"] == "multirow"
+    assert result["findings_by_status"].get("confirmed_change", 0) == 0
+
+
+def test_multirow_scenarios_cover_header_changes_and_interrupted_inheritance():
+    validate_sequences(SEQUENCES)
+    assert len(SEQUENCES) >= 10
+    assert len({case.id for case in SEQUENCES}) == len(SEQUENCES)
+    assert any(len(case.warning_kinds) == 2 for case in SEQUENCES)
+    assert any(len(case.joined_indices) == 0 for case in SEQUENCES)
+    assert any(len(case.joined_indices) == 2 for case in SEQUENCES)
+    assert any(case.rotation == 270 for case in SEQUENCES)
+    assert all(len(case.original_rows) == len(case.revised_rows) for case in SEQUENCES)
+
+
+@pytest.mark.parametrize("name", [
+    "invalid_value_breaks_header_inheritance",
+    "unrelated_row_breaks_header_inheritance",
+    "repeated_header_restores_inheritance",
+])
+def test_interrupted_rows_are_not_silently_repaired_by_order(name):
+    case = next(item for item in SEQUENCES if item.id == name)
+    result = check_sequence(case)
+    assert result["pass"], result
+    assert "confirmed_change" not in result["findings_by_status"]
+
+
+def test_multirow_source_generator_retains_all_original_independent_text():
+    case = next(item for item in SEQUENCES if item.id == "date_then_fee_header_switch")
+    source = render_rows_pdf(case.original_rows, layout=case.layout, rotation=case.rotation)
+    with fitz.open(stream=source, filetype="pdf") as document:
+        page = document[0]
+        visible = page.get_text()
+        for row in case.original_rows:
+            assert all(cell in visible for cell in row)
+        assert FICTIONAL_MARKER in visible
+        assert len(page.get_cdrawings()) > 0
+
+
+@pytest.mark.parametrize("count", [0, 1, 11, 20])
+def test_generator_rejects_out_of_budget_multirow_documents(count):
+    rows = (HEADERS["date"],) * count
+    with pytest.raises(ValueError, match="row count"):
+        render_rows_pdf(rows, layout="rules", rotation=0)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda case: replace(case, id=""),
+    lambda case: replace(case, id="non_ascii_तारीख"),
+    lambda case: replace(case, id="bad spacing"),
+    lambda case: replace(case, original_rows=(HEADERS["date"],)),
+    lambda case: replace(case, revised_rows=(HEADERS["date"],)),
+    lambda case: replace(case, joined_indices=(0,)),
+    lambda case: replace(case, joined_indices=(999,)),
+    lambda case: replace(case, joined_indices=(2, 1)),
+    lambda case: replace(case, joined_indices=(1, 1)),
+    lambda case: replace(case, warning_kinds=("date", "date")),
+    lambda case: replace(case, warning_kinds=("unsupported",)),
+    lambda case: replace(case, layout="hidden"),
+    lambda case: replace(case, rotation=45),
+    lambda case: replace(case, original_rows=(HEADERS["date"], ("bad",))),
+])
+def test_bad_multirow_case_definitions_are_rejected(mutation):
+    with pytest.raises(ValueError):
+        validate_sequences((mutation(SEQUENCES[0]),))
+
+
+def test_duplicate_multirow_ids_and_unbounded_catalogues_are_rejected():
+    case = SEQUENCES[0]
+    with pytest.raises(ValueError, match="unique"):
+        validate_sequences((case, replace(case)))
+    with pytest.raises(ValueError, match="bounded"):
+        validate_sequences(())
+    invalid = tuple(replace(case, id=f"extra_{i}") for i in range(MAX_CASES + 1))
+    with pytest.raises(ValueError, match="bounded"):
+        validate_sequences(invalid)
+
+
+def test_multirow_runner_exposes_errors_without_printing_source_text(monkeypatch):
+    from native_table_matrix import check_sequence as actual
+
+    def broken(case: SequenceScenario):
+        if case.id == "two_consecutive_deadlines":
+            raise RuntimeError("printed official notice text must not escape")
+        return actual(case)
+
+    monkeypatch.setattr("native_table_matrix.check_sequence", broken)
+    result = run_sequence_matrix(SEQUENCES[:2])
+    assert [item["pass"] for item in result] == [False, True]
+    assert result[0]["errors"] == ["synthetic_sequence_execution_failed"]
+    assert "printed official notice text" not in json.dumps(result)
+
+
+def test_multirow_results_are_deterministic_and_preserve_no_authority_claims():
+    first = run_sequence_matrix()
+    assert first == run_sequence_matrix()
+    assert len(first) == len(SEQUENCES)
+    assert all(item["pass"] for item in first)
+    assert "Application deadline" not in json.dumps(first)
+    assert not any("confirmed_change" in item["findings_by_status"] for item in first)
+
+
+def test_cli_default_evaluates_both_single_rows_and_sequences(capsys):
+    assert main(["--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["synthetic_cases"] == len(SCENARIOS) + len(SEQUENCES)
+    assert payload["passing_cases"] == payload["synthetic_cases"]
+    assert payload["failing_cases"] == 0
+    assert all(item["pass"] for item in payload["cases"])
+    assert "official" in payload["warning"]
+
+
+def test_cli_can_select_only_a_multirow_case(capsys):
+    assert main(["--json", "--sequence", "fee_then_time_header_switch"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["synthetic_cases"] == 1
+    assert payload["cases"][0]["id"] == "fee_then_time_header_switch"
+    assert payload["cases"][0]["expected_review_type"] == "multirow"
+
+
+def test_cli_can_combine_selected_single_and_multirow_cases(capsys):
+    assert main(["--json", "--case", "date_iso",
+                 "--sequence", "unruled_rows_remain_independent"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["synthetic_cases"] == payload["passing_cases"] == 2
+    assert [item["id"] for item in payload["cases"]] == [
+        "date_iso", "unruled_rows_remain_independent",
+    ]
