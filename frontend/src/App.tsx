@@ -2,6 +2,7 @@ import ReviewFindings from './ReviewFindings';
 import ReviewRestore from './ReviewRestore';
 import type { DocumentRole, Evidence, Report } from './comparison';
 import { serializeReviewCsv } from './exportCsv';
+import { revisionTableReviews } from './tableReview';
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
@@ -53,6 +54,9 @@ const t = {
   uncheckedImageHelp: 'These pages contain some selectable text. The large images may contain more notice text.',
   openOcrSettings: 'Open selected-page OCR settings',
   fuzzyLimited: 'The comparison skipped some candidate pairings because the matching limit was reached. Check the source before interpreting unmatched statements.',
+  tableReviewHeading: 'Revision tables need source review',
+  tableReviewHelp: 'Earlier and revised columns were preserved as printed. These are not confirmed amendments. Check each notice against the issuer before acting.',
+  tableReviewPage: 'Open source page',
   previewLoading: 'Preparing PDF viewer…',
   semantic: 'Suggest matches with local AI (experimental)',
   semanticNote: 'Optional: sends selected unmatched text excerpts to Ollama running on the backend computer (127.0.0.1:11434). This feature does not call cloud APIs. Suggestions are unverified.',
@@ -288,6 +292,8 @@ export default function App() {
     });
   }
 
+  const tableReviews = report ? revisionTableReviews(report) : [];
+
   return <div className="app-shell">
     <header className="topbar" inert={Boolean(activePreview)}>
       <div className="brand"><span className="brand-mark">N<span>↗</span></span><span>NoticeBridge <b>AI</b></span></div>
@@ -364,6 +370,21 @@ export default function App() {
           <div><b>{report.findings.filter(f => f.status === 'possible_change').length}</b><span>{t.possible}</span></div>
         </div>
         <div className="caution"><span>!</span><p>{t.verify} <strong>{t.authority}.</strong></p></div>
+        {tableReviews.length > 0 && <section className="table-review-panel"
+          aria-labelledby="table-review-heading">
+          <h3 id="table-review-heading">{t.tableReviewHeading}</h3>
+          <p>{t.tableReviewHelp}</p>
+          <ul>{tableReviews.map(item => <li key={`${item.role}-${item.page}-${item.kind}`}>
+            <span><strong>{t[item.role]}</strong> · {t.page} {item.page}
+              {' · '}{item.kind === 'date-and-time' ? 'Date and time' : item.kind}
+            </span>
+            <button className="review-button" type="button"
+              aria-label={`Open ${item.role} notice page ${item.page}`}
+              onClick={() => openSource({
+                document_id: item.role, filename: item.filename, page: item.page,
+              })}>{t.tableReviewPage}</button>
+          </li>)}</ul>
+        </section>
         {report.semantic_assistance !== 'not_requested' && <p className="ai-feedback" role="status">
           {report.semantic_assistance === 'proposals_added' ? t.semanticAdded :
             report.semantic_assistance === 'no_candidates' ? t.semanticNoCandidates :

@@ -393,3 +393,56 @@ def test_gate_closing_time_keeps_shift_and_zone_scope(pdf_bytes):
     assert all(f.category == "time" for f in report.findings)
     assert all(f.status != "confirmed_change" for f in report.findings)
     assert not any(delta.outcome == "changed" for f in report.findings for delta in f.field_changes)
+
+
+@pytest.mark.parametrize(("original", "revised", "category"), [
+    ("Application deadline: 13 December 2026 or 19 December 2026",
+     "Application deadline: 13 December 2026 or 20 December 2026", "deadline"),
+    ("Application fee: Rs. 300 or Rs. 450",
+     "Application fee: Rs. 300 or Rs. 500", "fee"),
+])
+def test_multiple_printed_values_do_not_confirm_which_value_changed(
+    pdf_bytes, original, revised, category,
+):
+    report = compare_documents(*_pair(pdf_bytes, original, revised))
+    assert len(report.findings) == 1
+    (finding,) = report.findings
+    assert finding.category == category
+    assert finding.status == "possible_change"
+    assert finding.original.text == original
+    assert finding.revised.text == revised
+    assert not finding.field_changes
+    assert not finding.authority_verified
+
+
+@pytest.mark.parametrize(("original", "revised"), [
+    ("13 December 2026", "19 December 2026"),
+    ("2026-12-13", "2026-12-19"),
+    ("Rs. 300", "Rs. 450"),
+    ("INR 300", "INR 450"),
+    ("17:00 IST", "18:00 IST"),
+    ("2026-12-13 at 17:00 IST", "2026-12-19 at 18:00 IST"),
+    ("09:00 to 10:00", "11:00 to 12:00"),
+    ("100", "200"),
+])
+def test_bare_values_cannot_claim_confirmed_text_change(pdf_bytes, original, revised):
+    from noticebridge.compare import has_descriptive_context
+
+    assert not has_descriptive_context(original)
+    assert not has_descriptive_context(revised)
+    report = compare_documents(*_pair(pdf_bytes, original, revised))
+    assert not any(f.status == "confirmed_change" for f in report.findings)
+    assert not any(delta.outcome == "changed" for f in report.findings
+                   for delta in f.field_changes)
+
+
+@pytest.mark.parametrize("text", [
+    "Application deadline: 13 December 2026",
+    "Paper 1 fee: INR 300",
+    "Exam starts at 17:00 IST",
+    "Room 100",
+])
+def test_descriptive_labels_remain_eligible_for_strong_matching(text):
+    from noticebridge.compare import has_descriptive_context
+
+    assert has_descriptive_context(text)

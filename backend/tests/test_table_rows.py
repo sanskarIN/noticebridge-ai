@@ -16,22 +16,28 @@ FEE = ("Application fee", "Rs. 300")
 
 def _notice(rows, *, layout="rules", rotation=0):
     with fitz.open() as document:
-        page = document.new_page(width=610, height=500)
+        page_width = 980 if layout.startswith("wide_") else 610
+        page = document.new_page(width=page_width, height=500)
         table_top = 60
         row_height = 38
         boundaries = [table_top + index * row_height for index in range(len(rows) + 1)]
-        columns = (50, 265, 430, 550) if layout == "three_columns" else (50, 265, 460)
-        if layout in ("rules", "three_columns", "partial_divider"):
+        if layout.startswith("wide_"):
+            columns = (50, 265, 600, 950)
+        elif layout == "three_columns":
+            columns = (50, 265, 430, 550)
+        else:
+            columns = (50, 265, 460)
+        if layout in ("rules", "three_columns", "wide_three_columns", "partial_divider"):
             for y in boundaries:
                 page.draw_line((columns[0], y), (columns[-1], y))
             for x in columns:
                 top = boundaries[1] + 5 if layout == "partial_divider" and x == 265 else table_top
                 page.draw_line((x, top), (x, boundaries[-1]))
-        if layout in ("rectangles", "fills"):
+        if layout in ("rectangles", "fills", "wide_rectangles", "wide_fills"):
             for top, bottom in zip(boundaries[:-1], boundaries[1:], strict=True):
                 for left, right in zip(columns[:-1], columns[1:], strict=True):
                     box = (left, top, right, bottom)
-                    if layout == "fills":
+                    if layout in ("fills", "wide_fills"):
                         page.draw_rect(box, color=None, fill=(0.9, 0.9, 0.9))
                     else:
                         page.draw_rect(box)
@@ -330,3 +336,316 @@ def test_revision_rows_are_review_only_through_api():
     assert not finding["authority_verified"]
     assert all(delta["outcome"] != "changed" for delta in finding["field_changes"])
     assert sum("verify the column headings" in warning for warning in report["warnings"]) == 2
+
+
+@pytest.mark.parametrize(("header", "row", "kind"), [
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application fee", "Rs. 300", "Rs. 450"), "fee"),
+    (("Particulars", "Existing fee", "Updated fee"),
+     ("Application fee", "INR 300", "INR 450"), "fee"),
+    (("Activity", "Previous time", "Revised time"),
+     ("Reporting time", "17:00 IST", "18:30 IST"), "time"),
+    (("Schedule", "Original time", "New time"),
+     ("Gate closing time", "17:00", "18:30"), "time"),
+])
+def test_typed_three_column_revision_is_review_only(header, row, kind):
+    doc = extract_pdf(
+        _notice([header, row], layout="three_columns", rotation=90),
+        document_id="revised", filename="revision.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*header, " ".join(row)]
+    assert doc.lines[-1].review_only
+    assert doc.lines[-1].evidence.extraction_method == "native"
+    assert doc.lines[-1].evidence.page_rotation == 90
+    assert doc.lines[-1].evidence.bbox[0] < 265 < 430 < doc.lines[-1].evidence.bbox[2]
+    assert any(f"earlier/revised {kind} table" in warning for warning in doc.warnings)
+
+
+@pytest.mark.parametrize(("header", "row"), [
+    (("Activity", "Revised fee", "Earlier fee"),
+     ("Application fee", "Rs. 300", "Rs. 450")),
+    (("Activity", "Fee", "Fee"),
+     ("Application fee", "Rs. 300", "Rs. 450")),
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application fee", "Rs. 3,4", "Rs. 450")),
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application fee", "300", "Rs. 450")),
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application deadline", "Rs. 300", "Rs. 450")),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Reporting time", "5:30", "18:30")),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Reporting time", "17:00 to 18:00", "19:00")),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Application fee", "17:00", "18:00")),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Reporting time", "", "18:30")),
+])
+def test_ambiguous_fee_time_revision_leaves_original_cells(header, row):
+    doc = extract_pdf(
+        _notice([header, row], layout="three_columns"),
+        document_id="revised", filename="revision.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *header, *(value for value in row if value),
+    ]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("earlier/revised fee table" in warning
+                   or "earlier/revised time table" in warning for warning in doc.warnings)
+
+
+@pytest.mark.parametrize(("header", "label", "earlier", "old", "new", "kind"), [
+    (("Activity", "Earlier fee", "Revised fee"), "Application fee",
+     "Rs. 300", "Rs. 450", "Rs. 500", "fee"),
+    (("Activity", "Earlier time", "Revised time"), "Reporting time",
+     "17:00 IST", "18:00 IST", "19:00 IST", "time"),
+])
+def test_fee_time_revision_api_never_confirms_typed_table(
+    header, label, earlier, old, new, kind,
+):
+    original = _notice([header, (label, earlier, old)], layout="three_columns")
+    revised = _notice([header, (label, earlier, new)], layout="three_columns")
+    with TestClient(app) as client:
+        response = client.post("/api/compare", files={
+            "original": ("original.pdf", original, "application/pdf"),
+            "revised": ("revised.pdf", revised, "application/pdf"),
+        })
+    assert response.status_code == 200, response.text
+    report = response.json()
+    quotations = {
+        source["text"]
+        for finding in report["findings"]
+        for source in [finding["original"], finding["revised"], *finding["supporting_evidence"]]
+        if source is not None
+    }
+    assert f"{label} {earlier} {old}" in quotations
+    assert f"{label} {earlier} {new}" in quotations
+    assert all(finding["status"] != "confirmed_change" for finding in report["findings"])
+    assert all(delta["outcome"] != "changed" for finding in report["findings"]
+               for delta in finding["field_changes"])
+    assert sum(f"earlier/revised {kind} table" in warning
+               for warning in report["warnings"]) == 2
+
+
+@pytest.mark.parametrize(("header", "row_a", "row_b", "kind"), [
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application fee", "Rs. 300", "Rs. 450"),
+     ("Exam fee", "Rs. 200", "Rs. 250"), "fee"),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Reporting time", "17:00 IST", "18:00 IST"),
+     ("Exam time", "09:00 IST", "10:00 IST"), "time"),
+])
+def test_multiple_consecutive_revision_rows_share_one_page_warning(
+    header, row_a, row_b, kind,
+):
+    doc = extract_pdf(
+        _notice([header, row_a, row_b], layout="three_columns"),
+        document_id="revised", filename="multirow.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *header, " ".join(row_a), " ".join(row_b),
+    ]
+    assert [line.review_only for line in doc.lines] == [False, False, False, True, True]
+    assert sum(f"earlier/revised {kind} table" in warning for warning in doc.warnings) == 1
+
+
+def test_invalid_revision_row_breaks_header_inheritance():
+    header = ("Activity", "Earlier fee", "Revised fee")
+    supported = ("Application fee", "Rs. 300", "Rs. 450")
+    unsupported = ("Reference number", "Rs. 200", "Rs. 250")
+    later = ("Application fee", "Rs. 400", "Rs. 500")
+    doc = extract_pdf(
+        _notice([header, supported, unsupported, later], layout="three_columns"),
+        document_id="original", filename="broken.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *header, " ".join(supported), *unsupported, *later,
+    ]
+    assert sum(line.review_only for line in doc.lines) == 1
+    assert sum("earlier/revised fee table" in warning for warning in doc.warnings) == 1
+
+
+def test_mixed_typed_revision_sections_keep_distinct_review_warnings():
+    fee_header = ("Activity", "Earlier fee", "Revised fee")
+    fee_row = ("Application fee", "Rs. 300", "Rs. 450")
+    time_header = ("Activity", "Earlier time", "Revised time")
+    time_row = ("Reporting time", "17:00", "18:00")
+    doc = extract_pdf(
+        _notice([fee_header, fee_row, time_header, time_row], layout="three_columns"),
+        document_id="original", filename="mixed.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *fee_header, " ".join(fee_row), *time_header, " ".join(time_row),
+    ]
+    assert sum(line.review_only for line in doc.lines) == 2
+    assert sum("earlier/revised fee table" in warning for warning in doc.warnings) == 1
+    assert sum("earlier/revised time table" in warning for warning in doc.warnings) == 1
+
+
+def test_oversized_revision_quote_is_not_merged_or_warned(monkeypatch):
+    monkeypatch.setattr("noticebridge.extract.MAX_LINE_CHARACTERS", 30)
+    header = ("Activity", "Earlier fee", "Revised fee")
+    row = ("Application fee", "Rs. 300", "Rs. 450")
+    doc = extract_pdf(
+        _notice([header, row], layout="three_columns"),
+        document_id="original", filename="quote-limit.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*header, *row]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("earlier/revised fee table" in warning for warning in doc.warnings)
+
+
+COMBINED_HEADER = ("Activity", "Earlier date/time", "Revised date/time")
+
+
+@pytest.mark.parametrize(("layout", "rotation"), [
+    ("wide_three_columns", 90), ("wide_rectangles", 0),
+])
+def test_combined_date_and_cutoff_table_preserves_native_evidence_and_rotation(
+    layout, rotation,
+):
+    row = ("Application deadline", "2026-12-13 at 17:00 IST",
+           "2026-12-19 at 18:00 IST")
+    doc = extract_pdf(
+        _notice([COMBINED_HEADER, row], layout=layout, rotation=rotation),
+        document_id="revised", filename="date-clock.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*COMBINED_HEADER, " ".join(row)]
+    joined = doc.lines[-1]
+    assert joined.review_only
+    assert joined.evidence.page_rotation == rotation
+    assert joined.evidence.extraction_method == "native"
+    assert joined.evidence.bbox[0] < 265 < 600 < joined.evidence.bbox[2]
+    assert any("earlier/revised date-and-time table" in item for item in doc.warnings)
+
+
+@pytest.mark.parametrize("row", [
+    ("Application deadline", "2026-12-13", "2026-12-19"),
+    ("Application deadline", "2026-12-13 at 5:30", "2026-12-19 at 18:00"),
+    ("Application deadline", "2026-12-13 at 17:00 to 18:00",
+     "2026-12-19 at 18:00"),
+    ("Application deadline", "2026-13-13 at 17:00", "2026-12-19 at 18:00"),
+    ("Application fee", "2026-12-13 at 17:00", "2026-12-19 at 18:00"),
+    ("Application deadline", "", "2026-12-19 at 18:00"),
+])
+def test_unproved_combined_date_clock_cells_remain_independent(row):
+    doc = extract_pdf(
+        _notice([COMBINED_HEADER, row], layout="wide_three_columns"),
+        document_id="original", filename="ambiguous.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *COMBINED_HEADER, *(value for value in row if value),
+    ]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("date-and-time table" in item for item in doc.warnings)
+
+
+def test_combined_date_time_table_api_does_not_confirm_amendments():
+    old_row = ("Application deadline", "2026-12-13 at 17:00 IST",
+               "2026-12-19 at 18:00 IST")
+    new_row = ("Application deadline", "2026-12-13 at 17:00 IST",
+               "2026-12-20 at 19:00 IST")
+    original = _notice([COMBINED_HEADER, old_row], layout="wide_three_columns")
+    revised = _notice([COMBINED_HEADER, new_row], layout="wide_three_columns")
+    with TestClient(app) as client:
+        response = client.post("/api/compare", files={
+            "original": ("original.pdf", original, "application/pdf"),
+            "revised": ("revised.pdf", revised, "application/pdf"),
+        })
+    assert response.status_code == 200, response.text
+    report = response.json()
+    quoted = {
+        evidence["text"]
+        for finding in report["findings"]
+        for evidence in [
+            finding["original"], finding["revised"], *finding["supporting_evidence"],
+        ]
+        if evidence is not None
+    }
+    assert " ".join(old_row) in quoted
+    assert " ".join(new_row) in quoted
+    assert not any(f["status"] == "confirmed_change" for f in report["findings"])
+    assert not any(v["outcome"] == "changed" for f in report["findings"]
+                   for v in f["field_changes"])
+    assert sum("earlier/revised date-and-time table" in item
+               for item in report["warnings"]) == 2
+
+
+def test_combined_date_time_rejects_generic_or_reversed_headers():
+    row = ("Application deadline", "2026-12-13 at 17:00 IST",
+           "2026-12-19 at 18:00 IST")
+    for header in (
+        ("Activity", "Date", "Date"),
+        ("Activity", "Revised date/time", "Earlier date/time"),
+        ("Activity", "Earlier time", "Revised time"),
+    ):
+        doc = extract_pdf(
+            _notice([header, row], layout="wide_three_columns"),
+            document_id="revised", filename="unsupported.pdf",
+        )
+        assert [line.text for line in doc.lines] == [*header, *row]
+        assert not any(line.review_only for line in doc.lines)
+
+
+@pytest.mark.parametrize(("layout", "header"), [
+    ("wide_fills", COMBINED_HEADER),
+    ("wide_three_columns", ("Activity", "Date", "Date")),
+])
+def test_combined_date_time_requires_stroked_explicit_grid(layout, header):
+    row = ("Application deadline", "2026-12-13 at 17:00 IST",
+           "2026-12-19 at 18:00 IST")
+    doc = extract_pdf(
+        _notice([header, row], layout=layout),
+        document_id="original", filename="not-grid.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*header, *row]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("date-and-time table" in item for item in doc.warnings)
+
+
+def test_combined_clock_cells_preserve_different_printed_utc_zones():
+    row = ("Application deadline", "2026-12-13 at 17:00 UTC+05:30",
+           "2026-12-19 at 18:00 UTC+06:00")
+    doc = extract_pdf(
+        _notice([COMBINED_HEADER, row], layout="wide_three_columns"),
+        document_id="revised", filename="mixed-zones.pdf",
+    )
+    assert doc.lines[-1].text == " ".join(row)
+    assert doc.lines[-1].review_only
+    assert "UTC+05:30" in doc.lines[-1].evidence.text
+    assert "UTC+06:00" in doc.lines[-1].evidence.text
+    assert any("date-and-time table" in item for item in doc.warnings)
+
+
+@pytest.mark.parametrize(("layout", "label", "old_cell", "new_cell"), [
+    ("partial_divider", "Application deadline", "13 December 2026", "19 December 2026"),
+    ("borderless", "Application deadline", "2026-12-13", "2026-12-19"),
+    ("fills", "Application fee", "Rs. 300", "Rs. 450"),
+    ("partial_divider", "Reporting time", "17:00 IST", "18:00 IST"),
+])
+def test_unproven_two_column_value_cells_cannot_be_confirmed_by_api(
+    layout, label, old_cell, new_cell,
+):
+    original = _notice([HEADER, (label, old_cell)], layout=layout)
+    revised = _notice([HEADER, (label, new_cell)], layout=layout)
+    with TestClient(app) as client:
+        response = client.post("/api/compare", files={
+            "original": ("original.pdf", original, "application/pdf"),
+            "revised": ("revised.pdf", revised, "application/pdf"),
+        })
+    assert response.status_code == 200, response.text
+    report = response.json()
+    source_texts = {
+        evidence["text"]
+        for finding in report["findings"]
+        for evidence in [
+            finding["original"], finding["revised"], *finding["supporting_evidence"],
+        ]
+        if evidence is not None
+    }
+    assert old_cell in source_texts
+    assert new_cell in source_texts
+    assert any(f["status"] == "possible_change" for f in report["findings"])
+    assert not any(f["status"] == "confirmed_change" for f in report["findings"])
+    assert not any(delta["outcome"] == "changed" for f in report["findings"]
+                   for delta in f["field_changes"])
