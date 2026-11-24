@@ -517,3 +517,38 @@ A public GitHub demo should use fictional or properly permissioned documents.
 **Non-negotiable:** an evidence match is not proof of issuer authority or a
 legal deadline. Users must still inspect the issuing organization's official
 source before making consequential decisions.
+
+## Preflight positive label quotations
+
+Use the optional native-quote audit after human review/reconciliation and before
+scoring, with only trusted, permission-safe local PDFs. It runs native extraction
+in the developer process, not the isolated API worker; do not expose it as an
+upload service. No OCR, AI inference or comparison predictions are run.
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/audit_review_quotes.py \
+  evaluation/labels-reconciled.json
+~~~
+
+This verifies source hashes and checks normalized full extracted lines at each
+labeled page. It reports counts and bounded case/pair/role/page flags without
+including quotations. Repeated identical pairs require enough matching source
+line occurrences; distinct pairs may reuse one endpoint. A selected OCR page,
+missing-text page or image-heavy unchecked page requires visual review instead
+of receiving native-exact status. Missing native lines may be caused by wrapping,
+layout or extraction limits, not necessarily inaccurate human labels.
+
+For a strictly native-text cohort, add `--require-native-exact` to fail on any
+flag or a corpus with no positive endpoints. Do not use this strict gate to
+exclude legitimate OCR or hard-layout cases from real-world evaluation. A
+negative case has no positive quotation to check; this audit does not establish
+label completeness, human independence, visual truth or official authority.
+Never edit human labels merely to make the comparator's extraction agree.
+
+## Browser-based independent review workbench
+
+For manual label preparation, use the [offline workbench](../tools/review-workbench/README.md).
+It uses blank pinned manifests, local fingerprint checks, manual page/quote
+entry, resumable drafts and explicit completion before export. It is a local
+review utility, not part of the public comparison API. Keep corpus documents
+outside the served folder and verify exported labels with the backend tools.
