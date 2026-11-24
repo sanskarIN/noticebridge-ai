@@ -24,7 +24,7 @@ CASE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 PAIR_FIELDS = ("original_page", "original_text", "revised_page", "revised_text")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SOURCE_KINDS = frozenset({"fictional", "public_notice", "consented"})
-LABEL_METHODS = frozenset({"synthetic", "author_reviewed", "independent_human"})
+LABEL_METHODS = frozenset({"unreviewed", "synthetic", "author_reviewed", "independent_human"})
 
 
 def _unique_object(entries: list[tuple[str, object]]) -> dict:
@@ -71,6 +71,13 @@ def _manifest(path: Path) -> tuple[int, list[dict], str]:
                 raise ValueError(f"{label}: source_kind must identify its source category")
             if not isinstance(method, str) or method not in LABEL_METHODS:
                 raise ValueError(f"{label}: label_method must identify how labels were prepared")
+        for field in ("issuer_group", "event_group"):
+            if field in case and (
+                not isinstance(case[field], str) or not CASE_ID.fullmatch(case[field])
+            ):
+                raise ValueError(f"{label}: {field} must be a bounded URL-safe identifier")
+        if ("issuer_group" in case) != ("event_group" in case):
+            raise ValueError(f"{label}: issuer_group and event_group must occur together")
         pairs = case.get("expected_pairs")
         if not isinstance(pairs, list) or len(pairs) > MAX_GOLD_PAIRS:
             raise ValueError(f"{label}: expected_pairs must be a bounded array")
@@ -99,7 +106,9 @@ def _require_ready_for_scoring(cases: list[dict]) -> None:
     supplied by a reviewer must be the JSON boolean true, not a truthy value.
     """
     for case in cases:
-        if "review_complete" in case and case["review_complete"] is not True:
+        if case.get("label_method") == "unreviewed" or (
+            "review_complete" in case and case["review_complete"] is not True
+        ):
             raise ValueError(f"{case['id']}: explicitly unfinished review cannot be scored")
 
 
