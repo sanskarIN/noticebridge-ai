@@ -384,7 +384,7 @@ export default function App() {
                 document_id: item.role, filename: item.filename, page: item.page,
               })}>{t.tableReviewPage}</button>
           </li>)}</ul>
-        </section>
+        </section>}
         {report.semantic_assistance !== 'not_requested' && <p className="ai-feedback" role="status">
           {report.semantic_assistance === 'proposals_added' ? t.semanticAdded :
             report.semantic_assistance === 'no_candidates' ? t.semanticNoCandidates :
