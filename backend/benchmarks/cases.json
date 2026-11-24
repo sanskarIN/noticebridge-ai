@@ -159,5 +159,35 @@
     "revised": ["Interview time: 10:30 AM"],
     "expected_status_counts": {"confirmed_change": 1},
     "expected_field_outcomes": ["uncertain"]
+  },
+  {
+    "id": "explicit_reporting_time_amendment",
+    "original": [
+      "Reporting time: 17:00 IST"
+    ],
+    "revised": [
+      "Reporting time hereby revised from 5 PM IST to 18:30 IST"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
+  },
+  {
+    "id": "hereby_deadline_extension",
+    "original": [
+      "Application deadline: 13 Dec 2026"
+    ],
+    "revised": [
+      "Application deadline is hereby extended from 13 Dec 2026 to 14 Dec 2026"
+    ],
+    "expected_status_counts": {
+      "possible_change": 1
+    },
+    "expected_field_outcomes": [
+      "uncertain"
+    ]
   }
 ]

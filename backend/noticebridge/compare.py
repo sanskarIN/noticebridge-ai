@@ -26,6 +26,7 @@ from .warning_policy import MAX_CROSS_PAGE_DETAILS
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
 
+
 def anchor(text: str, category: str, *, mask_clock: bool = True) -> str:
     """Mask expected values while keeping dates of scheduled events and other scope."""
     if mask_clock and category in ("deadline", "time"):

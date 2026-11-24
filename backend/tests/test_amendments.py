@@ -107,3 +107,96 @@ def test_unique_amendment_links_pdf_evidence_and_keeps_the_change_uncertain(pdf_
 def test_a_link_requires_a_unique_matching_earlier_value_and_context(pdf_bytes, original, updated):
     _, _, report = _reports(pdf_bytes, original, updated)
     assert all(finding.match_method != "explicit_amendment" for finding in report.findings)
+
+
+@pytest.mark.parametrize(("old", "new", "before", "after"), [
+    (
+        "Reporting time: 17:00",
+        "Reporting time revised from 17:00 to 18:30",
+        "17:00", "18:30",
+    ),
+    (
+        "Interview time on 13 Dec 2026: 5 PM IST",
+        "The interview time on 13 Dec 2026 is hereby rescheduled from 17:00 IST to 6 PM IST.",
+        "17:00", "18:00",
+    ),
+    (
+        "Exam time: 17:00 UTC+05:30",
+        "Exam time was moved from 17:00 UTC+05:30 to 18:00 UTC+05:30",
+        "17:00", "18:00",
+    ),
+])
+def test_clock_amendments_preserve_label_and_printed_zone(old, new, before, after):
+    original = original_statement(old, "time")
+    revised = revised_amendment(new, "time")
+    assert original is not None and revised is not None
+    assert original.key == revised.key
+    assert (original.value.canonical, revised.value.canonical) == (before, after)
+
+
+@pytest.mark.parametrize("text", [
+    "Reporting time revised from 17:00 IST to 18:00 UTC",
+    "Reporting time revised from 17:00 to 18:00 IST",
+    "Reporting time revised from 17:00 UTC+05:30 to 18:00 UTC+06:00",
+    "Reporting time revised from 5:00 to 18:00",
+    "Reporting time revised from 17:00 to 24:00",
+    "Reporting time revised from 17:00 to 5 PM",
+    "Reporting time could be changed from 17:00 to 18:00",
+    "Reporting time has not been changed from 17:00 to 18:00",
+    "Reporting time changed from 17:00 to 18:00 for Shift 2 only",
+    "Reporting time advanced from 17:00 to 16:00",
+    "Reporting time changed from 17:00-18:00 to 19:00",
+    "Reporting time changed from -17:00 to 18:00",
+    "Reporting time changed from 17:00 to +18:00",
+])
+def test_clock_amendments_do_not_infer_ambiguous_or_conditional_changes(text):
+    assert revised_amendment(text, "time") is None
+
+
+def test_explicit_time_amendment_is_provenance_checked_but_never_confirmed(pdf_bytes):
+    old_text = "Reporting time Shift 1: 17:00 IST"
+    new_text = "Reporting time Shift 1 has been revised from 5 PM IST to 18:30 IST"
+    old, new, report = _reports(pdf_bytes, [old_text], [new_text])
+    (finding,) = report.findings
+    assert finding.status == "possible_change"
+    assert finding.match_method == "explicit_amendment"
+    assert finding.category == "time"
+    assert finding.original.text == old_text
+    assert finding.revised.text == new_text
+    (delta,) = finding.field_changes
+    assert (delta.kind, delta.outcome) == ("time", "uncertain")
+    assert delta.original.canonical == "17:00"
+    assert delta.revised.canonical == "18:30"
+    assert not finding.authority_verified
+    verify_report_provenance(
+        report, original=old, revised=new, old_name="old.pdf", new_name="new.pdf",
+    )
+    delta.revised.canonical = "19:30"
+    with pytest.raises(InvalidReportProvenance, match="amendment value"):
+        verify_report_provenance(
+            report, original=old, revised=new, old_name="old.pdf", new_name="new.pdf",
+        )
+
+
+@pytest.mark.parametrize("old_text", [
+    "Reporting time Shift 2: 17:00 IST",
+    "Reporting time Shift 1: 17:00 UTC",
+    "Reporting time Shift 1: 16:00 IST",
+    "Reporting time Shift 1: 17:00",
+])
+def test_time_amendment_must_match_original_scope_prior_value_and_zone(pdf_bytes, old_text):
+    _, _, report = _reports(
+        pdf_bytes, [old_text],
+        ["Reporting time Shift 1 revised from 17:00 IST to 18:30 IST"],
+    )
+    assert not any(f.match_method == "explicit_amendment" for f in report.findings)
+
+
+def test_hereby_qualified_date_amendment(pdf_bytes):
+    _, _, report = _reports(
+        pdf_bytes, ["Application deadline: 13 Dec 2026"],
+        ["Application deadline is hereby extended from 13 Dec 2026 to 14 Dec 2026"],
+    )
+    (finding,) = report.findings
+    assert finding.match_method == "explicit_amendment"
+    assert finding.field_changes[0].outcome == "uncertain"

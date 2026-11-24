@@ -8,16 +8,19 @@ from itertools import pairwise
 import pymupdf as fitz
 
 from .classification import category_for
-from .facts import AMOUNT_TOKEN, CLOCK_TOKEN, DATE_TOKEN, parse_date, single_clock_token
+from .facts import (
+    AMOUNT_TOKEN,
+    CLOCK_TOKEN,
+    CLOCK_ZONE,
+    DATE_TOKEN,
+    parse_date,
+    single_clock_token,
+)
 from .models import ExtractedLine
 
 MAX_PAGE_LINES = 512
 MAX_DRAWING_ITEMS = 256
 # Zone labels remain part of the original context. This is not conversion.
-CLOCK_ZONE = re.compile(
-    r"\s*(?:IST|(?:UTC|GMT)(?:\s*[+−-]\s*\d{1,2}:\d{2})?)?\s*",
-    re.IGNORECASE,
-)
 DATE_CLOCK_SEPARATOR = re.compile(r"(?:\s+(?:at\s+)?|,\s*)", re.IGNORECASE)
 
 Interval = tuple[float, float]
