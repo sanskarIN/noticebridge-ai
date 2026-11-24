@@ -564,3 +564,17 @@ The page warning asks users to inspect the actual headers. Reversed/unknown
 headings, ambiguous dates, incomplete or multiline cells, unsupported layouts
 and OCR retain their original passages. This narrow geometry rule is not a
 general table parser or an authority check.
+
+
+### Explicit earlier/revised fee and clock tables
+
+The same bounded, native three-column evidence grouping also accepts explicitly
+paired **earlier/revised fee** and **earlier/revised time** headings. Fees must be
+complete, parseable INR cells under a fee label; clocks must be single, parseable
+times (with any printed zone retained) under a reporting/exam-time label. A
+generic old/new table, inferred unit, numeric-only fee, ambiguous clock, range,
+crossed cell or missing value is not silently joined. Each grouped row keeps
+both printed values and source geometry, remains **review-only**, and produces a
+page warning. No fee adjustment, timezone conversion, effective cutoff,
+precedence, or official authority is inferred. This remains a deliberately
+narrow English-header native-text rule, not OCR table understanding.

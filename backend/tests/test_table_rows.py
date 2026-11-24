@@ -330,3 +330,92 @@ def test_revision_rows_are_review_only_through_api():
     assert not finding["authority_verified"]
     assert all(delta["outcome"] != "changed" for delta in finding["field_changes"])
     assert sum("verify the column headings" in warning for warning in report["warnings"]) == 2
+
+
+@pytest.mark.parametrize(("header", "row", "kind"), [
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application fee", "Rs. 300", "Rs. 450"), "fee"),
+    (("Particulars", "Existing fee", "Updated fee"),
+     ("Application fee", "₹300", "₹450"), "fee"),
+    (("Activity", "Previous time", "Revised time"),
+     ("Reporting time", "17:00 IST", "18:30 IST"), "time"),
+    (("Schedule", "Original time", "New time"),
+     ("Gate closing time", "17:00", "18:30"), "time"),
+])
+def test_typed_three_column_revision_is_review_only(header, row, kind):
+    doc = extract_pdf(
+        _notice([header, row], layout="three_columns", rotation=90),
+        document_id="revised", filename="revision.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*header, " ".join(row)]
+    assert doc.lines[-1].review_only
+    assert doc.lines[-1].evidence.extraction_method == "native"
+    assert doc.lines[-1].evidence.page_rotation == 90
+    assert doc.lines[-1].evidence.bbox[0] < 265 < 430 < doc.lines[-1].evidence.bbox[2]
+    assert any(f"earlier/revised {kind} table" in warning for warning in doc.warnings)
+
+
+@pytest.mark.parametrize(("header", "row"), [
+    (("Activity", "Revised fee", "Earlier fee"),
+     ("Application fee", "Rs. 300", "Rs. 450")),
+    (("Activity", "Fee", "Fee"),
+     ("Application fee", "Rs. 300", "Rs. 450")),
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application fee", "Rs. 3,4", "Rs. 450")),
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application fee", "300", "Rs. 450")),
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application deadline", "Rs. 300", "Rs. 450")),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Reporting time", "5:30", "18:30")),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Reporting time", "17:00 to 18:00", "19:00")),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Application fee", "17:00", "18:00")),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Reporting time", "", "18:30")),
+])
+def test_ambiguous_fee_time_revision_leaves_original_cells(header, row):
+    doc = extract_pdf(
+        _notice([header, row], layout="three_columns"),
+        document_id="revised", filename="revision.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *header, *(value for value in row if value),
+    ]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("earlier/revised fee table" in warning
+                   or "earlier/revised time table" in warning for warning in doc.warnings)
+
+
+@pytest.mark.parametrize(("header", "label", "earlier", "old", "new", "kind"), [
+    (("Activity", "Earlier fee", "Revised fee"), "Application fee",
+     "Rs. 300", "Rs. 450", "Rs. 500", "fee"),
+    (("Activity", "Earlier time", "Revised time"), "Reporting time",
+     "17:00 IST", "18:00 IST", "19:00 IST", "time"),
+])
+def test_fee_time_revision_api_never_confirms_typed_table(
+    header, label, earlier, old, new, kind,
+):
+    original = _notice([header, (label, earlier, old)], layout="three_columns")
+    revised = _notice([header, (label, earlier, new)], layout="three_columns")
+    with TestClient(app) as client:
+        response = client.post("/api/compare", files={
+            "original": ("original.pdf", original, "application/pdf"),
+            "revised": ("revised.pdf", revised, "application/pdf"),
+        })
+    assert response.status_code == 200, response.text
+    report = response.json()
+    quotations = {
+        source["text"]
+        for finding in report["findings"]
+        for source in [finding["original"], finding["revised"], *finding["supporting_evidence"]]
+        if source is not None
+    }
+    assert f"{label} {earlier} {old}" in quotations
+    assert f"{label} {earlier} {new}" in quotations
+    assert all(finding["status"] != "confirmed_change" for finding in report["findings"])
+    assert all(delta["outcome"] != "changed" for finding in report["findings"]
+               for delta in finding["field_changes"])
+    assert sum(f"earlier/revised {kind} table" in warning
+               for warning in report["warnings"]) == 2
