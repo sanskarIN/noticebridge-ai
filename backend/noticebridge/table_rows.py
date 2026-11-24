@@ -273,6 +273,7 @@ def _revision_value_rows(
             result.append((indices, active_kind))
     return result
 
+
 def join_ruled_value_rows(
     page: fitz.Page, lines: list[ExtractedLine], *, max_quote_length: int,
     warnings: list[str] | None = None,
