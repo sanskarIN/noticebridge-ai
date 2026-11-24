@@ -28,7 +28,8 @@ from .warning_policy import MAX_CROSS_PAGE_DETAILS
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
 VALUE_CONNECTORS = re.compile(
-    r"\b(?:at|to|or|and|through|until|ist|utc|gmt|am|pm)\b",
+    r"\b(?:at|to|or|and|through|until|ist|utc|gmt|am|pm|rs|inr|usd|eur|gbp|"
+    r"rupees|dollar|dollars|pounds)\b",
     re.IGNORECASE,
 )
 

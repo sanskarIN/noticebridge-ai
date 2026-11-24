@@ -446,3 +446,37 @@ def test_descriptive_labels_remain_eligible_for_strong_matching(text):
     from noticebridge.compare import has_descriptive_context
 
     assert has_descriptive_context(text)
+
+
+@pytest.mark.parametrize(("old_value", "new_value"), [
+    ("USD 300", "USD 450"),
+    ("EUR 300", "EUR 450"),
+    ("GBP 300", "GBP 450"),
+    ("Rs. -300", "Rs. -450"),
+    ("INR -300", "INR -450"),
+    ("300 dollars", "450 dollars"),
+    ("300 rupees", "450 rupees"),
+])
+def test_unlabeled_unsupported_currency_cells_are_review_only(
+    pdf_bytes, old_value, new_value,
+):
+    from noticebridge.compare import has_descriptive_context
+
+    assert not has_descriptive_context(old_value)
+    assert not has_descriptive_context(new_value)
+    report = compare_documents(*_pair(pdf_bytes, old_value, new_value))
+    assert all(f.status != "confirmed_change" for f in report.findings)
+    assert not any(delta.outcome == "changed"
+                   for finding in report.findings for delta in finding.field_changes)
+
+
+@pytest.mark.parametrize("description", [
+    "Application fee: USD 300",
+    "Parking charge: EUR 300",
+    "Payment note: Rs. -300",
+    "Foreign-currency fee: GBP 200",
+])
+def test_currency_inside_an_explicit_label_keeps_descriptive_context(description):
+    from noticebridge.compare import has_descriptive_context
+
+    assert has_descriptive_context(description)
