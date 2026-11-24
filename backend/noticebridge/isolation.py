@@ -50,7 +50,7 @@ SAFE_WORKER_DOCUMENT_ERRORS = frozenset({
     "OCR page numbers must be unique",
 })
 _OCR_PAGE_ERROR = re.compile(
-    r"OCR page [1-9][0-9]? is outside the (?:original|revised) PDF "
+    r"OCR page [1-9][0-9]? is outside the (original|revised) PDF "
     r"\([1-9][0-9]? pages\)",
     re.ASCII,
 )
@@ -119,8 +119,9 @@ def _worker_document_error(response: dict) -> InvalidDocument:
         raise ProcessingFailed("PDF comparison worker returned an invalid error response")
     if message in SAFE_WORKER_DOCUMENT_ERRORS:
         return InvalidDocument(message)
-    if _OCR_PAGE_ERROR.fullmatch(message):
-        return InvalidDocument("Selected OCR page is outside the PDF")
+    if match := _OCR_PAGE_ERROR.fullmatch(message):
+        # Preserve which uploaded PDF failed without forwarding arbitrary text.
+        return InvalidDocument(f"Selected OCR page is outside the {match.group(1)} PDF")
     raise ProcessingFailed("PDF comparison worker returned an untrusted error response")
 
 
