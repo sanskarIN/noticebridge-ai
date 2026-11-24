@@ -3,12 +3,13 @@
 **Planning baseline:** 23 November 2026  
 **Engineering freeze target:** 20 December 2026  
 **Final review / GenHacks preparation window:** 21–25 December 2026  
-**Status:** working engineering plan, no published release. The organizer's schedule and rules were checked on 23 November; a conflicting deadline remains in the overview text.
+**Status:** working engineering plan, no published release. The organizer's overview, schedule and rules were rechecked on 24 November and currently agree on the submission cutoff.
 
-> This document is a target schedule, not a guarantee. GenHacks schedule/rules list
-> 26 December 2026 at 5 PM EST, while the event overview still states midnight
-> Eastern. Use 25 December as the internal safe completion/submission target,
-> and verify the live form with the organizer before any approved submission.
+> This document is a target schedule, not a guarantee. As checked on 24 November,
+> the official GenHacks overview, rules and schedule show 26 December 2026 at
+> 5 PM EST (27 December, 03:30 IST); an older midnight discrepancy is no longer
+> present there. Retain 25 December as the internal safe completion/submission
+> target and verify the live form before any owner-approved submission.
 > The tool never certifies official notices or applicants' eligibility.
 
 ## Current verified capabilities
@@ -91,7 +92,7 @@ candidate commit, with known limitations and no unresolved P0 safety defects.
 - [ ] On **20 December**, review the candidate against each acceptance gate.
 - [ ] By **21–24 December**, prepare the up-to-3-minute demonstration recording
   and Devpost project narrative, including AI usage and limitations.
-- [x] Check GenHacks rules and schedule; document the conflicting official deadline texts (docs/genhacks-submission-checklist.md).
+- [x] Recheck GenHacks overview, rules and schedule; document their currently consistent 26 December 5 PM EST cutoff and preserve the conservative internal 25 December target (docs/genhacks-submission-checklist.md).
 - [ ] Reconfirm the live Devpost cutoff and entrant eligibility with the organizer before the approved submission.
 - [ ] Final documentation, license, installation, privacy and attribution review.
 - [ ] Request explicit approval before merging, tagging, releasing, deploying,

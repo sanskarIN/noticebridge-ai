@@ -30,9 +30,9 @@
 
 **Submission:** NOT sent. Only user may approve final entry submission.
 
-## Deadline discrepancy
+## Current submission cutoff (rechecked 24 November 2026)
 
-The official site contains conflicting text: the event banner/schedule states December 26, 2026 at 5:00 PM EST, while some Rules/Requirements text says December 26 at 12:00 AM EST. The corresponding India times are December 27 at 3:30 AM IST versus December 26 at 10:30 AM IST. Use an internal December 25 submission target and request organizer confirmation if necessary.
+The official GenHacks overview, Rules and Schedule pages now agree: **December 26, 2026 at 5:00 PM EST** (**December 27 at 3:30 AM IST**). Earlier midnight wording is no longer present on those pages. Keep the internal **December 25** target to avoid last-minute eligibility or upload problems. Verify the live submission form before submitting, and seek explicit owner approval; this draft is not a submission.
 
 ## References
 

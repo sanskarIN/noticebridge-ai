@@ -173,7 +173,7 @@ The generated documents have obvious "FICTIONAL" labeling and are deliberately n
 
 ## Hackathon
 
-Planned for **GenHacks 2026**, AI/Agentic Systems/Cybersecurity/Dev Tools track. Eligibility is student-only, ages 13+. Devpost currently shows **conflicting deadline statements**, so we use **25 December 2026** as an internal safe submission target; confirm the organizer's actual submission cutoff. Required: public code, project description, up-to-3-minute embedded video, team and technology disclosures. See `docs/devpost-draft.md`.
+Planned for **GenHacks 2026**, AI/Agentic Systems/Cybersecurity/Dev Tools track. Eligibility is student-only, ages 13+. The official overview/rules/schedule currently agree on **26 December 2026 at 5:00 PM EST** (rechecked 24 November), while **25 December 2026** remains the internal submission target; verify the live form before submission. Required: public code, project description, up-to-3-minute embedded video, team and technology disclosures. See `docs/devpost-draft.md`.
 
 ## License
 
