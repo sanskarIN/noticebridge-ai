@@ -345,7 +345,8 @@ def test_cli_help_mentions_local_only_and_no_authority(capsys):
         compare_cli.main(["--help"])
     assert exc.value.code == 0
     result = capsys.readouterr().out
-    assert "without network uploads" in result
+    # argparse may wrap the description at different console widths.
+    assert "without network uploads" in " ".join(result.split())
     assert "--output" in result
     assert "--automatic-ocr" in result
     assert "--summary-json" in result
