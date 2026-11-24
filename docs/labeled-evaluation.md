@@ -352,6 +352,29 @@ human-reviewed examples with recorded provenance:
 - A frozen test split independent of development examples and the fictional
   demonstration.
 
+### Audit development/held-out split isolation
+
+Before adjusting engine thresholds or measuring a held-out corpus, compare
+the two pinned manifests:
+
+~~~sh
+python backend/benchmarks/audit_evaluation_split.py \
+  evaluation/dev/labels.json evaluation/heldout/labels.json
+~~~
+
+The audit rechecks every source hash and reports shared document bytes even
+if filenames, roles or case IDs differ. Repeated unordered PDF pairs within
+either split and any cross-split document overlap fail the check. A document
+can occur in multiple distinct pairs within one split, such as a sequence
+of amendments. The report contains fingerprints and case IDs, not source
+quotes; no extraction or model inference runs.
+
+Passing this audit proves only byte-level separation. PDFs regenerated
+with different bytes may still contain the same content. Keep related
+notice versions, issuer/event families and near-duplicates together within
+one split; manually review provenance and never tune against the final
+held-out set.
+
 ### Reconcile two independent reviews
 
 Generate separate blank reviewer copies from a version-2 pinned source manifest:
