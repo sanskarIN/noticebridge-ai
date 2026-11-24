@@ -20,6 +20,7 @@ MAX_CANDIDATES = 30
 MAX_PASSAGE_CHARS = 320
 MAX_MODEL_CHARS = 16384
 MAX_MODEL_RESPONSE_BYTES = 64 * 1024
+MAX_MODEL_JSON_DEPTH = 16
 MAX_PROPOSALS = 12
 MODEL_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,63}$")
 
@@ -36,9 +37,32 @@ def _reject_json_constant(value: str) -> None:
 
 
 def _decode_model_json(raw: str | bytes) -> object:
-    # Do not accept ambiguous duplicate members or Python's JSON extensions.
+    # Bound nesting before parsing, independently of interpreter recursion limits.
+    # Braces and escaped quotes inside JSON strings do not count as nesting.
+    text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+    depth = 0
+    in_string = escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > MAX_MODEL_JSON_DEPTH:
+                raise ValueError("Local model JSON exceeds the nesting limit")
+        elif char in "]}":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("Unbalanced local model JSON")
+    # The decoder still validates grammar, including delimiter types.
     return json.loads(
-        raw, object_pairs_hook=_unique_json_object, parse_constant=_reject_json_constant,
+        text, object_pairs_hook=_unique_json_object, parse_constant=_reject_json_constant,
     )
 
 
