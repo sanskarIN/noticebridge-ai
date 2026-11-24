@@ -14,7 +14,9 @@ from .classification import SPACE, category_for, normalize
 from .extract import ExtractedDocument
 from .facts import (
     AMOUNT_TOKEN,
+    CLOCK_TOKEN,
     DATE_TOKEN,
+    amount_tokens,
     date_tokens,
     field_changes,
     single_clock_token,
@@ -25,6 +27,21 @@ from .models import ChecklistItem, ComparisonReport, Evidence, Finding, ValueCha
 from .warning_policy import MAX_CROSS_PAGE_DETAILS
 
 NUMBER = re.compile(r"\b\d+(?:[.:]\d+)?\b")
+
+
+def has_competing_values(text: str, category: str) -> bool:
+    """Never promote a multi-value passage to a confirmed individual field change.
+
+    An identical masked context is insufficient to choose which printed date,
+    amount or clock actually applies. The raw passage remains reviewable.
+    """
+    if category == "deadline" and len(date_tokens(text)) > 1:
+        return True
+    if category == "fee" and len(amount_tokens(text)) > 1:
+        return True
+    return category in ("deadline", "time") and sum(
+        token["clock"] is not None for token in CLOCK_TOKEN.finditer(text)
+    ) > 1
 
 
 def anchor(text: str, category: str, *, mask_clock: bool = True) -> str:
@@ -189,6 +206,8 @@ def compare_documents(old: ExtractedDocument, new: ExtractedDocument) -> Compari
         strong = (
             unique_context
             and not original.review_only and not revised.review_only
+            and not has_competing_values(original.text, category)
+            and not has_competing_values(revised.text, category)
             and original.evidence.extraction_method == "native"
             and revised.evidence.extraction_method == "native"
         )

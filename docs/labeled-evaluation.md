@@ -578,3 +578,15 @@ both printed values and source geometry, remains **review-only**, and produces a
 page warning. No fee adjustment, timezone conversion, effective cutoff,
 precedence, or official authority is inferred. This remains a deliberately
 narrow English-header native-text rule, not OCR table understanding.
+
+
+### Multi-value comparison confirmation guard
+
+A uniquely matched masked label can still quote several date, fee or clock
+candidates (for example, two proposed application deadlines). In those cases
+the engine retains a `possible_change` rather than asserting that an
+individual field is confirmed, even when native text matches by context.
+Parent-side report verification independently rejects a worker claiming
+`confirmed_change` for these multi-value passages. This does not resolve
+which value is effective; inspect both source pages and the issuer's actual
+amendment context.

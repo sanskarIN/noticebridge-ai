@@ -632,3 +632,36 @@ def test_real_cross_page_deadline_warnings_remain_supported(pdf_bytes):
         old_name="old.pdf", new_name="new.pdf",
     )
 
+
+
+@pytest.mark.parametrize(("original", "revised"), [
+    ("Application deadline: 13 December 2026 or 19 December 2026",
+     "Application deadline: 13 December 2026 or 20 December 2026"),
+    ("Application fee: Rs. 300 or Rs. 450",
+     "Application fee: Rs. 300 or Rs. 500"),
+])
+def test_parent_rejects_forged_confirmation_for_competing_source_values(
+    pdf_bytes, original, revised,
+):
+    old_pdf = pdf_bytes([[original]])
+    new_pdf = pdf_bytes([[revised]])
+    old_doc = extract_pdf(old_pdf, document_id="original", filename="old.pdf")
+    new_doc = extract_pdf(new_pdf, document_id="revised", filename="new.pdf")
+    report = compare_documents(old_doc, new_doc)
+    (finding,) = report.findings
+    assert finding.status == "possible_change"
+    verify_report_provenance(
+        report, original=old_pdf, revised=new_pdf,
+        old_name="old.pdf", new_name="new.pdf",
+    )
+
+    forged = report.model_copy(deep=True)
+    forged.findings[0].status = "confirmed_change"
+    forged.findings[0].summary_en, forged.findings[0].summary_hi = (
+        SUMMARY_MESSAGES["confirmed_change"]
+    )
+    with pytest.raises(InvalidReportProvenance, match="competing source values"):
+        verify_report_provenance(
+            forged, original=old_pdf, revised=new_pdf,
+            old_name="old.pdf", new_name="new.pdf",
+        )

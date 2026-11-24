@@ -419,3 +419,71 @@ def test_fee_time_revision_api_never_confirms_typed_table(
                for delta in finding["field_changes"])
     assert sum(f"earlier/revised {kind} table" in warning
                for warning in report["warnings"]) == 2
+
+
+@pytest.mark.parametrize(("header", "row_a", "row_b", "kind"), [
+    (("Activity", "Earlier fee", "Revised fee"),
+     ("Application fee", "Rs. 300", "Rs. 450"),
+     ("Exam fee", "Rs. 200", "Rs. 250"), "fee"),
+    (("Activity", "Earlier time", "Revised time"),
+     ("Reporting time", "17:00 IST", "18:00 IST"),
+     ("Exam time", "09:00 IST", "10:00 IST"), "time"),
+])
+def test_multiple_consecutive_revision_rows_share_one_page_warning(
+    header, row_a, row_b, kind,
+):
+    doc = extract_pdf(
+        _notice([header, row_a, row_b], layout="three_columns"),
+        document_id="revised", filename="multirow.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *header, " ".join(row_a), " ".join(row_b),
+    ]
+    assert [line.review_only for line in doc.lines] == [False, False, False, True, True]
+    assert sum(f"earlier/revised {kind} table" in warning for warning in doc.warnings) == 1
+
+
+def test_invalid_revision_row_breaks_header_inheritance():
+    header = ("Activity", "Earlier fee", "Revised fee")
+    supported = ("Application fee", "Rs. 300", "Rs. 450")
+    unsupported = ("Reference number", "Rs. 200", "Rs. 250")
+    later = ("Application fee", "Rs. 400", "Rs. 500")
+    doc = extract_pdf(
+        _notice([header, supported, unsupported, later], layout="three_columns"),
+        document_id="original", filename="broken.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *header, " ".join(supported), *unsupported, *later,
+    ]
+    assert sum(line.review_only for line in doc.lines) == 1
+    assert sum("earlier/revised fee table" in warning for warning in doc.warnings) == 1
+
+
+def test_mixed_typed_revision_sections_keep_distinct_review_warnings():
+    fee_header = ("Activity", "Earlier fee", "Revised fee")
+    fee_row = ("Application fee", "Rs. 300", "Rs. 450")
+    time_header = ("Activity", "Earlier time", "Revised time")
+    time_row = ("Reporting time", "17:00", "18:00")
+    doc = extract_pdf(
+        _notice([fee_header, fee_row, time_header, time_row], layout="three_columns"),
+        document_id="original", filename="mixed.pdf",
+    )
+    assert [line.text for line in doc.lines] == [
+        *fee_header, " ".join(fee_row), *time_header, " ".join(time_row),
+    ]
+    assert sum(line.review_only for line in doc.lines) == 2
+    assert sum("earlier/revised fee table" in warning for warning in doc.warnings) == 1
+    assert sum("earlier/revised time table" in warning for warning in doc.warnings) == 1
+
+
+def test_oversized_revision_quote_is_not_merged_or_warned(monkeypatch):
+    monkeypatch.setattr("noticebridge.extract.MAX_LINE_CHARACTERS", 32)
+    header = ("Activity", "Earlier fee", "Revised fee")
+    row = ("Application fee", "Rs. 300", "Rs. 450")
+    doc = extract_pdf(
+        _notice([header, row], layout="three_columns"),
+        document_id="original", filename="quote-limit.pdf",
+    )
+    assert [line.text for line in doc.lines] == [*header, *row]
+    assert not any(line.review_only for line in doc.lines)
+    assert not any("earlier/revised fee table" in warning for warning in doc.warnings)

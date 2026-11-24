@@ -393,3 +393,23 @@ def test_gate_closing_time_keeps_shift_and_zone_scope(pdf_bytes):
     assert all(f.category == "time" for f in report.findings)
     assert all(f.status != "confirmed_change" for f in report.findings)
     assert not any(delta.outcome == "changed" for f in report.findings for delta in f.field_changes)
+
+
+@pytest.mark.parametrize(("original", "revised", "category"), [
+    ("Application deadline: 13 December 2026 or 19 December 2026",
+     "Application deadline: 13 December 2026 or 20 December 2026", "deadline"),
+    ("Application fee: Rs. 300 or Rs. 450",
+     "Application fee: Rs. 300 or Rs. 500", "fee"),
+])
+def test_multiple_printed_values_do_not_confirm_which_value_changed(
+    pdf_bytes, original, revised, category,
+):
+    report = compare_documents(*_pair(pdf_bytes, original, revised))
+    assert len(report.findings) == 1
+    (finding,) = report.findings
+    assert finding.category == category
+    assert finding.status == "possible_change"
+    assert finding.original.text == original
+    assert finding.revised.text == revised
+    assert not finding.field_changes
+    assert not finding.authority_verified

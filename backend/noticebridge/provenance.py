@@ -9,7 +9,7 @@ import hashlib
 import math
 
 from .amendments import linked_amendment, original_statement, revised_amendment
-from .compare import anchor, category_for, normalize
+from .compare import anchor, category_for, has_competing_values, normalize
 from .extract import (
     MAX_EXTRACTED_LINES,
     MAX_LINE_CHARACTERS,
@@ -293,6 +293,11 @@ def verify_report_provenance(
             _require(
                 normalize(finding.original.text) != normalize(finding.revised.text),
                 "Confirmed change cannot cite identical source wording",
+            )
+            _require(
+                not has_competing_values(finding.original.text, finding.category)
+                and not has_competing_values(finding.revised.text, finding.category),
+                "Confirmed change has competing source values requiring review",
             )
 
         if finding.match_method == "semantic_proposal":
