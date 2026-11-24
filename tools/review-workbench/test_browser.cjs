@@ -82,6 +82,14 @@ async function run() {
     await (await draftWait).saveAs(draft);
     assert.equal(JSON.parse(await readFile(draft, 'utf8')).format, 'noticebridge-review-draft');
     await page.locator('#resume').setInputFiles(draft);
+    // File inputs dispatch change before the async draft parse and load() finish.
+    // The old textareas already contain this quote; waiting on them alone can
+    // let subsequent PDF uploads race with replacement of the source panels.
+    await expect(page.locator('#message'))
+      .toHaveText('Draft restored. Reverify both PDFs and reconfirm each case.');
+    await expect(page.locator('#sources .source')).toHaveCount(2);
+    await expect(page.locator('#sources .source').getByText('Not yet verified.', { exact: true }))
+      .toHaveCount(2);
     await expect(quotes.nth(1)).toHaveValue('Incomplete edit');
     await expect(page.locator('#complete')).toBeDisabled();
     await verifySource(0, 'original.pdf');
