@@ -686,7 +686,9 @@ def test_duplicate_revision_table_warning_is_rejected(source_report):
 def test_native_table_warning_budget_includes_all_supported_kinds():
     from noticebridge.extract import MAX_PAGES
     from noticebridge.warning_policy import (
-        MAX_CROSS_PAGE_DETAILS, MAX_REPORT_WARNINGS, REVISION_TABLE_WARNINGS,
+        MAX_CROSS_PAGE_DETAILS,
+        MAX_REPORT_WARNINGS,
+        REVISION_TABLE_WARNINGS,
     )
 
     assert len(REVISION_TABLE_WARNINGS) == 4

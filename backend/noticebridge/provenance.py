@@ -23,8 +23,8 @@ from .messages import HINDI_CATEGORY, SUMMARY_MESSAGES, review_messages
 from .models import ComparisonReport, Evidence
 from .warning_policy import (
     MAX_REPORT_WARNINGS,
-    REVISION_TABLE_WARNINGS,
     PAGE_RE,
+    REVISION_TABLE_WARNINGS,
     warning_supported,
 )
 
