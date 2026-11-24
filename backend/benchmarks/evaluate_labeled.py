@@ -327,6 +327,7 @@ def _cohort_results(cases: list[dict]) -> dict:
 def evaluate_labeled(
     manifest: Path, *, enable_ocr: bool = False, require_pinned_sources: bool = False,
     include_error_examples: bool = False,
+    expected_manifest_sha256: str | None = None,
 ) -> dict:
     """Run offline evidence-pair evaluation from operator-supplied ground truth.
 
@@ -336,6 +337,8 @@ def evaluate_labeled(
     """
     resolved = manifest.resolve()
     version, cases, manifest_sha256 = _manifest(resolved)
+    if expected_manifest_sha256 is not None and manifest_sha256 != expected_manifest_sha256:
+        raise ValueError("Evaluation manifest changed after preflight")
     _require_ready_for_scoring(cases)
     if require_pinned_sources and version != 2:
         raise ValueError("Pinned sources require a version-2 manifest")

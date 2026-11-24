@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { readFile } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
+import type { Report } from '../src/comparison';
 
 // Fictional, generated PDF data: no real applicant details or official notices.
 const originalPdf = Buffer.from('JVBERi0xLjcKJcK1wrYKCjEgMCBvYmoKPDwvVHlwZS9DYXRhbG9nL1BhZ2VzIDIgMCBSPj4KZW5kb2JqCgoyIDAgb2JqCjw8L1R5cGUvUGFnZXMvQ291bnQgMS9LaWRzWzQgMCBSXT4+CmVuZG9iagoKMyAwIG9iago8PC9Gb250PDwvaGVsdiA1IDAgUj4+Pj4KZW5kb2JqCgo0IDAgb2JqCjw8L1R5cGUvUGFnZS9NZWRpYUJveFswIDAgNjEwIDgwMF0vUm90YXRlIDAvUmVzb3VyY2VzIDMgMCBSL1BhcmVudCAyIDAgUi9Db250ZW50c1s2IDAgUl0+PgplbmRvYmoKCjUgMCBvYmoKPDwvVHlwZS9Gb250L1N1YnR5cGUvVHlwZTEvQmFzZUZvbnQvSGVsdmV0aWNhL0VuY29kaW5nL1dpbkFuc2lFbmNvZGluZz4+CmVuZG9iagoKNiAwIG9iago8PC9MZW5ndGggMTA5L0ZpbHRlci9GbGF0ZURlY29kZT4+CnN0cmVhbQp42hWJOwoCQRBE8z5F38D+zFQjiIGwiZnQ2bKB6CwGGph4fnsoXhXUoy9dkpSlogzhUOH80OE13j9WcO68npqGhOCBIxwarXbHMEFDh1ZPM9D9buLqbtKm8eIJQw+r33yC85ZXWpJu9AeuKBtxCmVuZHN0cmVhbQplbmRvYmoKCnhyZWYKMCA3CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNiAwMDAwMCBuIAowMDAwMDAwMDYyIDAwMDAwIG4gCjAwMDAwMDAxMTQgMDAwMDAgbiAKMDAwMDAwMDE1NSAwMDAwMCBuIAowMDAwMDAwMjYyIDAwMDAwIG4gCjAwMDAwMDAzNTEgMDAwMDAgbiAKCnRyYWlsZXIKPDwvU2l6ZSA3L1Jvb3QgMSAwIFIvSURbPEMyOUIyMEMyQjRDMkJDNTZDMzhBMkIxMjE4QzI4M0MyPjwxMUMwRDIyMDM3NzE0QkMxRjgyRDE0RDA3ODUxNUM1Mj5dPj4Kc3RhcnR4cmVmCjUyOQolJUVPRgo=', 'base64');
@@ -634,6 +635,112 @@ test('opens an uncovered PDF page for manual review without a fabricated highlig
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(open).toBeFocused();
+});
+
+test('retries selected OCR pages explicitly and preserves the previous report after failure', async ({ page }) => {
+  let requests = 0;
+  const postBodies: string[] = [];
+  await page.route('**/api/compare', async route => {
+    requests += 1;
+    postBodies.push(route.request().postDataBuffer()?.toString() ?? '');
+    if (requests === 2) {
+      await route.fulfill({ status: 503, json: { detail: 'Temporary processing failure' } });
+    } else {
+      await route.continue();
+    }
+  });
+  await compareReviewFixture(page, [['Application deadline: 13 December 2026'], []], [
+    ['Application deadline: 14 December 2026'], [],
+  ]);
+  const deadline = page.getByRole('checkbox', { name: /Verify the deadline/ });
+  await deadline.check();
+  const coverage = page.getByRole('region', { name: 'Text extraction coverage' });
+  await expect(coverage).toHaveCount(1);
+  for (const group of await coverage.getByText('Open pages with no extracted text (1)').all()) {
+    await group.click();
+  }
+  const original = coverage.getByRole('checkbox', { name: 'Select original notice page 2 for OCR' });
+  const revised = coverage.getByRole('checkbox', { name: 'Select updated notice page 2 for OCR' });
+  await original.check();
+  await revised.check();
+  await expect(coverage.getByText(/Both PDFs are uploaded again/)).toBeVisible();
+  expect(requests).toBe(1);
+  const rerun = coverage.getByRole('button', { name: 'Compare again with OCR on 2 more pages' });
+  await rerun.click();
+  await expect(coverage.getByRole('alert')).toContainText('Temporary processing failure');
+  await expect(deadline).toBeChecked();
+  await expect(original).toBeChecked();
+  await expect(revised).toBeChecked();
+  await expect(page.getByRole('button', { name: /Export evidence report/ })).toBeVisible();
+  await expect(page.getByLabel('Original notice OCR pages')).toHaveValue('');
+
+  await rerun.click();
+  await expect(coverage.getByText('Selected for OCR · 2', { exact: true })).toHaveCount(2);
+  await expect(coverage).toHaveCount(1);
+  await expect(coverage.getByRole('alert')).toHaveCount(0);
+  await expect(deadline).toBeChecked();
+  await expect(page.getByLabel('Original notice OCR pages')).toHaveValue('2');
+  await expect(page.getByLabel('Updated notice OCR pages')).toHaveValue('2');
+  expect(requests).toBe(3);
+  for (const option of ['original_ocr_pages', 'revised_ocr_pages']) {
+    expect(postBodies[2]).toContain(`name="${option}"\r\n\r\n2\r\n`);
+  }
+  expect(postBodies[2]).toContain('name="enable_ocr"\r\n\r\nfalse\r\n');
+  expect(postBodies[2]).toContain('name="enable_semantic"\r\n\r\nfalse\r\n');
+});
+
+test('counts previous OCR choices against the page limit and preserves them in the rerun', async ({ page }) => {
+  const pages = [['Application deadline: 13 December 2026'], ...Array.from({ length: 13 }, () => [])];
+  await page.goto('/');
+  for (const [role, buffer] of [['original', reviewFixture(pages)], ['revised', revisedPdf]] as const) {
+    await page.locator(`#${role}`).setInputFiles({ name: `${role}.pdf`, mimeType: 'application/pdf', buffer });
+  }
+  await page.getByText('Recover text on selected pages with OCR', { exact: true }).click();
+  await page.getByLabel('Original notice OCR pages').fill('2–12');
+  await page.getByRole('button', { name: /Compare documents/ }).click();
+  const coverage = page.getByRole('region', { name: 'Text extraction coverage' });
+  await expect(coverage.getByText('11/12 selected OCR pages for this PDF')).toBeVisible();
+  await coverage.getByText(/Open pages with no extracted text/).click();
+  const page13 = coverage.getByRole('checkbox', { name: 'Select original notice page 13 for OCR' });
+  const page14 = coverage.getByRole('checkbox', { name: 'Select original notice page 14 for OCR' });
+  await expect(coverage.getByRole('checkbox', { name: 'Select original notice page 2 for OCR' })).toHaveCount(0);
+  await page13.check();
+  await expect(page14).toBeDisabled();
+  await page13.uncheck();
+  await page14.check();
+  await expect(page13).toBeDisabled();
+  await coverage.getByRole('button', { name: 'Compare again with OCR on 1 more page' }).click();
+  await expect(coverage.getByText('12/12 selected OCR pages for this PDF')).toBeVisible();
+  await expect(page.getByLabel('Original notice OCR pages')).toHaveValue('2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14');
+});
+
+test('a successful OCR retry clears review marks for changed evidence at the same finding ID', async ({ page }) => {
+  await compareReviewFixture(page, [[
+    'Application deadline: 13 December 2026', 'Application fee: Rs. 200',
+  ], []], [[
+    'Application deadline: 14 December 2026', 'Application fee: Rs. 300',
+  ]]);
+  const deadline = page.getByRole('checkbox', { name: /Verify the deadline/ });
+  const fee = page.getByRole('checkbox', { name: /Verify the fee/ });
+  await deadline.check();
+  await fee.check();
+  await page.route('**/api/compare', async route => {
+    const response = await route.fetch();
+    const report: Report = await response.json();
+    // Exercise the UI's stale-review guard even if Tesseract is unavailable in this browser job.
+    const finding = report.findings.find(item => item.category === 'fee');
+    if (!finding?.original) throw new Error('Expected the fictional fee evidence');
+    finding.original.text += ' (different extraction)';
+    await route.fulfill({ response, json: report });
+  }, { times: 1 });
+
+  const coverage = page.getByRole('region', { name: 'Text extraction coverage' });
+  await coverage.getByText(/Open pages with no extracted text/).click();
+  await coverage.getByRole('checkbox', { name: 'Select original notice page 2 for OCR' }).check();
+  await coverage.getByRole('button', { name: 'Compare again with OCR on 1 more page' }).click();
+  await expect(coverage.getByText('Selected for OCR · 2', { exact: true })).toBeVisible();
+  await expect(deadline).toBeChecked();
+  await expect(fee).not.toBeChecked();
 });
 
 test('discloses a fuzzy-search limit separately from page text coverage and exports it', async ({ page }) => {

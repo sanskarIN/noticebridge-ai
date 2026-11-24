@@ -1,14 +1,15 @@
+import CoverageReview, { type CoveragePage, type SelectedOcrPages } from './CoverageReview';
 import ReviewFindings from './ReviewFindings';
 import ReviewRestore from './ReviewRestore';
 import type { DocumentRole, Evidence, Report } from './comparison';
 import { serializeReviewCsv } from './exportCsv';
+import { carryReviewSelections } from './restoreReview';
 import { revisionTableReviews } from './tableReview';
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
 
-type SourcePage = Pick<Evidence, 'document_id' | 'filename' | 'page'> & { uncheckedImage?: boolean };
-type Preview = { url: string; file: File; source: SourcePage; evidence?: Evidence };
+type Preview = { url: string; file: File; source: CoveragePage; evidence?: Evidence };
 type ComparisonSource = 'live_upload' | 'live_demo' | 'showcase';
 type CompareOptions = {
   enableOcr: boolean;
@@ -42,17 +43,6 @@ const t = {
   ocrRecoveryHelp: 'Use PDF page numbers such as 1, 3–5 when the embedded text is garbled or incomplete. Selected pages use OCR only and take priority within the 12-page limit per PDF.',
   ocrOriginalPages: 'Original notice OCR pages',
   ocrRevisedPages: 'Updated notice OCR pages',
-  ocrSelected: 'Selected for OCR',
-  ocrRecovered: 'Text extracted by OCR',
-  coverageTitle: 'Text extraction coverage',
-  coverageFull: 'Every PDF page yielded some text, but this does not prove every statement was captured.',
-  coveragePartial: 'Some PDF pages yielded no text. Changes on those pages may be missed.',
-  coverageInconclusive: 'One or both PDFs yielded no text. The comparison is inconclusive.',
-  coveragePages: 'pages yielded text',
-  uncovered: 'Open pages with no extracted text',
-  uncheckedImages: 'Review pages with large images',
-  uncheckedImageHelp: 'These pages contain some selectable text. The large images may contain more notice text.',
-  openOcrSettings: 'Open selected-page OCR settings',
   fuzzyLimited: 'The comparison skipped some candidate pairings because the matching limit was reached. Check the source before interpreting unmatched statements.',
   tableReviewHeading: 'Revision tables need source review',
   tableReviewHelp: 'Earlier and revised columns were preserved as printed. These are not confirmed amendments. Check each notice against the issuer before acting.',
@@ -186,7 +176,7 @@ export default function App() {
     if (role === 'original') setOriginal(file); else setRevised(file);
   }
 
-  function openSource(...sources: [SourcePage | Evidence] | [Evidence, Evidence]) {
+  function openSource(...sources: [CoveragePage | Evidence] | [Evidence, Evidence]) {
     const selected = sources.flatMap(source => {
       const file = source.document_id === 'original' ? original : revised;
       return file ? [{ file, source }] : [];
@@ -247,15 +237,24 @@ export default function App() {
 
   async function runComparison(
     source: ComparisonSource, getReport: (signal: AbortSignal) => Promise<Report>,
+    retry?: { previous: Report; pages: CompareOptions['ocrPages'] },
   ) {
-    clearComparison();
+    if (retry) setError('');
+    else clearComparison();
     const controller = new AbortController();
     controllerRef.current = controller;
     setComparisonSource(source);
     setPending(true);
     try {
       const result = await getReport(controller.signal);
-      if (controllerRef.current === controller) setReport(result);
+      if (controllerRef.current === controller) {
+        if (retry) {
+          setChecked(previous => carryReviewSelections(retry.previous, result, previous));
+          setOcrPages(retry.pages);
+          setPreview(null);
+        }
+        setReport(result);
+      }
     } catch (cause) {
       if (controllerRef.current === controller && !controller.signal.aborted) {
         setError(cause instanceof Error ? cause.message : 'Could not compare documents');
@@ -270,10 +269,18 @@ export default function App() {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!original || !revised) return;
+    if (!original || !revised || controllerRef.current) return;
     void runComparison('live_upload', signal => requestComparison(
       original, revised, { enableOcr, ocrPages, enableSemantic }, signal,
     ));
+  }
+
+  function retryWithOcr(pages: SelectedOcrPages) {
+    if (!original || !revised || !report || controllerRef.current) return;
+    const selectedPages = { original: pages.original.join(', '), revised: pages.revised.join(', ') };
+    void runComparison(comparisonSource, signal => requestComparison(
+      original, revised, { enableOcr, ocrPages: selectedPages, enableSemantic }, signal,
+    ), { previous: report, pages: selectedPages });
   }
 
   function startDemo() {
@@ -293,6 +300,7 @@ export default function App() {
   }
 
   const tableReviews = report ? revisionTableReviews(report) : [];
+  const coverageKey = report?.documents.map(doc => doc.ocr_override_pages?.join(',') ?? '').join(':');
 
   return <div className="app-shell">
     <header className="topbar" inert={Boolean(activePreview)}>
@@ -305,7 +313,7 @@ export default function App() {
         <p className="hero-copy">{t.detail}</p>
         <div className="showcase-actions">
           <button type="button" className="primary-button" disabled={pending} onClick={startDemo}>
-            {pending && comparisonSource !== 'live_upload' ? 'Loading example…' : 'Try a fictional notice'}
+            {pending && !report && comparisonSource !== 'live_upload' ? 'Loading example…' : 'Try a fictional notice'}
             <span aria-hidden="true">→</span>
           </button>
           {!SHOWCASE_ONLY && <a href="#upload-notices">Compare your own PDFs</a>}
@@ -315,7 +323,7 @@ export default function App() {
             ? 'Explore a saved comparison of two fictional notices, including the source PDFs.'
             : 'See how a moved deadline, a changed fee, and an ambiguous date appear in a live comparison.'}
         </p>
-        {(SHOWCASE_ONLY || comparisonSource === 'live_demo') && pending &&
+        {(SHOWCASE_ONLY || comparisonSource === 'live_demo') && pending && !report &&
           <p role="status" className="showcase-intro">Loading the fictional notices and evidence…</p>}
         {SHOWCASE_ONLY && error && <p role="alert" className="error-banner">{error}</p>}
       </section>
@@ -354,7 +362,7 @@ export default function App() {
           </details>
           <label className="ocr-option"><input type="checkbox" checked={enableSemantic} onChange={(e) => { clearComparison(); setEnableSemantic(e.target.checked); }} /><span><strong>{t.semantic}</strong><small>{t.semanticNote}</small></span></label>
           <div className="upload-footer"><p>{t.note}</p><button type="submit" disabled={!original || !revised || pending} className="primary-button">{pending ? t.comparing : t.button}<span>→</span></button></div>
-          {error && <p role="alert" className="error-banner">{error}</p>}
+          {error && !report && <p role="alert" className="error-banner">{error}</p>}
         </form>
       </section>}
       {report && <section className="results" aria-labelledby="results-heading">
@@ -391,43 +399,12 @@ export default function App() {
             report.semantic_assistance === 'unavailable' ? t.semanticUnavailable :
             t.semanticRejected}
         </p>}
-        <div className={`coverage-report ${report.text_coverage}`} role="status">
-          <strong>{t.coverageTitle}</strong>
-          <p>{report.text_coverage === 'all_pages_have_text' ? t.coverageFull :
-            report.text_coverage === 'partial' ? t.coveragePartial : t.coverageInconclusive}</p>
-          <ul className="coverage-documents">{report.documents.map(d => <li key={d.id}>
-            <span>{t[d.id]} · {d.filename} · {d.pages_with_text}/{d.page_count} {t.coveragePages}</span>
-            {!!d.ocr_override_pages?.length && <p>{t.ocrSelected} · {d.ocr_override_pages.join(', ')}</p>}
-            {!!d.ocr_pages?.length && <p>{t.ocrRecovered} · {d.ocr_pages.join(', ')}</p>}
-            {d.pages_without_text.length > 0 && <details>
-              <summary>{t.uncovered} ({d.pages_without_text.length})</summary>
-              <div className="coverage-page-links">
-                {d.pages_without_text.map(page => <button className="review-button" type="button" key={page}
-                  onClick={() => openSource({ document_id: d.id, filename: d.filename, page })}>
-                  {t.page} {page}
-                </button>)}
-              </div>
-            </details>}
-            {!!d.pages_with_unchecked_images?.length && <details>
-              <summary>{t.uncheckedImages} ({d.pages_with_unchecked_images.length})</summary>
-              <p>{t.uncheckedImageHelp}</p>
-              <div className="coverage-page-links">
-                {d.pages_with_unchecked_images.map(page => <button
-                  className="review-button" type="button" key={page}
-                  onClick={() => openSource({
-                    document_id: d.id, filename: d.filename, page, uncheckedImage: true,
-                  })}>
-                  {t.page} {page}
-                </button>)}
-                {!SHOWCASE_ONLY && <button className="review-button" type="button"
-                  onClick={() => openSelectedPageOcr(d.id)}>{t.openOcrSettings}</button>}
-              </div>
-            </details>}
-          </li>)}</ul>
-        </div>
+        <CoverageReview key={`coverage-${coverageKey}`} report={report} busy={pending} error={error}
+          localAi={enableSemantic} onOpen={openSource} onSettings={openSelectedPageOcr}
+          onRetry={SHOWCASE_ONLY ? undefined : retryWithOcr} />
         {report.fuzzy_matching_limited && <p className="coverage-report partial" role="status">{t.fuzzyLimited}</p>}
         {report.findings.length === 0 && <p className="no-findings" role="status">{report.documents.some(d => !d.has_extractable_text) ? t.insufficient : t.noFindings}</p>}
-        {report.checklist.length > 0 && <ReviewRestore report={report}
+        {report.checklist.length > 0 && <ReviewRestore key={`restore-${coverageKey}`} report={report}
           onRestore={ids => setChecked(previous => new Set([...previous, ...ids]))} />}
         {report.findings.length > 0 && <ReviewFindings
           report={report} checked={checked} onCheck={setReviewed} onOpen={openSource}

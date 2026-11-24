@@ -510,6 +510,71 @@ checks that both reviews refer to the same pinned PDFs and uses the adjudicated
 labels for disputed cases. The private review manifests preserve source
 quotations and should stay with the evaluation data.
 
+### Freeze the deterministic release evaluation
+
+Choose a policy before running the comparator on the held-out set. Save it as
+`evaluation/release-policy.json`. The following numbers illustrate an explicit
+policy. Use the agreed thresholds and extraction mode for the actual run.
+
+```json
+{
+  "min_cases": 20,
+  "min_issuer_groups": 2,
+  "min_precision": 0.90,
+  "min_recall": 0.90,
+  "max_unsupported_confirmed": 0,
+  "max_incomplete_cases": 0,
+  "max_unchecked_image_cases": 0,
+  "max_limited_matching_cases": 0,
+  "enable_ocr": false
+}
+```
+
+After reconciling the two reviews, preflight the development split, held-out
+labels, policy, and reviewer inputs together from the repository root:
+
+```sh
+python backend/benchmarks/evaluate_release.py freeze \
+  --development evaluation/dev/source.json \
+  --heldout evaluation/heldout/labels-reconciled.json \
+  --review-a evaluation/heldout/review-a.json --reviewer-a reviewer-a \
+  --review-b evaluation/heldout/review-b.json --reviewer-b reviewer-b \
+  --policy evaluation/release-policy.json --plan evaluation/release-plan.json
+```
+
+Supply `--adjudication` and `--adjudicator` when a third reviewer resolved
+disputes. Preflight recomputes the reconciliation, verifies PDF byte hashes,
+and rejects duplicate source pairs, shared PDF bytes, and shared or missing
+declared event groups. It requires completed, non-fictional held-out cases,
+the declared case and issuer counts, and at least one positive label for
+recall. It creates a new plan and reports its SHA-256 without starting the
+comparison worker. Record the plan digest separately before scoring.
+
+Replace `RECORDED_SHA256` with that digest, and use the same review inputs and
+adjudication options:
+
+```sh
+python backend/benchmarks/evaluate_release.py score \
+  --development evaluation/dev/source.json \
+  --heldout evaluation/heldout/labels-reconciled.json \
+  --review-a evaluation/heldout/review-a.json --reviewer-a reviewer-a \
+  --review-b evaluation/heldout/review-b.json --reviewer-b reviewer-b \
+  --plan evaluation/release-plan.json --plan-sha256 RECORDED_SHA256
+```
+
+Scoring rechecks preflight and the pinned input hashes. Its JSON shows all
+gate outcomes, raw precision and recall counts, and extraction coverage. A
+zero denominator fails the corresponding minimum. Exit status `0` means
+all scoring gates passed, `1` means at least one failed, and `2` indicates a
+preflight or processing error. The report contains case identifiers and hashes,
+so review it before sharing. Scoring runs locally with semantic AI disabled.
+
+The digest shows that the measured inputs and thresholds match the recorded
+plan. Keep the publication and consent records, reviewer independence checks,
+manual near-duplicate review, exact engine commit and OCR environment with the
+evaluation. The separate local-model experiment has its own configuration and
+results.
+
 When reporting results, state sample counts, scope, version/commit, extraction
 coverage, and known failure cases. Keep exact user or applicant data private.
 A public GitHub demo should use fictional or properly permissioned documents.

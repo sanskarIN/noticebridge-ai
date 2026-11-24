@@ -55,6 +55,9 @@ test('opens image-heavy pages and points users to the right OCR settings', async
   await expect(preview.locator('.evidence-highlight')).toHaveCount(0);
   await page.keyboard.press('Escape');
 
+  const choice = page.getByRole('checkbox', { name: 'Select original notice page 1 for OCR' });
+  await choice.check();
+  await expect(page.getByRole('button', { name: 'Compare again with OCR on 1 more page' })).toBeEnabled();
   await page.getByRole('button', { name: 'Open selected-page OCR settings' }).click();
   await expect(page.getByLabel('Original notice OCR pages')).toBeFocused();
   await expect(page.getByLabel('Original notice OCR pages')).toHaveValue('');
