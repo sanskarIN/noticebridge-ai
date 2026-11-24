@@ -302,6 +302,41 @@ upload its JSON output to public CI logs or an issue tracker without redacting
 the previews. Truncated normalized excerpts are for triage, not substitutes
 for the full original PDF and human adjudication.
 
+## Separate opt-in local AI experiment
+
+The deterministic evaluator never calls the model. To measure incremental
+utility of semantic proposals, use this separate SHA-pinned experiment with
+Ollama running on a trusted local machine:
+
+~~~sh
+PYTHONPATH=backend python backend/benchmarks/evaluate_semantic.py \
+  evaluation/independent-pinned.json --run-local-model \
+  --min-independent-distinct-pairs 20 \
+  --min-independent-proposal-precision 0.90 \
+  --min-independent-miss-recovery 0.20
+~~~
+
+Opt-in sends bounded unmatched PDF excerpts to the fixed loopback endpoint.
+Do not run on private data without authorization; ensure the local server
+does not forward requests elsewhere. Both worker runs use the same bytes
+and OCR selections. Changes to deterministic findings, checklist, coverage
+metadata or warning prefix abort scoring. Proposals earn credit only for
+labeled occurrences missed by the baseline; unsupported or redundant
+proposals count against incremental precision. Recovery divides newly
+recovered gold occurrences by all baseline-missed occurrences. Undefined
+denominators remain null. JSON reports counts, source hashes, case IDs,
+model outcomes, coverage and elapsed times, not source quotes.
+
+The command exits nonzero if any model run is unavailable or no proposals
+are admitted. Independent gates use raw counts, reject undefined metrics
+and exclude fictional cases. The distinct-pair gate rejects repetitions
+and requires an independent proposal. Targets above are engineering goals,
+not measured performance. Record exact model weights and environment
+separately; a configured model name is not a weight fingerprint.
+This measures alignment, not semantic truth, issuer authority, or
+correctness of recommended actions, and does not replace the deterministic
+release gate.
+
 ## 4. Build a useful independent evaluation corpus
 
 For the December completion gate, use a permission-safe, diverse set of
