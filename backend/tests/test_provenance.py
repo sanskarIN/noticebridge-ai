@@ -722,3 +722,30 @@ def test_parent_rejects_worker_confirming_unlabeled_cell_values(
             forged, original=original_pdf, revised=revised_pdf,
             old_name="old.pdf", new_name="new.pdf",
         )
+
+
+@pytest.mark.parametrize(("old_value", "new_value"), [
+    ("USD 300", "USD 450"),
+    ("EUR 300", "EUR 450"),
+    ("Rs. -300", "Rs. -450"),
+])
+def test_parent_rejects_forged_confirmation_on_unsupported_currency_cells(
+    pdf_bytes, old_value, new_value,
+):
+    original = pdf_bytes([[old_value]])
+    revised = pdf_bytes([[new_value]])
+    report = compare_documents(
+        extract_pdf(original, document_id="original", filename="old.pdf"),
+        extract_pdf(revised, document_id="revised", filename="new.pdf"),
+    )
+    pair = next(f for f in report.findings if f.original and f.revised)
+    assert pair.status == "possible_change"
+    modified = report.model_copy(deep=True)
+    forged = next(f for f in modified.findings if f.original and f.revised)
+    forged.status = "confirmed_change"
+    forged.summary_en, forged.summary_hi = SUMMARY_MESSAGES["confirmed_change"]
+    with pytest.raises(InvalidReportProvenance, match="unlabeled value"):
+        verify_report_provenance(
+            modified, original=original, revised=revised,
+            old_name="old.pdf", new_name="new.pdf",
+        )

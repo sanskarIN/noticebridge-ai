@@ -35,6 +35,7 @@ jobs:
       - run: pytest -q backend/tests
       - run: ruff check backend
       - run: python backend/benchmarks/generate_showcase.py --check
+      - run: python backend/benchmarks/native_table_matrix.py --json
   windows-backend:
     runs-on: windows-latest
     timeout-minutes: 20
@@ -48,6 +49,7 @@ jobs:
       - run: python backend/scripts/verify_python_constraints.py
       - run: python -m pytest -q backend/tests
       - run: python -m ruff check backend
+      - run: python backend/benchmarks/native_table_matrix.py --json
 
   frontend:
     runs-on: ubuntu-latest
