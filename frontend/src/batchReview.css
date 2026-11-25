@@ -260,3 +260,28 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.batch-review-select {
+  background: #071325;
+  color: #e8edf7;
+  border: 1px solid #50627d;
+  border-radius: 8px;
+  padding: 9px;
+  max-width: 200px;
+}
+.batch-ledger-controls {
+  justify-content: flex-start;
+  align-items: center;
+}
+.batch-ledger-controls .batch-file-control {
+  min-width: 180px;
+}
+@media (max-width: 640px) {
+  .batch-ledger-controls {
+    align-items: stretch;
+  }
+  .batch-ledger-controls .batch-file-control {
+    min-width: 0;
+  }
+}

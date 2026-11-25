@@ -5,6 +5,9 @@ import {
   type ReportPreview, type Status,
 } from './batchIndex';
 import BatchSourceReview, { type PageSelection } from './BatchSourceReview';
+import BatchLedgerPanel from './BatchLedgerPanel';
+import { reviewStateFor, reviewStateNames, reviewStates, setReviewState,
+  type ReviewLedger, type ReviewState } from './batchReviewLedger';
 import './batchReview.css';
 
 const messages: Record<BatchReadError['code'], string> = {
@@ -138,6 +141,8 @@ function CaseDetails({ row, manifestMatched }: { row: CaseSummary; manifestMatch
 export default function BatchReview() {
   const [index, setIndex] = useState<BatchIndex | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [ledger, setLedger] = useState<ReviewLedger>(() => new Map());
+  const [reviewFilter, setReviewFilter] = useState<ReviewState | 'all'>('all');
   const [manifestMatched, setManifestMatched] = useState(false);
   const [indexLoading, setIndexLoading] = useState(false);
   const [manifestLoading, setManifestLoading] = useState(false);
@@ -153,6 +158,8 @@ export default function BatchReview() {
     manifestGeneration.current++;
     setIndex(null);
     setSelected(null);
+    setLedger(new Map());
+    setReviewFilter('all');
     setManifestMatched(false);
     setIndexLoading(false);
     setManifestLoading(false);
@@ -202,7 +209,8 @@ export default function BatchReview() {
 
   const selectedRow = index?.cases.find(row => row.number === selected);
   const visibleRows = index?.cases.filter(
-    row => coverageFilter === 'all' || row.coverage !== 'all_pages_have_text',
+    row => (coverageFilter === 'all' || row.coverage !== 'all_pages_have_text') &&
+      (reviewFilter === 'all' || reviewStateFor(ledger, row) === reviewFilter),
   );
 
   return <div className="app-shell batch-shell">
@@ -259,6 +267,8 @@ export default function BatchReview() {
           </p>}
           {manifestError && <p role="alert" className="batch-error">{manifestError}</p>}
         </section>
+        <BatchLedgerPanel key={index.indexHash ?? index.manifestHash}
+          index={index} ledger={ledger} onRestore={setLedger} />
         <section className="batch-panel" aria-labelledby="batch-list-title">
           <div className="batch-toolbar">
             <h2 id="batch-list-title">3. Completed cases</h2>
@@ -269,6 +279,15 @@ export default function BatchReview() {
                 <option value="limited">Partial or inconclusive only</option>
               </select>
             </label>
+            <label>Human review filter
+              <select value={reviewFilter}
+                onChange={e => setReviewFilter(e.target.value as ReviewState | 'all')}>
+                <option value="all">All review states</option>
+                {reviewStates.map(state => <option key={state} value={state}>
+                  {reviewStateNames[state]}
+                </option>)}
+              </select>
+            </label>
           </div>
           {!visibleRows?.length ? <p>No completed cases match this view.</p> :
             <div className="batch-table-wrap">
@@ -276,11 +295,21 @@ export default function BatchReview() {
                 <caption>Saved case counts and extraction coverage</caption>
                 <thead><tr><th scope="col">Case</th><th scope="col">Findings</th>
                   <th scope="col">Review tasks</th><th scope="col">Warnings</th>
-                  <th scope="col">Text coverage</th><th scope="col">Inspect</th></tr></thead>
+                  <th scope="col">Text coverage</th><th scope="col">Human review</th>
+                  <th scope="col">Inspect</th></tr></thead>
                 <tbody>{visibleRows.map(row => <tr key={row.number}>
                   <th scope="row">{row.number}</th><td>{row.findings}</td>
                   <td>{row.reviewTasks}</td><td>{row.warnings}</td>
                   <td>{coverageNames[row.coverage]}</td>
+                  <td><select className="batch-review-select" aria-label={'Review state for case ' + row.number}
+                    value={reviewStateFor(ledger, row)} onChange={event => {
+                      const state = event.target.value as ReviewState;
+                      setLedger(previous => setReviewState(previous, row, state));
+                    }}>
+                    {reviewStates.map(state => <option key={state} value={state}>
+                      {reviewStateNames[state]}
+                    </option>)}
+                  </select></td>
                   <td><button type="button" className="batch-secondary"
                     aria-pressed={selected === row.number}
                     onClick={() => setSelected(row.number)}>Case {row.number} details</button></td>

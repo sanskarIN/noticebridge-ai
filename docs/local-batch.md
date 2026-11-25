@@ -175,3 +175,20 @@ files or loading a mismatched replacement invalidates the relevant preview.
 No file is uploaded. This is manual source inspection; a matching saved
 hash does not authenticate a notice, independently establish the accuracy
 of a quotation, or replace full engine replay.
+
+
+## Track human review progress
+
+The browser case table includes a human review marker for each completed
+case: not marked, review in progress, needs follow-up, or marked reviewed
+by the user. Markers are organizational state and never modify saved
+findings, establish issuer authority, or prove the user inspected the PDFs.
+Use the human review filter to locate follow-up cases.
+
+Export the review ledger JSON to resume your work later. It binds review
+markers to the exact batch index SHA-256, manifest SHA-256, and report
+fingerprints. Restoring a ledger validates those bindings and requires an
+explicit confirmation before replacing current markers. The optional CSV
+contains only case numbers, fixed categories, review markers, counts and
+hashes, never source quotations or PDF filenames. A new index or page
+reload clears the in-memory state. No marker is stored on a server.

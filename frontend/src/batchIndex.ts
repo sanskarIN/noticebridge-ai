@@ -44,6 +44,7 @@ export type CaseSummary = {
 };
 
 export type BatchIndex = {
+  indexHash: string | null;
   manifestHash: string;
   total: number;
   completed: number;
@@ -203,7 +204,7 @@ export function parseIndex(input: unknown): BatchIndex {
   }
   const expected = counts(index.status_counts);
   if (!equalCounts(observed, expected)) fail('counts');
-  return { manifestHash: hash(index.manifest_sha256), total, completed, complete,
+  return { indexHash: null, manifestHash: hash(index.manifest_sha256), total, completed, complete,
     counts: expected, cases };
 }
 
@@ -230,7 +231,9 @@ export async function fingerprint(data: ArrayBuffer): Promise<string> {
 }
 
 export async function readIndex(file: File): Promise<BatchIndex> {
-  return parseIndex(decode(await fileBytes(file, MAX_INDEX_BYTES)));
+  const data = await fileBytes(file, MAX_INDEX_BYTES);
+  const result = parseIndex(decode(data));
+  return { ...result, indexHash: globalThis.crypto?.subtle ? await fingerprint(data) : null };
 }
 
 function relativePdf(input: unknown): void {
