@@ -79,3 +79,45 @@ Both commands must use a compatible engine version.
 - Batch counters are not independent accuracy measurements. They must not
   be represented as precision, recall, or evidence of legal authority.
 - Use the separately labeled evaluation workflow for release quality claims.
+
+
+## Prepare pins automatically
+
+Instead of manually computing hashes, create a plan JSON beside the source
+folders containing the version and explicit original/revised paths, without
+the SHA-256 fields. The order is supplied by the user; filename dates do not
+prove chronological or official precedence.
+
+```json
+{
+  "version": 1,
+  "cases": [
+    {"original": "notices/original.pdf", "revised": "notices/revised.pdf"}
+  ]
+}
+```
+
+```bash
+python -m noticebridge.batch_cli prepare plan.json --output manifest.json
+python -m noticebridge.batch_cli check manifest.json
+```
+
+Preparation fingerprints each bounded PDF and atomically creates a new
+manifest; it never overwrites a previous pin. Keep the plan and output
+manifest in the same folder. A source check verifies the current bytes
+against every manifest fingerprint without parsing any PDF content.
+
+## Audit before replay
+
+```bash
+python -m noticebridge.batch_cli audit manifest.json --output batch-review
+```
+
+The structural audit checks source pins, generated report bytes, index
+counts and report digests, and internal evidence provenance. It does not
+independently extract quotations from the original documents; a forged but
+structurally consistent report may pass. Its output explicitly states
+engine_replayed=false. Full verification first performs the structural
+checks, then independently replays each case using a fresh worker and
+rechecks all report and index bytes. Only a successful verify command
+reports engine_replayed=true. Neither command authenticates the issuer.

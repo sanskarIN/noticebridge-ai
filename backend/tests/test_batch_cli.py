@@ -304,3 +304,175 @@ def test_cli_missing_manifest_does_not_echo_path(tmp_path, capsys):
     captured = capsys.readouterr()
     assert not captured.out
     assert "private-filename" not in captured.err
+
+
+
+@pytest.fixture
+def plan(manifest, tmp_path):
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    for case in data["cases"]:
+        case.pop("original_sha256")
+        case.pop("revised_sha256")
+    return _write(tmp_path / "plan.json", data)
+
+
+def test_prepare_preserves_explicit_order_and_pins(manifest, plan, tmp_path):
+    destination = tmp_path / "pinned.json"
+    summary = batch_cli.prepare_manifest(plan, destination)
+    assert summary["case_count"] == 2
+    assert summary["authority_verified"] is False
+    assert summary["manifest_sha256"] == _hash(destination.read_bytes())
+    assert json.loads(destination.read_bytes()) == json.loads(manifest.read_bytes())
+
+
+def test_prepare_and_check_cli_do_not_echo_private_paths(plan, tmp_path, capsys):
+    destination = tmp_path / "pinned.json"
+    assert batch_cli.main(["prepare", str(plan), "--output", str(destination)]) == 0
+    assert batch_cli.main(["check", str(destination)]) == 0
+    captured = capsys.readouterr()
+    first, second = map(json.loads, captured.out.splitlines())
+    assert first["manifest_sha256"] == second["manifest_sha256"]
+    assert second["source_pins_match"] is True
+    assert "private-original" not in captured.out
+    assert not captured.err
+
+
+def test_prepare_never_overwrites_manifest(plan, tmp_path):
+    destination = tmp_path / "pinned.json"
+    destination.write_bytes(b"private existing data")
+    with pytest.raises(batch_cli.CliError):
+        batch_cli.prepare_manifest(plan, destination)
+    assert destination.read_bytes() == b"private existing data"
+
+
+def test_prepare_rejects_destination_in_different_folder(plan, tmp_path):
+    folder = tmp_path / "nested"
+    folder.mkdir()
+    with pytest.raises(batch_cli.BatchError, match="share a directory"):
+        batch_cli.prepare_manifest(plan, folder / "pinned.json")
+    assert not list(folder.iterdir())
+
+
+@pytest.mark.parametrize("change", [
+    lambda raw: raw.update(version=True),
+    lambda raw: raw.update(version=2),
+    lambda raw: raw.update(extra="not allowed"),
+    lambda raw: raw.update(cases=[]),
+    lambda raw: raw.update(cases=raw["cases"] * 9),
+    lambda raw: raw.update(cases="not a list"),
+    lambda raw: raw["cases"][0].update(original_sha256="0" * 64),
+    lambda raw: raw["cases"][0].pop("revised"),
+    lambda raw: raw["cases"][0].update(original="../escape.pdf"),
+    lambda raw: raw["cases"].append(raw["cases"][0]),
+])
+def test_prepare_rejects_invalid_plan_without_writing(plan, tmp_path, change):
+    destination = tmp_path / "pinned.json"
+    _mutate(plan, change)
+    with pytest.raises(batch_cli.BatchError):
+        batch_cli.prepare_manifest(plan, destination)
+    assert not destination.exists()
+
+
+def test_prepare_rejects_non_pdf_bytes(plan, tmp_path):
+    data = json.loads(plan.read_bytes())
+    (tmp_path / data["cases"][1]["revised"]).write_bytes(b"not a PDF")
+    destination = tmp_path / "pinned.json"
+    with pytest.raises(batch_cli.CliError):
+        batch_cli.prepare_manifest(plan, destination)
+    assert not destination.exists()
+
+
+def test_check_manifest_detects_changed_source(manifest):
+    case = batch_cli.load_manifest(manifest).cases[1]
+    case.revised.write_bytes(b"%PDF-replaced")
+    with pytest.raises(batch_cli.BatchError, match="fingerprints"):
+        batch_cli.check_manifest(manifest)
+
+
+def test_check_manifest_never_parses_source(manifest, monkeypatch):
+    monkeypatch.setattr(
+        batch_cli, "run_isolated_comparison",
+        lambda *a, **k: pytest.fail("Pin checking must not start a worker"),
+    )
+    result = batch_cli.check_manifest(manifest)
+    assert result["source_pins_match"] is True
+    assert result["authority_verified"] is False
+
+
+def test_structural_audit_is_distinct_from_replay(manifest, tmp_path, fast_worker, monkeypatch):
+    output = tmp_path / "audit"
+    index = batch_cli.run_batch(manifest, output)
+    monkeypatch.setattr(
+        batch_cli, "verify_saved_report",
+        lambda *a, **k: pytest.fail("Structural audit must not replay the engine"),
+    )
+    audit = batch_cli.audit_batch(manifest, output)
+    assert audit["structural_checks_passed"] is True
+    assert audit["engine_replayed"] is False
+    assert audit["authority_verified"] is False
+    assert audit["status_counts"] == index["status_counts"]
+
+
+@pytest.mark.parametrize("change", [
+    lambda idx: idx.update(authority_verified=True),
+    lambda idx: idx.update(case_count=1),
+    lambda idx: idx["cases"][1].update(report_sha256="0" * 64),
+])
+def test_bad_index_rejected_before_any_replay(
+    manifest, tmp_path, fast_worker, monkeypatch, change,
+):
+    output = tmp_path / "bad-index"
+    batch_cli.run_batch(manifest, output)
+    _mutate(output / "index.json", change)
+    monkeypatch.setattr(
+        batch_cli, "verify_saved_report",
+        lambda *a, **k: pytest.fail("Tampered index reached expensive replay"),
+    )
+    with pytest.raises(batch_cli.BatchError, match="does not match"):
+        batch_cli.verify_batch(manifest, output)
+
+
+def test_browser_envelope_cannot_be_added_to_batch_report(
+    manifest, tmp_path, fast_worker,
+):
+    output = tmp_path / "envelope"
+    batch_cli.run_batch(manifest, output)
+    report_path = output / "case-001.json"
+    _mutate(report_path, lambda report: report.update(review={"authority": "fake"}))
+    _mutate(
+        output / "index.json",
+        lambda index: index["cases"][0].update(report_sha256=_hash(report_path.read_bytes())),
+    )
+    with pytest.raises(batch_cli.BatchError, match="generated report format"):
+        batch_cli.audit_batch(manifest, output)
+
+
+def test_audit_rejects_symbolic_index(manifest, tmp_path, fast_worker):
+    output = tmp_path / "audit"
+    batch_cli.run_batch(manifest, output)
+    index = output / "index.json"
+    other = tmp_path / "moved-index.json"
+    index.rename(other)
+    try:
+        index.symlink_to(other)
+    except OSError:
+        pytest.skip("Symlinks unavailable on this platform")
+    with pytest.raises(batch_cli.BatchError, match="symbolic link"):
+        batch_cli.audit_batch(manifest, output)
+
+
+def test_audit_detects_modified_source(manifest, tmp_path, fast_worker):
+    output = tmp_path / "audit"
+    batch_cli.run_batch(manifest, output)
+    batch_cli.load_manifest(manifest).cases[0].original.write_bytes(b"%PDF-changed")
+    with pytest.raises(batch_cli.BatchError):
+        batch_cli.audit_batch(manifest, output)
+
+
+def test_cli_explicit_replay_marker(manifest, tmp_path, fast_worker, capsys):
+    output = tmp_path / "markers"
+    assert batch_cli.main(["run", str(manifest), "--output", str(output)]) == 0
+    assert batch_cli.main(["audit", str(manifest), "--output", str(output)]) == 0
+    assert batch_cli.main(["verify", str(manifest), "--output", str(output)]) == 0
+    results = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [result["engine_replayed"] for result in results] == [False, False, True]
