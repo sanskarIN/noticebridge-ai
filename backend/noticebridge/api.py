@@ -4,9 +4,12 @@ import asyncio
 import unicodedata
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import JSONResponse
 
 from .body_limit import FRONTEND_ORIGINS, CompareBodyLimit
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument, parse_ocr_selection
@@ -79,7 +82,50 @@ async def _read_pdf(upload: UploadFile) -> bytes:
     return data
 
 
-@app.post("/api/compare", response_model=ComparisonReport)
+COMPARE_FORM_FIELDS = frozenset({
+    "original", "revised", "enable_ocr", "enable_semantic",
+    "original_ocr_pages", "revised_ocr_pages",
+})
+
+
+async def validate_compare_form(request: Request) -> None:
+    """Reject ambiguous input before any PDF worker or optional AI call.
+
+    FastAPI has already parsed the multipart body and owns its cleanup.
+    Request.form() returns that cached FormData, preserving repeated fields.
+    Scalar argument binding alone would silently choose the final occurrence.
+    """
+    form = await request.form()
+    seen: set[str] = set()
+    for field, _ in form.multi_items():
+        if field not in COMPARE_FORM_FIELDS or field in seen:
+            # Field names can contain submitted private data, too.
+            raise HTTPException(
+                status_code=422, detail="Unexpected or repeated comparison form field",
+            )
+        seen.add(field)
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_request_validation(request: Request, exc: RequestValidationError):
+    """Do not reflect invalid upload/form contents into comparison responses."""
+    if request.method == "POST" and request.scope.get("path") == "/api/compare":
+        # FastAPI's default error representation may include the raw invalid
+        # input value, filenames or multipart validation context. Do not echo
+        # or log these values. Known application errors remain actionable.
+        return JSONResponse(
+            status_code=422,
+            content={
+                "detail": "Invalid comparison form: provide two PDFs and valid comparison options",
+            },
+        )
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.post(
+    "/api/compare", response_model=ComparisonReport,
+    dependencies=[Depends(validate_compare_form)],
+)
 async def compare(
     original: Annotated[UploadFile, File()],
     revised: Annotated[UploadFile, File()],
