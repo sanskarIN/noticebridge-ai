@@ -449,3 +449,23 @@ test('local model selection imports only complete candidate identities and prese
   await ask(page, 'Eligibility');
   await expect(review).toHaveCount(0);
 });
+
+
+test('concise field answer preserves all value counts and links to local source pages', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Application fee: Rs. 500', 'Application fee: Rs. 600',
+    'Application fee: Rs. 700', 'Application fee: Rs. 800', 'Application fee: Rs. 900',
+  ]);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const answer = await ask(page, 'Application fee');
+  const concise = answer.getByRole('region', { name: 'Concise printed-field answer' });
+  await expect(concise.getByText('Multiple distinct printed values were found. No single value is chosen.')).toBeVisible();
+  await expect(concise.getByText(/1 additional distinct printed values not displayed/)).toBeVisible();
+  await expect(concise.getByText(/prints “Rs. 500”/)).toBeVisible();
+  await concise.getByRole('button', { name: 'Read original page 1, fragment 1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  await expect(answer.locator('blockquote')).toHaveCount(4);
+  const qualified = await ask(page, 'Application fee for rural applicants');
+  await expect(qualified.getByRole('region', { name: 'Concise printed-field answer' })).toHaveCount(0);
+});
