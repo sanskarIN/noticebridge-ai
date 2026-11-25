@@ -305,7 +305,10 @@ export default function App() {
   return <div className="app-shell">
     <header className="topbar" inert={Boolean(activePreview)}>
       <div className="brand"><span className="brand-mark">N<span>↗</span></span><span>NoticeBridge <b>AI</b></span></div>
-      <a className="repo-link" href="https://github.com/sanskarIN/noticebridge-ai">View source code</a>
+      <div className="top-actions">
+        <a className="repo-link" href="?view=batch">Inspect saved batch</a>
+        <a className="repo-link" href="https://github.com/sanskarIN/noticebridge-ai">View source code</a>
+      </div>
     </header>
     <main inert={Boolean(activePreview)}>
       <section className="hero">

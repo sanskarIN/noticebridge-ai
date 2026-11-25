@@ -113,3 +113,8 @@ GitHub Actions runs the CLI tests and smoke-checks argument discovery on both
 Linux and Windows. The tests include a live worker round-trip, report replay,
 quote-free stdout, filename checks, OCR-option boundaries and race-safe report
 publication. Successful CI does not constitute a production security review.
+
+## Multiple notice pairs
+
+For a bounded native-text batch with pinned source bytes and replay verification,
+see [local batch comparison](local-batch.md).

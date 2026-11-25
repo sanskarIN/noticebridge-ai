@@ -79,7 +79,11 @@ def _same_engine_json(raw: object, canonical: object) -> bool:
 
 
 def _load_report(path: Path) -> ComparisonReport:
-    data = _read_bounded(path, MAX_SAVED_REPORT_BYTES, "saved report")
+    return _parse_report(_read_bounded(path, MAX_SAVED_REPORT_BYTES, "saved report"))
+
+
+def _parse_report(data: bytes) -> ComparisonReport:
+    """Parse the exact bytes supplied by a bounded local report reader."""
     try:
         raw = json.loads(
             data, object_pairs_hook=_unique_object, parse_constant=_reject_nonfinite,
