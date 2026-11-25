@@ -133,7 +133,7 @@ viewer accepts 128 KiB indexes, 64 KiB manifests and individual reports up to
 
 This view checks selected bytes and basic consistency, not the complete engine
 schema, the original PDF bytes, or independently extracted quotations. A
-self-consistent modified index and report can still mislead. The browser's JSON
-parser is not the strict duplicate-member parser used by the CLI. For authoritative
+self-consistent modified index and report can still mislead. The browser rejects duplicate JSON members, invalid UTF-8, non-finite numbers
+and excessive JSON nesting before checking the supported fields. For authoritative
 local consistency checks, run the structural audit and independent replay commands.
 Use HTTPS or localhost for browser SHA-256 support.

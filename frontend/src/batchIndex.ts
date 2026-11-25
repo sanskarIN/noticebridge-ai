@@ -1,3 +1,5 @@
+import { parseStrictJson } from './strictJson';
+
 /** Read local batch exports as untrusted data. No PDF engine replay occurs here. */
 export const MAX_INDEX_BYTES = 128 * 1024;
 export const MAX_MANIFEST_BYTES = 64 * 1024;
@@ -204,7 +206,7 @@ async function fileBytes(file: File, limit: number): Promise<ArrayBuffer> {
 function decode(data: ArrayBuffer): unknown {
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(data);
-    return JSON.parse(text) as unknown;
+    return parseStrictJson(text);
   } catch {
     return fail();
   }
