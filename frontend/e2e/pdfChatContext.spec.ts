@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { answerQuestion, buildIndex, contextualMatches, queryTerms, type Passage } from '../src/pdfChatCore';
+import { answerQuestion, buildIndex, contextualMatches, queryTerms, pageCoverage, type Corpus, type Passage } from '../src/pdfChatCore';
 
 function line(text: string, ordinal: number, page = 1, role: Passage['role'] = 'original'): Passage {
   return { role, page, ordinal, text };
@@ -115,4 +115,20 @@ test('a colon field from only part of a contextual answer is not promoted', () =
   const parts = [line('Rural applicants', 1), line('Residence certificate: mandatory', 2)];
   const answer = answerQuestion(buildIndex(parts), 'rural residence certificate', 'original', true);
   expect(answer.printedFields).toEqual([]);
+});
+
+
+test('coverage distinguishes physical page availability and indexing limitations', () => {
+  const corpus: Corpus = {
+    passages: rows, pageCount: 5, processedPages: 3, limited: true,
+    missingPages: [2, 3], limitedPages: [3],
+  };
+  expect(pageCoverage(corpus, 1)).toBe('some_text');
+  expect(pageCoverage(corpus, 2)).toBe('no_indexed_text');
+  expect(pageCoverage(corpus, 3)).toBe('limited');
+  expect(pageCoverage(corpus, 4)).toBe('not_indexed');
+  expect(pageCoverage(corpus, 5)).toBe('not_indexed');
+  expect(pageCoverage(corpus, 6)).toBe('not_present');
+  expect(pageCoverage(corpus, 0)).toBe('not_present');
+  expect(pageCoverage(corpus, 1.5)).toBe('not_present');
 });

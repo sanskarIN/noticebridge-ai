@@ -236,3 +236,17 @@ test('explicit physical page filter does not silently search other pages', async
   await page.getByRole('button', { name: 'Ask PDF' }).click();
   await expect(page.getByRole('alert')).toHaveText('Use one physical PDF page number from 1 to 80.');
 });
+
+
+test('page coverage distinguishes blank and nonexistent physical pages', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', []);
+  await expect(page.getByText('Processed 1 of 1 physical PDF pages.', { exact: false })).toBeVisible();
+  const blank = await ask(page, 'Application fee on page 1?');
+  await expect(blank.getByText(/physical page 1 has no indexed text/)).toBeVisible();
+  const absent = await ask(page, 'Application fee on page 2?');
+  await expect(absent.getByText(/physical page 2 does not exist in this PDF/)).toBeVisible();
+  const whole = await ask(page, 'Application fee');
+  await expect(whole.getByText(/searchable text coverage is incomplete/)).toBeVisible();
+  await expect(whole.locator('blockquote')).toHaveCount(0);
+});
