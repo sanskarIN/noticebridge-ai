@@ -361,3 +361,40 @@ test('pending replay is discarded when the source changes', async ({ page }) => 
   await expect(page.getByRole('region', { name: 'Replay confirmation' })).toHaveCount(0);
   await expect(page.locator('.chat-turn')).toHaveCount(0);
 });
+
+
+test('semantic file exchange is consented, source-scoped and never changes the baseline', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500', 'Eligibility: Class 12']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const result = await ask(page, 'Application fee');
+  await expect(result.locator('blockquote')).toHaveText('Application fee: Rs. 500');
+  await page.getByText('Experimental semantic retrieval (local file workflow)', { exact: true }).click();
+  const exportButton = page.getByRole('button', { name: 'Export semantic retrieval request' });
+  await expect(exportButton).toBeDisabled();
+  await page.getByLabel('I understand that the exported request contains document text.').check();
+  const waiting = page.waitForEvent('download');
+  await exportButton.click();
+  const file = await waiting;
+  const data = await readFile((await file.path())!);
+  const request = JSON.parse(data.toString());
+  expect(request.passages.map((row: {id: string}) => row.id)).toEqual(['original:1:1', 'original:1:2']);
+  const ranking = {
+    format: 'noticebridge-chat-embedding-result', version: 1,
+    request_sha256: createHash('sha256').update(data).digest('hex'),
+    model: 'example-embedding:latest', model_digest: 'a'.repeat(64), dimension: 2, candidate_count: 2,
+    ranks: { original: ['original:1:2', 'original:1:1'] }, authority_verified: false,
+  };
+  const input = page.getByLabel('Import local candidate ranking');
+  await input.setInputFiles({
+    name: 'ranking.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(ranking, null, 2) + '\n'),
+  });
+  const review = page.getByRole('region', { name: 'Experimental candidate review' });
+  await expect(review.locator('blockquote')).toHaveText(['Application fee: Rs. 500', 'Eligibility: Class 12']);
+  await expect(result.locator('blockquote')).toHaveText('Application fee: Rs. 500');
+  await review.getByRole('button', { name: 'Inspect candidate source' }).nth(1).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  await ask(page, 'Eligibility');
+  await expect(review).toHaveCount(0);
+});
