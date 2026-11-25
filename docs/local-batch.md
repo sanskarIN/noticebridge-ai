@@ -192,3 +192,33 @@ explicit confirmation before replacing current markers. The optional CSV
 contains only case numbers, fixed categories, review markers, counts and
 hashes, never source quotations or PDF filenames. A new index or page
 reload clears the in-memory state. No marker is stored on a server.
+
+
+## Reconcile two human review ledgers locally
+
+Two reviewers can export their own ledgers from the browser using the same
+exact saved batch index. The local review command validates the index,
+source pins, completed evidence structure and both ledgers before comparing
+markers. It does not replay the engine or validate an issuer.
+
+```bash
+python -m noticebridge.batch_review inspect manifest.json --batch batch-review --first reviewer-a.json
+python -m noticebridge.batch_review compare manifest.json --batch batch-review --first reviewer-a.json --second reviewer-b.json --template resolution.json
+```
+
+A missing marker is not a disagreement. Matching marked states are kept;
+a single explicit marker is retained. Conflicting explicit states require a
+human decision. The optional resolution template pins both exact ledger
+digests and the index digest, and initializes conflicts with null states.
+Edit each null to one of in_progress, follow_up, reviewed or unreviewed,
+the last of which removes the marker. Do not change any digest or case
+number. A resolution cannot contain non-conflicting or repeated cases.
+
+```bash
+python -m noticebridge.batch_review merge manifest.json --batch batch-review --first reviewer-a.json --second reviewer-b.json --resolution resolution.json --output combined-review.json
+```
+
+Omit the resolution option if there are no conflicts. The combined ledger
+can be restored in the browser. No input is overwritten. This is workflow
+coordination, not independent annotation of notice accuracy; markers are
+not proof of user identity, review quality, verified evidence, or authority.

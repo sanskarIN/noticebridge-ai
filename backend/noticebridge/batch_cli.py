@@ -395,7 +395,7 @@ def _completed_prefix(manifest: Manifest, saved: dict, *, allow_partial: bool) -
         or saved.get("complete") is not (completed == len(manifest.cases))
         or saved.get("manifest_sha256") != manifest.sha256
     ):
-        raise BatchError("Invalid batch completion or manifest claims.")
+        raise BatchError("Saved batch index does not match its completion or manifest claims.")
     return completed
 
 
