@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
 const original = 'a'.repeat(64);
@@ -465,5 +466,250 @@ test('source inspection sends neither PDFs nor evidence to the API', async ({ pa
   await attachPdf(page, 'Original notice', files.old);
   await page.getByRole('button', { name: 'Inspect original notice page 1' }).click();
   await expect(page.getByText('Source page shown without a verified highlight.')).toBeVisible();
+  expect(requests).toEqual([]);
+});
+
+
+function ledgerFor(input: Fixture, state = 'reviewed') {
+  return {
+    format: 'noticebridge-batch-review-ledger',
+    version: 1,
+    index_sha256: hash(json(input.index)),
+    manifest_sha256: input.index.manifest_sha256,
+    case_count: input.index.case_count,
+    completed_count: input.index.completed_count,
+    authority_verified: false,
+    engine_replayed: false,
+    policy: 'Human review markers only; engine replay and issuer authority are not certified.',
+    reviews: [{
+      case: 1,
+      report_sha256: input.index.cases[0].report_sha256,
+      state,
+    }],
+  };
+}
+
+async function chooseLedger(page: Page, buffer: Buffer) {
+  await page.getByLabel('Restore review ledger JSON').setInputFiles(
+    file('review-ledger.json', buffer),
+  );
+}
+
+async function downloadLedger(page: Page, csv = false) {
+  const waiting = page.waitForEvent('download');
+  await page.getByRole('button', {
+    name: csv ? 'Export quote-free review CSV' : 'Export review ledger JSON',
+  }).click();
+  const download = await waiting;
+  const path = await download.path();
+  return readFile(path!);
+}
+
+test('human review markers filter cases without changing saved findings', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  const marker = page.getByLabel('Review state for case 1');
+  await expect(marker).toHaveValue('unreviewed');
+  await marker.selectOption('follow_up');
+  await page.getByLabel('Human review filter').selectOption('reviewed');
+  await expect(page.getByText('No completed cases match this view.')).toBeVisible();
+  await page.getByLabel('Human review filter').selectOption('follow_up');
+  await expect(marker).toHaveValue('follow_up');
+  await selectReport(page, input.body);
+  await expect(page.getByText('Fictional deadline: 13 December')).toBeVisible();
+  await expect(page.getByText(/Issuer authority not verified/).first()).toBeVisible();
+  await marker.selectOption('unreviewed');
+  await expect(page.getByText('No completed cases match this view.')).toBeVisible();
+});
+
+test('exports exact digest-bound human markers without saved source text', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  await page.getByLabel('Review state for case 1').selectOption('follow_up');
+  await selectReport(page, input.body);
+  await expect(page.getByText('Fictional deadline: 13 December')).toBeVisible();
+  const bytes = await downloadLedger(page);
+  const raw = JSON.parse(bytes.toString());
+  expect(raw).toEqual(ledgerFor(input, 'follow_up'));
+  expect(bytes.toString()).not.toContain('Fictional deadline');
+  expect(bytes.toString()).not.toContain('private-original.pdf');
+  expect(raw.authority_verified).toBe(false);
+  expect(raw.engine_replayed).toBe(false);
+});
+
+test('CSV export contains only fixed labels, counters and digests', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  await page.getByLabel('Review state for case 1').selectOption('in_progress');
+  const bytes = await downloadLedger(page, true);
+  const lines = bytes.toString().trim().split('\r\n');
+  expect(lines).toHaveLength(2);
+  expect(lines[0]).toContain('"human_review_state"');
+  expect(lines[0]).toContain('"authority_verified"');
+  expect(lines[1]).toContain('"in_progress","false","false"');
+  expect(lines[1]).toContain(input.index.cases[0].report_sha256);
+  expect(bytes.toString()).not.toContain('private-original.pdf');
+  expect(bytes.toString()).not.toContain('Fictional deadline');
+});
+
+test('restoring a ledger requires explicit confirmation before replacing markers', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  const marker = page.getByLabel('Review state for case 1');
+  await marker.selectOption('follow_up');
+  await chooseLedger(page, json(ledgerFor(input)));
+  const confirm = page.getByRole('region', { name: 'Review restore confirmation' });
+  await expect(confirm).toBeVisible();
+  await expect(marker).toHaveValue('follow_up');
+  await confirm.getByRole('button', { name: 'Cancel restore' }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(marker).toHaveValue('follow_up');
+  await chooseLedger(page, json(ledgerFor(input)));
+  await confirm.getByRole('button', { name: 'Apply saved markers' }).click();
+  await expect(marker).toHaveValue('reviewed');
+  await expect(page.getByText('Restored 1 human review markers.')).toBeVisible();
+});
+
+test('saved ledger can be restored after page reload', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  await page.getByLabel('Review state for case 1').selectOption('in_progress');
+  const bytes = await downloadLedger(page);
+  await openIndex(page, input);
+  const marker = page.getByLabel('Review state for case 1');
+  await expect(marker).toHaveValue('unreviewed');
+  await chooseLedger(page, bytes);
+  await page.getByRole('button', { name: 'Apply saved markers' }).click();
+  await expect(marker).toHaveValue('in_progress');
+});
+
+test('empty ledger can intentionally clear current markers after confirmation', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  const marker = page.getByLabel('Review state for case 1');
+  await marker.selectOption('reviewed');
+  const raw = ledgerFor(input);
+  raw.reviews = [];
+  await chooseLedger(page, json(raw));
+  await expect(page.getByRole('region', { name: 'Review restore confirmation' })).toBeVisible();
+  await expect(marker).toHaveValue('reviewed');
+  await page.getByRole('button', { name: 'Apply saved markers' }).click();
+  await expect(marker).toHaveValue('unreviewed');
+});
+
+test('a reserialized index is a different exact binding even when its values agree', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  await page.getByLabel('Review state for case 1').selectOption('reviewed');
+  const exported = await downloadLedger(page);
+  await page.getByLabel('Batch index (up to 128 KiB)').setInputFiles(
+    file('index.json', Buffer.from(JSON.stringify(input.index, null, 2))),
+  );
+  await expect(page.getByLabel('Review state for case 1')).toHaveValue('unreviewed');
+  await chooseLedger(page, exported);
+  await expect(page.getByRole('alert')).toHaveText(
+    'Review ledger belongs to a different exact batch index.',
+  );
+  await expect(page.getByRole('region', { name: 'Review restore confirmation' })).toHaveCount(0);
+});
+
+type LedgerFixture = ReturnType<typeof ledgerFor>;
+const invalidLedgers: [string, (ledger: LedgerFixture) => void][] = [
+  ['wrong version', raw => { raw.version = 2; }],
+  ['verified authority', raw => { raw.authority_verified = true; }],
+  ['verified replay', raw => { raw.engine_replayed = true; }],
+  ['changed policy', raw => { raw.policy = 'Fake official verification'; }],
+  ['different index', raw => { raw.index_sha256 = '0'.repeat(64); }],
+  ['different manifest', raw => { raw.manifest_sha256 = '0'.repeat(64); }],
+  ['wrong case count', raw => { raw.case_count = 2; }],
+  ['wrong completed count', raw => { raw.completed_count = 0; }],
+  ['unknown review state', raw => { raw.reviews[0].state = 'verified'; }],
+  ['explicit unmarked entry', raw => { raw.reviews[0].state = 'unreviewed'; }],
+  ['different report fingerprint', raw => { raw.reviews[0].report_sha256 = '0'.repeat(64); }],
+  ['unprocessed case', raw => { raw.reviews[0].case = 2; }],
+  ['zero case number', raw => { raw.reviews[0].case = 0; }],
+  ['duplicate review entry', raw => { raw.reviews.push({ ...raw.reviews[0] }); }],
+  ['unexpected root field', raw => { Object.assign(raw, { quote: 'private-marker-text' }); }],
+  ['unexpected entry field', raw => { Object.assign(raw.reviews[0], { quote: 'private-marker-text' }); }],
+];
+
+for (const [label, mutate] of invalidLedgers) {
+  test('rejects invalid ledger: ' + label, async ({ page }) => {
+    const input = fixture();
+    await openIndex(page, input);
+    const marker = page.getByLabel('Review state for case 1');
+    await marker.selectOption('follow_up');
+    const raw = ledgerFor(input);
+    mutate(raw);
+    await chooseLedger(page, json(raw));
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Review restore confirmation' })).toHaveCount(0);
+    await expect(marker).toHaveValue('follow_up');
+    await expect(page.getByText('private-marker-text')).toHaveCount(0);
+  });
+}
+
+test('a duplicate JSON ledger member is rejected rather than silently replaced', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  const raw = JSON.stringify(ledgerFor(input));
+  await chooseLedger(page, Buffer.from(raw.replace('"version":1', '"version":1,"version":1')));
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Review restore confirmation' })).toHaveCount(0);
+});
+
+test('a failed restore invalidates any previously staged restore candidate', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  const marker = page.getByLabel('Review state for case 1');
+  await marker.selectOption('in_progress');
+  await chooseLedger(page, json(ledgerFor(input)));
+  await expect(page.getByRole('region', { name: 'Review restore confirmation' })).toBeVisible();
+  await chooseLedger(page, Buffer.from('{}'));
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Review restore confirmation' })).toHaveCount(0);
+  await expect(marker).toHaveValue('in_progress');
+});
+
+test('unprocessed cases in a partial batch cannot receive human review markers', async ({ page }) => {
+  const input = fixture({ partial: true });
+  await openIndex(page, input);
+  await expect(page.getByLabel('Review state for case 2')).toHaveCount(0);
+  await page.getByLabel('Review state for case 1').selectOption('follow_up');
+  const raw = JSON.parse((await downloadLedger(page)).toString());
+  expect(raw.case_count).toBe(2);
+  expect(raw.completed_count).toBe(1);
+  expect(raw.reviews).toHaveLength(1);
+  expect(raw.reviews[0].case).toBe(1);
+});
+
+test('clearing a batch clears all human markers and pending import confirmation', async ({ page }) => {
+  const input = fixture();
+  await openIndex(page, input);
+  await page.getByLabel('Review state for case 1').selectOption('follow_up');
+  await chooseLedger(page, json(ledgerFor(input)));
+  await expect(page.getByRole('region', { name: 'Review restore confirmation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear workspace' }).click();
+  await expect(page.getByRole('heading', { name: 'Human review progress' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Review restore confirmation' })).toHaveCount(0);
+  await page.getByLabel('Batch index (up to 128 KiB)').setInputFiles(
+    file('index.json', json(input.index)),
+  );
+  await expect(page.getByLabel('Review state for case 1')).toHaveValue('unreviewed');
+});
+
+test('ledger export and restore never send review decisions to the API', async ({ page }) => {
+  const requests: string[] = [];
+  await page.route('**/api/**', route => {
+    requests.push(route.request().url());
+    return route.abort();
+  });
+  const input = fixture();
+  await openIndex(page, input);
+  await page.getByLabel('Review state for case 1').selectOption('follow_up');
+  const bytes = await downloadLedger(page);
+  await chooseLedger(page, bytes);
+  await page.getByRole('button', { name: 'Apply saved markers' }).click();
+  await expect(page.getByLabel('Review state for case 1')).toHaveValue('follow_up');
   expect(requests).toEqual([]);
 });
