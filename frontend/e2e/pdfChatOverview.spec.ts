@@ -33,6 +33,7 @@ for (const value of [
   'General application fee: Rs. 500', 'Application fee for staff: Rs. 50',
   'Do not pay application fee: Rs. 500',
   'Application fee: Rs. 500; Examination fee: Rs. 750',
+  'Application fee: Rs. 500; Examination fee : Rs. 750',
   'Application fee: ' + 'x'.repeat(301),
 ]) {
   test('does not promote ambiguous or unsupported label: ' + value.slice(0, 65), () => {
@@ -102,4 +103,13 @@ test('ambiguous multi-field lines may be inspected but are not promoted to a com
   const result = answerQuestion(buildIndex([fragment]), 'Application fee', 'original');
   expect(result.citations).toEqual([fragment]);
   expect(result.printedFields).toEqual([]);
+});
+
+
+test('recognized fields are cached in the document index without rewriting their source text', () => {
+  const index = buildIndex([original, revised, row('Unrecognized text', 2)]);
+  expect(index.rows[0].field?.source).toBe(original);
+  expect(index.rows[1].field?.definition.id).toBe('application_deadline');
+  expect(index.rows[2].field).toBeNull();
+  expect(index.rows[0].passage.text).toBe(original.text);
 });

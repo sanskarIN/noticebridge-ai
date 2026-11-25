@@ -256,3 +256,7 @@ may change replay results: this is a reproducible question plan, not a
 signed or independently verified historical answer record. Source
 replacement invalidates a pending import. No files are uploaded or stored
 in browser persistence by this feature.
+
+Recognized fields are computed during index construction and reused in
+bare-field retrieval and overview generation. Normalized query aliases
+are precomputed, with colliding field keys disabled rather than guessed.

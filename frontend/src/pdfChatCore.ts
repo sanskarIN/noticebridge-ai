@@ -1,5 +1,5 @@
 /** Bounded extractive document QA. Retrieval scores are not confidence probabilities. */
-import { extractKnownField, fieldDefinitions, type FieldId } from './pdfChatOverview';
+import { extractKnownField, fieldDefinitions, type ExtractedField, type FieldId } from './pdfChatOverview';
 export const MAX_QUESTION = 400;
 export const MAX_PASSAGES = 12000;
 export const MAX_PASSAGE_CHARS = 900;
@@ -60,7 +60,7 @@ function tokens(text: string): string[] {
 function terms(text: string): string[] {
   return [...new Set(tokens(text))];
 }
-export type IndexedPassage = { passage: Passage; counts: Map<string, number>; length: number };
+export type IndexedPassage = { passage: Passage; counts: Map<string, number>; length: number; field: ExtractedField | null };
 export type SearchIndex = { rows: IndexedPassage[]; df: Map<string, number>; average: number; corpusSize: number };
 export function buildIndex(passages: Passage[]): SearchIndex {
   if (passages.length > MAX_PASSAGES) throw new Error('Passage budget exceeded.');
@@ -71,7 +71,7 @@ export function buildIndex(passages: Passage[]): SearchIndex {
     const counts = new Map<string, number>();
     for (const word of words) counts.set(word, (counts.get(word) ?? 0) + 1);
     for (const word of counts.keys()) df.set(word, (df.get(word) ?? 0) + 1);
-    return { passage, counts, length: words.length };
+    return { passage, counts, length: words.length, field: extractKnownField(passage) };
   });
   return { rows, df, corpusSize: rows.length, average: Math.max(1, rows.reduce((n, row) => n + row.length, 0) / Math.max(1, rows.length)) };
 }
@@ -95,15 +95,21 @@ export function queryTerms(question: string): string[] {
 // field printed under a different recognized label. Additional qualifiers
 // must not disappear: "application fee for rural applicants" is not a bare
 // field query. If normalization makes two fields collide, abstain from expansion.
+const questionFields = new Map<string, FieldId | null>();
+function fieldKey(words: string[]): string {
+  return [...new Set(words)].sort().join('\u0000');
+}
+for (const definition of fieldDefinitions) {
+  for (const alias of definition.aliases) {
+    const key = fieldKey(terms(alias));
+    if (!key) continue;
+    const prior = questionFields.get(key);
+    questionFields.set(key, prior === undefined || prior === definition.id ? definition.id : null);
+  }
+}
+
 export function knownQuestionField(words: string[]): FieldId | null {
-  if (!words.length) return null;
-  const matching = fieldDefinitions.filter(definition =>
-    definition.aliases.some(alias => {
-      const labelWords = terms(alias);
-      return labelWords.length === words.length && words.every(word => labelWords.includes(word));
-    }),
-  );
-  return matching.length === 1 ? matching[0].id : null;
+  return questionFields.get(fieldKey(words)) ?? null;
 }
 
 function rank(index: SearchIndex, words: string[], role: Role, field: FieldId | null): { matches: Passage[]; count: number } {
@@ -113,7 +119,7 @@ function rank(index: SearchIndex, words: string[], role: Role, field: FieldId | 
   for (const row of index.rows) {
     if (row.passage.role !== role) continue;
     const lexical = words.every(word => row.counts.has(word));
-    const known = field !== null && extractKnownField(row.passage)?.definition.id === field;
+    const known = field !== null && row.field?.definition.id === field;
     if (!lexical && !known) continue;
     let score = 0;
     for (const word of words) {

@@ -58,6 +58,11 @@ const aliases = new Map<string, FieldDefinition>();
 for (const definition of fieldDefinitions) {
   for (const alias of definition.aliases) aliases.set(alias, definition);
 }
+const embeddedLabel = new RegExp('(?:^|[^\\p{L}\\p{N}])(?:' + [...aliases.keys()].map(alias =>
+  alias.replace(/[.*+?^${}()|[\]\\]/g, '\\for (const definition of fieldDefinitions) {
+  for (const alias of definition.aliases) aliases.set(alias, definition);
+}'),
+).join('|') + ')\\s*:', 'u');
 
 export type ExtractedField = {
   definition: FieldDefinition;
@@ -75,8 +80,7 @@ export function extractKnownField(passage: Passage): ExtractedField | null {
   if (!definition || !value || value.length > 300) return null;
   // A single line containing a second recognized field is ambiguous.
   // Do not promote a partial substring as the value of the first field.
-  if (fieldDefinitions.some(field => field.aliases.some(alias =>
-    normalizeLabel(value).includes(alias + ':')))) return null;
+  if (embeddedLabel.test(normalizeLabel(value))) return null;
   return { definition, label, value, source: passage };
 }
 
@@ -119,7 +123,7 @@ export function buildNoticeOverview(index: SearchIndex): OverviewField[] {
     a.passage.page - b.passage.page || a.passage.ordinal - b.passage.ordinal);
   const seen = new Set<string>();
   for (const row of sorted) {
-    const field = extractKnownField(row.passage);
+    const field = row.field;
     if (!field) continue;
     const id = field.source.role + ':' + field.source.page + ':' + field.source.ordinal;
     if (seen.has(id)) continue;
