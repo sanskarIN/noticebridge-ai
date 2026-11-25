@@ -55,7 +55,7 @@ export function requestedScope(question: string): Scope | null {
   return both || (old && revised) ? 'both' : old ? 'original' : revised ? 'revised' : null;
 }
 
-function stripScopePhrases(question: string): string {
+export function stripScopePhrases(question: string): string {
   return question.replace(/\b(?:original|previous|earlier|first|updated|revised|second)\s+(?:pdf|notice|document|version)\b/gi, ' ')
     .replace(/\bboth\s+(?:pdfs?|notices?|documents?|versions?)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();

@@ -75,3 +75,11 @@
 
 .chat-embedding-panel summary{cursor:pointer;color:#82e2c6;font-weight:600}
 .chat-embedding-consent{display:flex;align-items:flex-start;gap:8px;margin:12px 0;overflow-wrap:anywhere}
+
+
+.chat-direct-answer{margin:14px 0;padding:14px;border:1px solid #38546c;border-radius:10px;background:#101e30;overflow-wrap:anywhere}
+.chat-direct-answer h4{margin:0 0 10px;color:#82e2c6}
+.chat-direct-side+.chat-direct-side{border-top:1px solid #38546c;margin-top:12px;padding-top:8px}
+.chat-direct-value p{margin:8px 0}
+.chat-direct-links{display:flex;flex-wrap:wrap;gap:6px}
+.chat-direct-links button{max-width:100%;white-space:normal;text-align:left}

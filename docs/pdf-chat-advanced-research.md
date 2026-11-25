@@ -419,3 +419,18 @@ length-truncated responses. The request contains document text and
 should be treated as private. Result hashes are bindings, not signatures.
 No claim of actual installed-model inference, verified entailment,
 generative answer accuracy, or independent evaluation is made.
+
+
+## Concise grounded field answers
+
+For bare recognized field questions, the deterministic chat now renders
+a concise natural-language summary using the literal printed label and
+value. It scans all recognized indexed fields in the requested role
+and physical page scope, not just the top four lexical matches. This
+means conflicts beyond the retrieval display cap are still counted.
+Each displayed value links directly to its source page and fragment.
+The summary is deliberately disabled for questions with additional
+qualifiers and for ambiguous vocabulary keys. It does not infer
+equivalent dates, fees, eligibility, legal effect or official authority.
+Other matches and coverage warnings remain visible. This is templated
+extractive synthesis, not free-form generative QA.

@@ -6,6 +6,7 @@ import PdfChatSessionPanel from './PdfChatSessionPanel';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
+import PdfChatDirectAnswer from './PdfChatDirectAnswer';
 import './pdfChat.css';
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
@@ -190,7 +191,7 @@ export default function PdfChat() {
         <p className="chat-eyebrow">LOCAL DOCUMENT QUESTION ANSWERING</p>
         <h1>Chat with your PDFs</h1>
         <p>Ask about deadlines, fees, eligibility and other written requirements. Search one notice or both versions and inspect the pages yourself.</p>
-        <p className="chat-note">This is extractive question answering, not a generative language model. Files and questions stay in this browser session. A matching passage is not a verified answer or proof of official authority.</p>
+        <p className="chat-note">Default answers are generated from locally indexed source text, not by a language model. Files and questions stay in this browser unless you explicitly export them for optional local AI processing. A matching passage is not a verified answer or proof of official authority.</p>
       </section>
       <section className="chat-panel" aria-labelledby="chat-files-title">
         <div className="chat-toolbar"><h2 id="chat-files-title">1. Attach notices</h2>
@@ -242,6 +243,7 @@ export default function PdfChat() {
                 Requested source not attached: {answer.missingRoles.filter(role => !attached.includes(role)).map(role => names[role]).join(', ')}.
               </p>}
               <SearchCoverage answer={answer} slots={slots} />
+              <PdfChatDirectAnswer index={index} answer={answer} onInspect={setPreview} />
               {answer.kind === 'insufficient' && <p>No sufficiently matching passage was found. This does not establish that the answer is absent. Try more specific wording or inspect the PDF.</p>}
               {answer.missingRoles.length > 0 && answer.kind === 'passages' && <p className="chat-note">
                 No sufficiently matching passage in {answer.missingRoles.map(role => names[role]).join(', ')}.
