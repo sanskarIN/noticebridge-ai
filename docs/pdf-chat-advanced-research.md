@@ -470,3 +470,9 @@ multi-line headers or nonuniform rows. Thus all results are explicitly
 layout review candidates, not verified table facts. Independent layout
 and row/column annotation is still needed. Tests include synthetic
 position fixtures and generated PDFs with complete and missing cells.
+
+The optional table explorer shows one aligned candidate at a time,
+including explicit headers and all recognized rows. Every cell has a
+source inspection link. A guided question is offered only when the
+same parser round-trips the exact category and field, and is prefilled
+with the correct source role and physical page rather than auto-submitted.

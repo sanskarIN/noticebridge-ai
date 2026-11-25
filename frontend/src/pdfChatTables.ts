@@ -167,8 +167,14 @@ export function buildCategoryTables(corpus: Corpus): TableIndex {
 /** Explicit single field + exact category. No fuzzy category matching,
  * numeric calculations, or inference from cells in a different row.
  */
-export function tableQuestion(answer: Answer): { field: FieldId; category: string } | null {
-  const { content, page } = parsePageFilter(stripScopePhrases(answer.question));
+export function tableQuestion(answer: Pick<Answer, 'question' | 'pageFilter'>): { field: FieldId; category: string } | null {
+  // Remove only explicit source-phrase prepositions. Leaving a dangling
+  // "in" after "General category in the original notice" would turn it
+  // into a different category. Never remove arbitrary category words.
+  const sourceNeutral = answer.question
+    .replace(/\b(?:in|from|of|on)\s+(?:the\s+)?(?:original|previous|earlier|first|updated|revised|second)\s+(?:pdf|notice|document|version)\b/gi, ' ')
+    .replace(/\b(?:in|from|of|on)\s+(?:the\s+)?both\s+(?:pdfs?|notices?|documents?|versions?)\b/gi, ' ');
+  const { content, page } = parsePageFilter(stripScopePhrases(sourceNeutral));
   if (page !== answer.pageFilter) return null;
   const clean = content.replace(/[?]+$/, '').trim();
   const match = /^(.+?)\s+for\s+(.+)$/i.exec(clean);
@@ -208,4 +214,18 @@ export function answerCategoryTable(tables: readonly CategoryTable[], answer: An
   }
   if (!total) return null;
   return { ...query, matches, total, missingRoles };
+}
+
+
+/** Prefill a question only if it round-trips through the same conservative
+ * grammar to the exact field and category. The caller selects the source.
+ */
+export function tableCellQuestion(table: CategoryTable, row: number, column: number): string | null {
+  if (!Number.isInteger(row) || !Number.isInteger(column) ||
+      row < 0 || row >= table.rows.length || column < 1 || column >= table.headers.length) return null;
+  const question = table.headers[column].text + ' for ' + table.rows[row][0].text + ' on page ' + table.page + '?';
+  if (question.length > 400) return null;
+  const parsed = tableQuestion({ question, pageFilter: table.page });
+  return parsed?.field === table.fields[column - 1] && parsed.category === categoryKey(table.rows[row][0].text)
+    ? question : null;
 }

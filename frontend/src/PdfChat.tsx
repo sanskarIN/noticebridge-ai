@@ -8,6 +8,7 @@ import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
 import PdfChatDirectAnswer from './PdfChatDirectAnswer';
 import PdfChatTableAnswer from './PdfChatTableAnswer';
+import PdfChatTableExplorer from './PdfChatTableExplorer';
 import { buildCategoryTables, type TableIndex } from './pdfChatTables';
 import './pdfChat.css';
 
@@ -234,6 +235,10 @@ export default function PdfChat() {
       </section>
       {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={setPreview}
         onAsk={value => { setQuestion(value); setReuse(false); setScope('auto'); inputRef.current?.focus(); }} />}
+      {!indexing && <PdfChatTableExplorer key={generation.current.original + ':' + generation.current.revised}
+        indexes={tableIndexes} onInspect={setPreview} onAsk={(value, role) => {
+          setQuestion(value); setReuse(false); setScope(role); inputRef.current?.focus();
+        }} />}
       <section className="chat-panel" aria-labelledby="chat-title">
         <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
           <button type="button" className="chat-button" disabled={!turns.length} onClick={clearConversation}>Clear conversation</button>
