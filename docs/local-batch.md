@@ -55,8 +55,8 @@ The batch stops at the first failed comparison, preserving the completed
 prefix and publishing an explicitly incomplete index. The command exits
 nonzero and verification refuses incomplete indexes. Use a new directory
 for a retry. If interrupted before index publication, the directory is not
-a complete batch and cannot pass verification. No implicit resume or
-overwrite is provided. The total serialized evidence budget is 128 MiB,
+a complete batch and cannot pass verification. No in-place resume or
+overwrite is provided. Use the recovery command below to create a new batch. The total serialized evidence budget is 128 MiB,
 with a maximum of 64 MiB per report.
 
 Verification rereads the manifest and sources, validates exact source
@@ -137,3 +137,23 @@ self-consistent modified index and report can still mislead. The browser rejects
 and excessive JSON nesting before checking the supported fields. For authoritative
 local consistency checks, run the structural audit and independent replay commands.
 Use HTTPS or localhost for browser SHA-256 support.
+
+
+## Recover an indexed partial batch
+
+```bash
+python -m noticebridge.batch_cli audit-prefix manifest.json --output batch-review
+python -m noticebridge.batch_cli recover manifest.json --previous batch-review --output recovered
+python -m noticebridge.batch_cli verify manifest.json --output recovered
+```
+
+The prefix audit checks only the recorded completed cases; it returns a
+nonzero exit status if the batch is incomplete even when those checks
+pass. Recovery requires a valid incomplete index and the original pinned
+manifest. It checks every source, independently replays the completed
+prefix before copying each verified report into a new directory, and
+compares the remaining pairs. It never edits the previous directory.
+If replay or a remaining comparison fails, the new index records only
+its own successfully completed prefix. An interrupted directory without
+a valid index cannot be recovered through this command. Verify the new
+complete batch separately to replay every case.

@@ -476,3 +476,172 @@ def test_cli_explicit_replay_marker(manifest, tmp_path, fast_worker, capsys):
     assert batch_cli.main(["verify", str(manifest), "--output", str(output)]) == 0
     results = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [result["engine_replayed"] for result in results] == [False, False, True]
+
+
+
+@pytest.fixture
+def partial_batch(manifest, tmp_path, fast_worker, monkeypatch):
+    """Create a real completed prefix while forcing the second case to fail."""
+    run = batch_cli.run_isolated_comparison
+    calls = []
+
+    def interrupted(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 2:
+            raise ProcessingTimedOut("interrupted")
+        return run(*args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(batch_cli, "run_isolated_comparison", interrupted)
+        previous = tmp_path / "partial-batch"
+        index = batch_cli.run_batch(manifest, previous)
+        assert index["completed_count"] == 1
+    return previous
+
+
+def test_prefix_audit_validates_only_completed_cases(manifest, partial_batch):
+    result = batch_cli.audit_prefix(manifest, partial_batch)
+    assert result["case_count"] == 2
+    assert result["completed_count"] == 1
+    assert result["complete"] is False
+    assert result["engine_replayed"] is False
+    assert result["authority_verified"] is False
+
+
+def test_prefix_audit_cannot_be_mistaken_for_full_replay(manifest, partial_batch):
+    with pytest.raises(batch_cli.BatchError, match="incomplete"):
+        batch_cli.verify_batch(manifest, partial_batch)
+    with pytest.raises(batch_cli.BatchError, match="incomplete"):
+        batch_cli.audit_batch(manifest, partial_batch)
+
+
+def test_recover_replays_prefix_then_compares_remaining(
+    manifest, partial_batch, tmp_path, monkeypatch,
+):
+    original = (partial_batch / "case-001.json").read_bytes()
+    index_before = (partial_batch / "index.json").read_bytes()
+    replay = batch_cli.verify_saved_report
+    run = batch_cli.run_isolated_comparison
+    calls = []
+
+    def check(*args, **kwargs):
+        calls.append("replay")
+        return replay(*args, **kwargs)
+
+    def compare(*args, **kwargs):
+        calls.append("compare")
+        return run(*args, **kwargs)
+
+    monkeypatch.setattr(batch_cli, "verify_saved_report", check)
+    monkeypatch.setattr(batch_cli, "run_isolated_comparison", compare)
+    destination = tmp_path / "recovered"
+    result = batch_cli.recover_batch(manifest, partial_batch, destination)
+    assert result["complete"] is True
+    assert calls == ["replay", "compare"]
+    assert (destination / "case-001.json").read_bytes() == original
+    assert (partial_batch / "case-001.json").read_bytes() == original
+    assert (partial_batch / "index.json").read_bytes() == index_before
+    assert not (partial_batch / "case-002.json").exists()
+    assert batch_cli.verify_batch(manifest, destination) == result
+
+
+@pytest.mark.parametrize("key,value", [
+    ("completed_count", True), ("completed_count", -1), ("completed_count", 2),
+    ("manifest_sha256", "0" * 64), ("complete", 0), ("complete", True),
+    ("authority_verified", True),
+])
+def test_recovery_rejects_tampered_prefix_before_new_directory(
+    manifest, partial_batch, tmp_path, key, value,
+):
+    _mutate(partial_batch / "index.json", lambda index: index.update({key: value}))
+    destination = tmp_path / "recovered"
+    with pytest.raises(batch_cli.BatchError):
+        batch_cli.recover_batch(manifest, partial_batch, destination)
+    assert not destination.exists()
+
+
+def test_recovery_rejects_changed_unprocessed_source(
+    manifest, partial_batch, tmp_path, monkeypatch,
+):
+    case = batch_cli.load_manifest(manifest).cases[1]
+    case.original.write_bytes(b"%PDF-different")
+    monkeypatch.setattr(
+        batch_cli, "verify_saved_report",
+        lambda *a, **k: pytest.fail("Invalid remaining source reached replay"),
+    )
+    destination = tmp_path / "recovered"
+    with pytest.raises(batch_cli.BatchError, match="fingerprints"):
+        batch_cli.recover_batch(manifest, partial_batch, destination)
+    assert not destination.exists()
+
+
+def test_recovery_rejects_changed_completed_report(
+    manifest, partial_batch, tmp_path,
+):
+    path = partial_batch / "case-001.json"
+    _mutate(path, lambda raw: raw.update(warnings=["fabricated"]))
+    destination = tmp_path / "recovered"
+    with pytest.raises(batch_cli.BatchError):
+        batch_cli.recover_batch(manifest, partial_batch, destination)
+    assert not destination.exists()
+
+
+def test_recovery_replay_failure_is_not_a_completed_case(
+    manifest, partial_batch, tmp_path, monkeypatch,
+):
+    def fail(*args, **kwargs):
+        raise ProcessingTimedOut("private failure")
+
+    monkeypatch.setattr(batch_cli, "verify_saved_report", fail)
+    destination = tmp_path / "recovered"
+    result = batch_cli.recover_batch(manifest, partial_batch, destination)
+    assert result["completed_count"] == 0
+    assert result["complete"] is False
+    assert not (destination / "case-001.json").exists()
+    assert "private failure" not in (destination / "index.json").read_text(encoding="utf-8")
+
+
+def test_recovery_of_zero_prefix_runs_all_cases(
+    manifest, tmp_path, fast_worker, monkeypatch,
+):
+    previous = tmp_path / "empty"
+    with monkeypatch.context() as patch:
+        def fail(*args, **kwargs):
+            raise ProcessingTimedOut("interrupted")
+
+        patch.setattr(batch_cli, "run_isolated_comparison", fail)
+        assert batch_cli.run_batch(manifest, previous)["completed_count"] == 0
+    result = batch_cli.recover_batch(manifest, previous, tmp_path / "recovered")
+    assert result["complete"] is True
+
+
+def test_recovery_refuses_existing_directory(manifest, partial_batch):
+    before = (partial_batch / "index.json").read_bytes()
+    with pytest.raises(batch_cli.BatchError, match="new directory"):
+        batch_cli.recover_batch(manifest, partial_batch, partial_batch)
+    assert (partial_batch / "index.json").read_bytes() == before
+
+
+def test_recovery_refuses_already_complete_batch(manifest, tmp_path, fast_worker):
+    previous = tmp_path / "complete"
+    batch_cli.run_batch(manifest, previous)
+    with pytest.raises(batch_cli.BatchError, match="incomplete"):
+        batch_cli.recover_batch(manifest, previous, tmp_path / "new")
+
+
+def test_prefix_and_recovery_commands_report_actual_completion(
+    manifest, partial_batch, tmp_path, capsys,
+):
+    assert batch_cli.main([
+        "audit-prefix", str(manifest), "--output", str(partial_batch),
+    ]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["structural_checks_passed"] is True
+    assert not result["complete"]
+    assert batch_cli.main([
+        "recover", str(manifest), "--previous", str(partial_batch),
+        "--output", str(tmp_path / "recovered"),
+    ]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["complete"] is True
+    assert result["engine_replayed"] is False
