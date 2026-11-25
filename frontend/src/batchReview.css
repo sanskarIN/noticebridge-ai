@@ -1,0 +1,224 @@
+.batch-main {
+  max-width: 1100px;
+  padding: 32px 24px 64px;
+}
+.batch-intro {
+  max-width: 820px;
+  margin-bottom: 28px;
+}
+.batch-eyebrow {
+  color: #82e2c6;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+.batch-intro h1 {
+  font-size: clamp(32px, 5vw, 58px);
+  line-height: 1.12;
+  letter-spacing: -1.5px;
+  margin: 12px 0;
+}
+.batch-intro p, .batch-panel p {
+  line-height: 1.6;
+}
+.batch-panel {
+  border: 1px solid #33445c;
+  background: #101f33;
+  border-radius: 16px;
+  padding: clamp(16px, 3vw, 28px);
+  margin: 16px 0;
+  min-width: 0;
+}
+.batch-panel h2 {
+  font-size: 22px;
+  margin: 0 0 16px;
+}
+.batch-panel h3 {
+  font-size: 17px;
+}
+.batch-muted {
+  color: #b2c1d6;
+  font-size: 14px;
+}
+.batch-note, .batch-error {
+  border-left: 3px solid #82e2c6;
+  background: #172d3c;
+  padding: 12px 16px;
+  overflow-wrap: anywhere;
+}
+.batch-error {
+  border-color: #f7b17e;
+  background: #382b2c;
+  color: #ffe0c7;
+}
+.batch-file-row, .batch-toolbar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.batch-toolbar {
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0;
+}
+.batch-file-control, .batch-toolbar label {
+  display: grid;
+  gap: 8px;
+  color: #d5e1f2;
+  font-size: 14px;
+  min-width: 0;
+}
+.batch-file-control {
+  margin: 12px 0;
+  flex: 1;
+}
+.batch-file-control input, .batch-toolbar select {
+  background: #071325;
+  color: #e8edf7;
+  border: 1px solid #50627d;
+  border-radius: 8px;
+  padding: 9px;
+  max-width: 100%;
+  min-width: 0;
+}
+.batch-file-control input::file-selector-button {
+  background: #28495d;
+  border: 0;
+  color: #f0fff9;
+  padding: 7px 10px;
+  border-radius: 5px;
+  margin-right: 12px;
+}
+.batch-secondary {
+  padding: 10px 14px;
+  border: 1px solid #62748e;
+  background: #172a41;
+  color: #e8edf7;
+  border-radius: 8px;
+  min-height: 42px;
+}
+.batch-secondary[aria-pressed="true"] {
+  border-color: #82e2c6;
+  color: #82e2c6;
+}
+.batch-secondary:disabled {
+  opacity: .5;
+}
+.batch-shell :is(button, input, select, a):focus-visible {
+  outline: 3px solid #82e2c6;
+  outline-offset: 3px;
+}
+.batch-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 12px;
+}
+.batch-metrics div {
+  background: #071325;
+  border: 1px solid #33445c;
+  border-radius: 12px;
+  padding: 12px;
+}
+.batch-metrics dt, .batch-details dt {
+  font-size: 13px;
+  color: #b2c1d6;
+}
+.batch-metrics dd {
+  margin: 8px 0 0;
+  font-size: 27px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.batch-hash {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: #d5e1f2;
+  user-select: all;
+}
+.batch-details {
+  display: grid;
+  gap: 12px;
+}
+.batch-details dd {
+  margin: 4px 0 0;
+}
+.batch-table-wrap {
+  overflow-x: auto;
+}
+.batch-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.batch-table caption {
+  text-align: left;
+  color: #b2c1d6;
+  padding: 8px 0;
+}
+.batch-table th, .batch-table td {
+  border-bottom: 1px solid #33445c;
+  padding: 12px 10px;
+  vertical-align: middle;
+  font-size: 14px;
+}
+.batch-finding-list {
+  display: grid;
+  gap: 14px;
+}
+.batch-finding {
+  border: 1px solid #33445c;
+  background: #0b1829;
+  padding: 16px;
+  border-radius: 12px;
+}
+.batch-finding h3 {
+  margin: 0;
+}
+.batch-quote-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.batch-quote {
+  min-width: 0;
+  background: #13243a;
+  padding: 12px;
+  border-radius: 8px;
+}
+.batch-quote h4 {
+  margin: 0;
+}
+.batch-quote blockquote {
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #e8edf7;
+  line-height: 1.65;
+}
+.batch-footer {
+  color: #b2c1d6;
+  text-align: center;
+  font-size: 13px;
+  margin-top: 24px;
+}
+@media (max-width: 640px) {
+  .batch-main {
+    padding: 20px 12px 36px;
+  }
+  .batch-file-row, .batch-toolbar {
+    align-items: stretch;
+  }
+  .batch-file-control {
+    flex-basis: 100%;
+  }
+  .batch-quote-grid {
+    grid-template-columns: 1fr;
+  }
+  .batch-shell .topbar {
+    height: auto;
+    padding: 16px;
+    flex-wrap: wrap;
+  }
+}

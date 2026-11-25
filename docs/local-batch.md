@@ -121,3 +121,19 @@ engine_replayed=false. Full verification first performs the structural
 checks, then independently replays each case using a fresh worker and
 rechecks all report and index bytes. Only a successful verify command
 reports engine_replayed=true. Neither command authenticates the issuer.
+
+## Browser batch review
+
+Open the frontend and select **Inspect saved batch** in the navigation. The
+browser accepts the generated index, optionally checks the pinned manifest's
+SHA-256 and listed source fingerprints, and previews a selected case report
+whose bytes match the index digest. No files are uploaded by this view. The
+viewer accepts 128 KiB indexes, 64 KiB manifests and individual reports up to
+8 MiB; use the CLI for larger reports. It displays at most 100 saved findings.
+
+This view checks selected bytes and basic consistency, not the complete engine
+schema, the original PDF bytes, or independently extracted quotations. A
+self-consistent modified index and report can still mislead. The browser's JSON
+parser is not the strict duplicate-member parser used by the CLI. For authoritative
+local consistency checks, run the structural audit and independent replay commands.
+Use HTTPS or localhost for browser SHA-256 support.
