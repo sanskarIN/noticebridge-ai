@@ -59,9 +59,7 @@ for (const definition of fieldDefinitions) {
   for (const alias of definition.aliases) aliases.set(alias, definition);
 }
 const embeddedLabel = new RegExp('(?:^|[^\\p{L}\\p{N}])(?:' + [...aliases.keys()].map(alias =>
-  alias.replace(/[.*+?^${}()|[\]\\]/g, '\\for (const definition of fieldDefinitions) {
-  for (const alias of definition.aliases) aliases.set(alias, definition);
-}'),
+  alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
 ).join('|') + ')\\s*:', 'u');
 
 export type ExtractedField = {
