@@ -66,3 +66,9 @@
 
 .chat-overview-filter{min-width:0;max-width:100%}
 .chat-overview-filter select{width:100%;min-width:0}
+
+
+.chat-session{border-top:1px solid #33445c;padding-top:16px;margin-top:16px;overflow-wrap:anywhere}
+.chat-session h3{margin:0 0 8px}
+.chat-session-file{display:grid;gap:6px;min-width:0;max-width:100%;font-size:14px}
+.chat-session-file input{background:#071325;color:#e8edf7;border:1px solid #50627d;border-radius:8px;padding:8px;max-width:100%;min-width:0}

@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { buildIndex, MAX_QUESTION, pageCoverage, type Answer, type Corpus, type Passage, type Role } from './pdfChatCore';
-import { answerScopedQuestions, comparePrintedValues, groupPrintedValues, nearbyPassages, resolveChatQuestion, type ChatScope } from './pdfChatInsights';
+import { comparePrintedValues, groupPrintedValues, nearbyPassages, type ChatScope } from './pdfChatInsights';
+import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
+import PdfChatSessionPanel from './PdfChatSessionPanel';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
 import './pdfChat.css';
@@ -9,8 +11,7 @@ const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
 const names: Record<Role, string> = { original: 'Original / first PDF', revised: 'Updated / second PDF' };
 type Slot = { kind: 'empty' } | { kind: 'loading' } | { kind: 'error'; message: string } |
   { kind: 'ready'; file: File; corpus: Corpus };
-type Turn = { input: string; resolved: string; answers: Answer[] };
-const MAX_TURNS = 24;
+const MAX_TURNS = MAX_CHAT_TURNS;
 const examples = ['What is the application deadline?', 'What is the application fee?', 'Who can apply?', 'What are the application deadline and fee?'];
 const empty = (): Record<Role, Slot> => ({ original: { kind: 'empty' }, revised: { kind: 'empty' } });
 
@@ -70,7 +71,7 @@ export default function PdfChat() {
   const [slots, setSlots] = useState(empty);
   const [scope, setScope] = useState<ChatScope>('original');
   const [question, setQuestion] = useState('');
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [reuse, setReuse] = useState(false);
   const [includeContext, setIncludeContext] = useState(true);
   const [error, setError] = useState('');
@@ -92,6 +93,11 @@ export default function PdfChat() {
   )), [slots]);
   const ready = (role: Role) => slots[role].kind === 'ready';
   const attached = (['original', 'revised'] as const).filter(ready);
+  const files: AttachedFiles = {};
+  for (const role of attached) {
+    const slot = slots[role];
+    if (slot.kind === 'ready') files[role] = slot.file;
+  }
   const indexing = demoLoading || Object.values(slots).some(slot => slot.kind === 'loading');
   const canAsk = !indexing && (scope === 'auto' ? attached.length > 0 : scope === 'both' ? ready('original') && ready('revised') : ready(scope));
 
@@ -160,9 +166,8 @@ export default function PdfChat() {
     event.preventDefault();
     if (!canAsk || turns.length >= MAX_TURNS) return;
     try {
-      const resolved = resolveChatQuestion(question, turns.at(-1)?.resolved ?? null, reuse);
-      const answers = answerScopedQuestions(index, resolved, scope, attached, includeContext);
-      setTurns(old => [...old, { input: question.trim(), resolved, answers }]);
+      const turn = runChatStep(index, { input: question.trim(), scope, includeContext, reuse }, turns.at(-1), attached);
+      setTurns(old => [...old, turn]);
       setQuestion('');
       setReuse(false);
       setPreview(null);
@@ -272,6 +277,11 @@ export default function PdfChat() {
           </article>)}
           <div ref={latestRef} />
         </div>
+        {!indexing && attached.length > 0 && <PdfChatSessionPanel
+          key={generation.current.original + ':' + generation.current.revised}
+          files={files} index={index} turns={turns} onRestore={restored => {
+            clearConversation(); setTurns(restored); setQuestion('');
+          }} />}
         <form className="chat-form" onSubmit={ask}>
           <label>Search scope
             <select value={scope} onChange={event => setScope(event.target.value as ChatScope)}>

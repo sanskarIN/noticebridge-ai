@@ -236,3 +236,23 @@ chat comparisons. The original extracted label and full quoted source
 remain available. A fragment containing a second recognized printed
 field is excluded from compact field extraction rather than partially
 interpreted.
+
+
+## Portable local question plans
+
+A local export stores up to 24 questions, each question's explicit search
+scope, nearby-line setting and follow-up flag, plus SHA-256 fingerprints of
+the exact attached PDF bytes under their source roles. It never saves
+answer text, citations, extracted fragments or filenames. Questions can
+themselves contain sensitive text; the user explicitly downloads the file.
+
+Replay requires HTTPS or localhost Web Crypto, the same exact source set
+and bytes, a bounded 64 KiB UTF-8 question-plan file and the canonical
+version-1 export format. Noncanonical JSON (including duplicate members
+or unknown fields) is rejected. Every question is recomputed through the
+same local engine, including follow-up resolution, before an explicit
+confirmation replaces the current conversation. A change in engine version
+may change replay results: this is a reproducible question plan, not a
+signed or independently verified historical answer record. Source
+replacement invalidates a pending import. No files are uploaded or stored
+in browser persistence by this feature.
