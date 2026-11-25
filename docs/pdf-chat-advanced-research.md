@@ -440,3 +440,33 @@ date. Opening and closing question patterns remain distinct; general
 window questions require matching window text. Conversation replay and
 clearing invalidate pending experimental model exchanges even when the
 last question text is unchanged.
+
+
+## Experimental aligned category-table question answering
+
+The browser now retains optional native-text position hints (horizontal
+unrotated text, finite baseline and width). These are not verified
+highlight rectangles. A separate bounded detector looks for 2–4 aligned
+columns headed by an explicit category label and recognized notice field
+labels, then at least two complete, consistently spaced rows. It rejects
+nearby incomplete, duplicate-category, overlapping, misaligned or wrapped
+rows rather than inferring missing cells. Pages with unavailable geometry,
+partial extraction or more than 512 fragments are skipped. At most 32
+candidate tables per document and 40 rows per table are retained.
+
+Questions of the form "Application fee for General category?" use exact
+normalized category and recognized field keys, constrained to the
+requested document role and physical page. The returned candidate
+preserves four separate source fragments: category header, field header,
+category cell and value cell. It links to the source page, keeps conflicting
+values across pages and roles, and never replaces the ordinary lexical
+answer. There is no fuzzy category equivalence, currency/date conversion,
+OCR, merged-cell inference, or official applicability decision.
+
+Unlike the existing server-side ruled-grid extraction, this browser
+experiment uses text alignment alone. Unrelated columns can mimic a
+table, and real tables may have right-aligned values, merged cells,
+multi-line headers or nonuniform rows. Thus all results are explicitly
+layout review candidates, not verified table facts. Independent layout
+and row/column annotation is still needed. Tests include synthetic
+position fixtures and generated PDFs with complete and missing cells.

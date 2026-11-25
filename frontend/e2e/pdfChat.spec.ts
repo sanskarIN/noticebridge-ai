@@ -7,6 +7,9 @@ function pdf(lines: string[]): Buffer {
   const stream = lines.map((line, i) =>
     'BT /F1 12 Tf 40 ' + (720 - i * 30) + ' Td (' + line + ') Tj ET\n',
   ).join('');
+  return pdfStream(stream);
+}
+function pdfStream(stream: string): Buffer {
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Count 1 /Kids [3 0 R] >>',
@@ -495,4 +498,65 @@ test('same-question replay with a different scope invalidates old model exchange
   await page.getByText('Experimental semantic retrieval (local file workflow)', { exact: true }).click();
   await expect(page.getByLabel('I understand that the exported request contains document text.')).not.toBeChecked();
   await expect(page.getByLabel('Import local candidate ranking')).toBeDisabled();
+});
+
+
+function categoryTablePdf(missing = false, changed = false): Buffer {
+  const lines = [
+    ['Category', 'Application fee', 'Examination fee'],
+    ['General', changed ? 'Rs. 350' : 'Rs. 500', 'Rs. 800'],
+    ['Reserved', missing ? '' : 'Rs. 250', 'Rs. 400'],
+  ];
+  const xs = [40, 220, 420];
+  const stream = lines.flatMap((row, i) => row.flatMap((cell, j) => cell
+    ? ['BT /F1 12 Tf ' + xs[j] + ' ' + (720 - i * 30) + ' Td (' + cell + ') Tj ET\n']
+    : [])).join('');
+  return pdfStream(stream);
+}
+
+test('aligned PDF table supports category-specific questions and source inspection', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'table.pdf', mimeType: 'application/pdf', buffer: categoryTablePdf(),
+  });
+  await expect(page.getByText('1 aligned category table candidates.')).toBeVisible();
+  const answer = await ask(page, 'What is the application fee for Reserved category?');
+  const table = answer.getByRole('region', { name: 'Aligned table evidence candidates' });
+  await expect(table).toBeVisible();
+  await expect(table.getByText('Rs. 250', { exact: true })).toBeVisible();
+  await expect(table.getByText('Rs. 500', { exact: true })).toHaveCount(0);
+  await expect(table.getByText('Rs. 400', { exact: true })).toHaveCount(0);
+  await table.getByRole('button', { name: 'Inspect table candidate 1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  const other = await ask(page, 'Examination fee for General');
+  await expect(other.getByRole('region', { name: 'Aligned table evidence candidates' }).getByText('Rs. 800', { exact: true })).toBeVisible();
+});
+test('an incomplete PDF table is not promoted to a category answer', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'table.pdf', mimeType: 'application/pdf', buffer: categoryTablePdf(true),
+  });
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const answer = await ask(page, 'Application fee for Reserved');
+  await expect(answer.getByRole('region', { name: 'Aligned table evidence candidates' })).toHaveCount(0);
+});
+test('table values are source-scoped and never silently choose one version', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'first.pdf', mimeType: 'application/pdf', buffer: categoryTablePdf(),
+  });
+  await page.getByLabel('Updated / second PDF', { exact: true }).setInputFiles({
+    name: 'second.pdf', mimeType: 'application/pdf', buffer: categoryTablePdf(false, true),
+  });
+  await expect(page.getByText('1 aligned category table candidates.')).toHaveCount(2);
+  await page.getByLabel('Search scope').selectOption('both');
+  const answer = await ask(page, 'Application fee for General');
+  const table = answer.getByRole('region', { name: 'Aligned table evidence candidates' });
+  await expect(table.getByText('Rs. 500', { exact: true })).toBeVisible();
+  await expect(table.getByText('Rs. 350', { exact: true })).toBeVisible();
+  await page.getByLabel('Search scope').selectOption('revised');
+  const selected = await ask(page, 'Application fee for General');
+  const scoped = selected.getByRole('region', { name: 'Aligned table evidence candidates' });
+  await expect(scoped.getByText('Rs. 350', { exact: true })).toBeVisible();
+  await expect(scoped.getByText('Rs. 500', { exact: true })).toHaveCount(0);
 });
