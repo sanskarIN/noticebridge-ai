@@ -109,8 +109,13 @@ function CaseDetails({ row, manifestMatched }: { row: CaseSummary; manifestMatch
           <h3>Finding {finding.number} · {statusNames[finding.status]}</h3>
           <p className="batch-muted">Saved category: {finding.category}</p>
           <div className="batch-quote-grid">
-            <SourceQuote title="Original notice" quote={finding.original} />
-            <SourceQuote title="Updated notice" quote={finding.revised} />
+            {finding.supporting.length ? finding.supporting.map((quote, i) =>
+              <SourceQuote key={i} quote={quote}
+                title={quote.role === 'original' ? 'Original notice' : 'Updated notice'} />) :
+              <>
+                <SourceQuote title="Original notice" quote={finding.original} />
+                <SourceQuote title="Updated notice" quote={finding.revised} />
+              </>}
           </div>
         </article>)}
       </div>

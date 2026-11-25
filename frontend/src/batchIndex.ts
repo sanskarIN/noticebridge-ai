@@ -57,6 +57,7 @@ export type FindingPreview = {
   category: string;
   original: Quote | null;
   revised: Quote | null;
+  supporting: (Quote & { role: 'original' | 'revised' })[];
 };
 
 export type ReportPreview = {
@@ -299,9 +300,23 @@ export async function inspectReport(file: File, row: CaseSummary): Promise<Repor
     ids.add(item.id);
     const original = quote(item.original, 'original');
     const revised = quote(item.revised, 'revised');
-    if (!original && !revised) fail();
+    if (!Array.isArray(item.supporting_evidence) || item.supporting_evidence.length > 2) fail();
+    const supporting = item.supporting_evidence.map(input => {
+      const evidence = object(input);
+      const role = evidence.document_id;
+      if (role !== 'original' && role !== 'revised') fail();
+      const parsed = quote(evidence, role);
+      if (!parsed) fail();
+      return { ...parsed, role };
+    });
+    if (kind === 'contradiction') {
+      if (original || revised || supporting.length !== 2 ||
+          supporting[0].role !== supporting[1].role ||
+          supporting[0].page !== supporting[1].page) fail();
+    } else if ((!original && !revised) || supporting.length) fail();
     if (i < MAX_FINDING_PREVIEW) findings.push({
-      number: i + 1, status: kind, category: item.category as string, original, revised,
+      number: i + 1, status: kind, category: item.category as string,
+      original, revised, supporting,
     });
   });
   if (!equalCounts(observed, row.counts)) fail('counts');
