@@ -115,3 +115,49 @@ def test_rejected_request_does_not_prevent_subsequent_valid_comparison(pdf_bytes
         assert response.status_code == 200, response.text
         assert response.json()["semantic_assistance"] == "not_requested"
         assert response.json()["automatic_ocr"] is False
+
+
+@pytest.mark.parametrize("option", [
+    "enable_ocr", "enable_semantic", "original_ocr_pages", "revised_ocr_pages",
+])
+def test_file_parts_cannot_supply_text_options(guarded_client, pdf_bytes, option):
+    files = _files(pdf_bytes) + [
+        (option, ("private-options.txt", b"true", "text/plain")),
+    ]
+    _assert_private_rejection(
+        guarded_client.post("/api/compare", files=files), INVALID, "private-options.txt",
+    )
+
+
+@pytest.mark.parametrize("option", ["enable_ocr", "enable_semantic"])
+@pytest.mark.parametrize("value", ["", "1", "0", "yes", "no", "on", "off", "TRUE", " true "])
+def test_noncanonical_boolean_values_are_rejected(
+    guarded_client, pdf_bytes, option, value,
+):
+    files = _files(pdf_bytes) + [(option, (None, value))]
+    _assert_private_rejection(guarded_client.post("/api/compare", files=files), INVALID)
+
+
+@pytest.mark.parametrize(("ocr", "semantic"), [
+    ("false", "false"), ("true", "false"), ("false", "true"), ("true", "true"),
+])
+def test_only_explicit_canonical_consent_is_forwarded(
+    monkeypatch, pdf_bytes, ocr, semantic,
+):
+    recorded = []
+    runner = api.run_isolated_comparison
+
+    def record(*args, **kwargs):
+        recorded.append((kwargs["enable_ocr"], kwargs["enable_semantic"]))
+        # The test verifies consent routing without invoking optional AI or OCR.
+        kwargs.update(enable_ocr=False, enable_semantic=False)
+        return runner(*args, **kwargs)
+
+    monkeypatch.setattr(api, "run_isolated_comparison", record)
+    files = _files(pdf_bytes) + [
+        ("enable_ocr", (None, ocr)), ("enable_semantic", (None, semantic)),
+    ]
+    with TestClient(api.app) as client:
+        response = client.post("/api/compare", files=files)
+    assert response.status_code == 200, response.text
+    assert recorded == [(ocr == "true", semantic == "true")]

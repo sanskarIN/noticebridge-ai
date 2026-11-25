@@ -82,10 +82,12 @@ async def _read_pdf(upload: UploadFile) -> bytes:
     return data
 
 
-COMPARE_FORM_FIELDS = frozenset({
-    "original", "revised", "enable_ocr", "enable_semantic",
+COMPARE_FILE_FIELDS = frozenset({"original", "revised"})
+COMPARE_BOOLEAN_FIELDS = frozenset({"enable_ocr", "enable_semantic"})
+COMPARE_FORM_FIELDS = COMPARE_FILE_FIELDS | COMPARE_BOOLEAN_FIELDS | frozenset({
     "original_ocr_pages", "revised_ocr_pages",
 })
+INVALID_COMPARE_FORM = "Invalid comparison form: provide two PDFs and valid comparison options"
 
 
 async def validate_compare_form(request: Request) -> None:
@@ -97,13 +99,23 @@ async def validate_compare_form(request: Request) -> None:
     """
     form = await request.form()
     seen: set[str] = set()
-    for field, _ in form.multi_items():
+    for field, value in form.multi_items():
         if field not in COMPARE_FORM_FIELDS or field in seen:
             # Field names can contain submitted private data, too.
             raise HTTPException(
                 status_code=422, detail="Unexpected or repeated comparison form field",
             )
         seen.add(field)
+
+    # Validate types and consent only after checking every field name and
+    # multiplicity. This prevents order-dependent handling of duplicate parts.
+    for field, value in form.multi_items():
+        if (field in COMPARE_FILE_FIELDS) == isinstance(value, str):
+            raise HTTPException(status_code=422, detail=INVALID_COMPARE_FORM)
+        if field in COMPARE_BOOLEAN_FIELDS and value not in ("true", "false"):
+            # Do not infer consent from an empty field or Pydantic's permissive
+            # boolean aliases such as "on", "yes" or "1".
+            raise HTTPException(status_code=422, detail=INVALID_COMPARE_FORM)
 
 
 @app.exception_handler(RequestValidationError)
@@ -115,9 +127,7 @@ async def handle_request_validation(request: Request, exc: RequestValidationErro
         # or log these values. Known application errors remain actionable.
         return JSONResponse(
             status_code=422,
-            content={
-                "detail": "Invalid comparison form: provide two PDFs and valid comparison options",
-            },
+            content={"detail": INVALID_COMPARE_FORM},
         )
     return await request_validation_exception_handler(request, exc)
 
