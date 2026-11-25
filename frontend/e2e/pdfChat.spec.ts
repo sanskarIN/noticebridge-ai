@@ -197,3 +197,25 @@ test('automatic scope answers separate versions and does not substitute a missin
   await expect(result.locator('.chat-answer').nth(0).locator('blockquote')).toHaveText('Application fee: Rs. 500');
   await expect(result.locator('.chat-answer').nth(1).locator('blockquote')).toHaveText('Application fee: Rs. 350');
 });
+
+
+test('nearby-line fallback shows separate source fragments and can be disabled', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Applications from rural districts', 'must include a residence certificate',
+  ]);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const result = await ask(page, 'Rural residence certificate');
+  await expect(result.getByRole('heading', { name: 'Nearby matching fragments' })).toBeVisible();
+  await expect(result.locator('blockquote')).toHaveText([
+    'Applications from rural districts', 'must include a residence certificate',
+  ]);
+  await expect(result.getByText('Context fragment, not a standalone answer')).toHaveCount(2);
+  await expect(result.getByRole('heading', { name: 'Printed values in matching passages' })).toHaveCount(0);
+  await result.getByRole('button', { name: 'Inspect source [2]' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  await page.getByLabel('Search nearby lines when no single line matches').uncheck();
+  const strict = await ask(page, 'Rural residence certificate');
+  await expect(strict.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
+  await expect(strict.locator('blockquote')).toHaveCount(0);
+});
