@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
         _publish_report(args.output, (json.dumps(result, indent=2) + "\n").encode("utf-8"))
     except (EmbeddingError, CliError, OSError):
         # Never print a request path, source quote, HTTP response or model output.
-        print("Embedding experiment failed. Check local settings, request and output.", file=sys.stderr)
+        print("Embedding experiment failed. Check local settings and files.", file=sys.stderr)
         return 2
     print("Local candidate ranking written; no answer or authority verified.")
     return 0
