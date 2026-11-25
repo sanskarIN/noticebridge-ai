@@ -398,3 +398,54 @@ test('semantic file exchange is consented, source-scoped and never changes the b
   await ask(page, 'Eligibility');
   await expect(review).toHaveCount(0);
 });
+
+
+test('local model selection imports only complete candidate identities and preserves baseline', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500', 'Application fee: Rs. 750']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const answer = await ask(page, 'Application fee');
+  await expect(answer.locator('blockquote')).toHaveText(['Application fee: Rs. 500', 'Application fee: Rs. 750']);
+  await page.getByText('Experimental local AI selection (local file workflow)', { exact: true }).click();
+  const button = page.getByRole('button', { name: 'Export evidence selection request' });
+  await expect(button).toBeDisabled();
+  await page.getByLabel('I approve exporting candidate text for local AI selection.').check();
+  const waiting = page.waitForEvent('download');
+  await button.click();
+  const data = await readFile((await (await waiting).path())!);
+  const request = JSON.parse(data.toString());
+  expect(request.passages.map((row: {id: string}) => row.id)).toEqual(['original:1:1', 'original:1:2']);
+  const proposal = {
+    format: 'noticebridge-chat-selection-result', version: 1,
+    request_sha256: createHash('sha256').update(data).digest('hex'),
+    model: 'example-local:latest', model_digest: 'a'.repeat(64),
+    selection: { status: 'select', ids: ['original:1:2'] },
+    authority_verified: false,
+  };
+  const input = page.getByLabel('Import local AI selection');
+  await input.setInputFiles({
+    name: 'selection.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(proposal, null, 2) + '\n'),
+  });
+  const review = page.getByRole('region', { name: 'Local AI selection review' });
+  await expect(review.locator('blockquote')).toHaveText('Application fee: Rs. 750');
+  await expect(review.getByText(/did not select 1 baseline evidence fragments/)).toBeVisible();
+  await expect(answer.locator('blockquote')).toHaveText(['Application fee: Rs. 500', 'Application fee: Rs. 750']);
+  await review.getByRole('button', { name: 'Inspect selected source' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  await input.setInputFiles({
+    name: 'selection.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ ...proposal, selection: { status: 'insufficient', ids: [] } }, null, 2) + '\n'),
+  });
+  await expect(review.getByRole('heading', { name: 'Local model abstained' })).toBeVisible();
+  await expect(review.locator('blockquote')).toHaveCount(0);
+  await expect(answer.locator('blockquote')).toHaveCount(2);
+  await input.setInputFiles({
+    name: 'selection.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ ...proposal, selection: { status: 'select', ids: ['revised:1:1'] } }, null, 2) + '\n'),
+  });
+  await expect(page.getByRole('alert')).toHaveText('Evidence selection rejected. Use the exact result for this request.');
+  await expect(review).toHaveCount(0);
+  await ask(page, 'Eligibility');
+  await expect(review).toHaveCount(0);
+});

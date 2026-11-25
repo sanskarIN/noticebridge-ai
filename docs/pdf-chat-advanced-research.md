@@ -381,3 +381,41 @@ An imported file is not signed: a dishonest local process can report
 arbitrary permitted ranks and model metadata. Treat them only as
 unverified review suggestions. No actual model benchmark or real model
 runtime compatibility has been established yet.
+
+
+## Local LLM evidence selection experiment implemented
+
+The first generative-model integration uses a deliberately narrower
+contract than free-form RAG or the earlier offset prototype. Instead of
+asking a language model to generate answer prose or calculate character
+offsets, it selects full candidate fragment IDs or explicitly abstains.
+The structured generation response uses Ollama /api/generate, with
+a schema-constrained response and independent strict parsing.
+
+The browser supplies deterministic citations first, then optional hybrid
+ranking candidates, deduplicated and bounded to 12 full passages per
+source. All baseline evidence is retained in the request; the original
+chat answer is never modified. Imported selection files must match the
+request hash and canonical result format. The browser resolves IDs
+against its in-memory source fragments rather than trusting model quotes.
+If the model omits baseline evidence, the UI explicitly reports that
+omission. A model abstention is not an assertion that evidence is absent.
+
+After a single question, expand Experimental local AI selection and
+explicitly approve exporting candidate text. Optionally import a semantic
+ranking first to supplement the deterministic candidate set. With an
+already installed, trusted local-only generation model and its exact
+inventory digest, run from the backend directory:
+
+```bash
+python -m noticebridge.chat_selection_cli noticebridge-selection-request.json --output selection.json --model MODEL:TAG --digest EXACT_64_HEX_DIGEST --allow-local-processing
+```
+
+Replace placeholders with the exact local model name and digest. Import
+selection.json in the same question. No remote endpoint, tool execution,
+download, or automatic retry is enabled. The bounded client checks the
+installed model before and after inference and rejects incomplete or
+length-truncated responses. The request contains document text and
+should be treated as private. Result hashes are bindings, not signatures.
+No claim of actual installed-model inference, verified entailment,
+generative answer accuracy, or independent evaluation is made.
