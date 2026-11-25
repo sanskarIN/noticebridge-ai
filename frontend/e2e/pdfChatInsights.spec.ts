@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { answerQuestion, buildIndex, type Passage } from '../src/pdfChatCore';
 import { answerQuestionSet, comparePrintedValues, groupPrintedValues, nearbyPassages,
-  planQuestions, resolveChatQuestion } from '../src/pdfChatInsights';
+  planQuestions, resolveChatQuestion, requestedScope, effectiveScope, answerScopedQuestions } from '../src/pdfChatInsights';
 
 const rows: Passage[] = [
   { role: 'original', page: 1, ordinal: 1, text: 'Fictional notice only' },
@@ -105,4 +105,34 @@ test('source context includes at most two neighboring fragments per side', () =>
     role: 'original', page: 1, ordinal: i + 1, text: 'Fragment ' + (i + 1),
   }));
   expect(nearbyPassages(buildIndex(many), many[5])).toEqual(many.slice(3, 8));
+});
+
+
+test('automatic scope recognizes only explicit source-version phrases', () => {
+  expect(requestedScope('Fee in the original notice?')).toBe('original');
+  expect(requestedScope('Deadline in the updated PDF?')).toBe('revised');
+  expect(requestedScope('Eligibility in both versions?')).toBe('both');
+  expect(requestedScope('Original notice versus revised notice')).toBe('both');
+  expect(requestedScope('New applicants with old certificates')).toBeNull();
+  expect(requestedScope('Current registration date')).toBeNull();
+});
+test('auto scope uses attached roles only when no explicit role is requested', () => {
+  expect(effectiveScope('Application fee', 'auto', ['revised'])).toBe('revised');
+  expect(effectiveScope('Application fee', 'auto', ['original', 'revised'])).toBe('both');
+  expect(effectiveScope('Fee in the original notice', 'auto', ['revised'])).toBe('original');
+  expect(effectiveScope('Fee in the updated notice', 'original', ['original', 'revised'])).toBe('original');
+});
+test('each explicit question can select a different source automatically', () => {
+  const answers = answerScopedQuestions(index,
+    'Application fee in original notice? Application fee in updated notice?', 'auto', ['original', 'revised']);
+  expect(answers.map(answer => answer.scope)).toEqual(['original', 'revised']);
+  expect(answers[0].citations).toEqual([rows[2]]);
+  expect(answers[1].citations).toEqual([rows[5]]);
+});
+test('auto scope never substitutes the available source for a missing requested source', () => {
+  const partial = buildIndex(rows.filter(row => row.role === 'original'));
+  const answer = answerScopedQuestions(partial, 'Application fee in updated notice?', 'auto', ['original'])[0];
+  expect(answer.scope).toBe('revised');
+  expect(answer.kind).toBe('insufficient');
+  expect(answer.missingRoles).toEqual(['revised']);
 });

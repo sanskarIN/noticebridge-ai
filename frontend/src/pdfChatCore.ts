@@ -27,7 +27,12 @@ const ALIASES: Record<string, string> = {
   registration: 'registration', register: 'registration',
 };
 function tokens(text: string): string[] {
-  return (text.normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+  const normalized = text.normalize('NFKC').toLowerCase()
+    .replace(/\b(?:last date|closing date|cut-off date|cutoff date|due date)\b/g, 'deadline')
+    .replace(/\bapplications? (?:close|closes)\b/g, 'application deadline')
+    .replace(/\bapplication charges?\b/g, 'application fee')
+    .replace(/\b(?:eligibility criteria|eligibility conditions)\b/g, 'eligibility');
+  return (normalized.match(/[\p{L}\p{N}]+/gu) ?? [])
     .map(word => Object.prototype.hasOwnProperty.call(ALIASES, word) ? ALIASES[word] : word)
     .filter(word => !STOP.has(word));
 }
@@ -55,8 +60,11 @@ function queryTerms(question: string): string[] {
   const expanded = question
     .replace(/\blast date\b/gi, 'deadline')
     .replace(/\bclosing date\b/gi, 'deadline')
-    .replace(/\bhow much\b/gi, 'fee')
-    .replace(/\bwho can apply\b/gi, 'eligibility')
+    // Do not turn "how much time" or "how much experience" into a fee query.
+    .replace(/\bhow much\b/gi, '')
+    .replace(/\bwho (?:can|may|is eligible to) apply\b/gi, 'eligibility')
+    .replace(/\bwhen do applications close\b/gi, 'application deadline')
+    .replace(/\bwhat (?:is|are) the (documents|certificates) (?:needed|required)\b/gi, 'required $1')
     .replace(/\bwhen (?:can|do|should|must) (?:i|we) apply\b/gi, 'application deadline')
     .replace(/\bwhen is the application due\b/gi, 'application deadline');
   return terms(expanded);

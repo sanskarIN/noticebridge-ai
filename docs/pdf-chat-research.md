@@ -116,3 +116,20 @@ A follow-up can reuse a single previous question only. Multi-question turns
 require an explicit new question rather than guessing which subquestion the
 user means. Prior trailing question punctuation is removed before adding
 context so that a follow-up does not accidentally become two searches.
+
+
+## Notice phrase normalization and automatic source selection
+
+The lexical baseline normalizes a small set of notice-specific phrases
+in both query and extracted text, including "last date", "closing date"
+and "application charges". This avoids asymmetric synonym matching.
+"How much" alone is not a fee indicator; questions about duration or
+experience must not be converted into fee queries. Aliases affect retrieval
+only; the original extracted wording is always retained for citations.
+
+Auto scope is an optional selection. Explicit phrases such as "original
+notice", "updated PDF", or "both versions" determine each independent
+question's source scope. Otherwise it searches the attached source(s).
+An explicitly requested but unattached source produces no matching evidence;
+the other source is never silently substituted. Explicit manual scope
+selection remains available and takes precedence when chosen.

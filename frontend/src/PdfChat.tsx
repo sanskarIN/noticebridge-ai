@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { buildIndex, MAX_QUESTION, type Answer, type Corpus, type Passage, type Role, type Scope } from './pdfChatCore';
-import { answerQuestionSet, comparePrintedValues, groupPrintedValues, nearbyPassages, resolveChatQuestion } from './pdfChatInsights';
+import { buildIndex, MAX_QUESTION, type Answer, type Corpus, type Passage, type Role } from './pdfChatCore';
+import { answerScopedQuestions, comparePrintedValues, groupPrintedValues, nearbyPassages, resolveChatQuestion, type ChatScope } from './pdfChatInsights';
 import { readPdf } from './pdfChatExtract';
 import './pdfChat.css';
 
@@ -40,7 +40,7 @@ function PrintedInsights({ answer }: { answer: Answer }) {
 
 export default function PdfChat() {
   const [slots, setSlots] = useState(empty);
-  const [scope, setScope] = useState<Scope>('original');
+  const [scope, setScope] = useState<ChatScope>('original');
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [reuse, setReuse] = useState(false);
@@ -62,7 +62,8 @@ export default function PdfChat() {
     slot.kind === 'ready' ? slot.corpus.passages : [],
   )), [slots]);
   const ready = (role: Role) => slots[role].kind === 'ready';
-  const canAsk = scope === 'both' ? ready('original') && ready('revised') : ready(scope);
+  const attached = (['original', 'revised'] as const).filter(ready);
+  const canAsk = scope === 'auto' ? attached.length > 0 : scope === 'both' ? ready('original') && ready('revised') : ready(scope);
 
   function clearConversation() {
     setTurns([]);
@@ -130,7 +131,7 @@ export default function PdfChat() {
     if (!canAsk || turns.length >= MAX_TURNS) return;
     try {
       const resolved = resolveChatQuestion(question, turns.at(-1)?.resolved ?? null, reuse);
-      const answers = answerQuestionSet(index, resolved, scope);
+      const answers = answerScopedQuestions(index, resolved, scope, attached);
       setTurns(old => [...old, { input: question.trim(), resolved, answers }]);
       setQuestion('');
       setReuse(false);
@@ -225,12 +226,14 @@ export default function PdfChat() {
         </div>
         <form className="chat-form" onSubmit={ask}>
           <label>Search scope
-            <select value={scope} onChange={event => setScope(event.target.value as Scope)}>
+            <select value={scope} onChange={event => setScope(event.target.value as ChatScope)}>
+              <option value="auto">Auto (explicit source wording)</option>
               <option value="original">Original / first PDF</option>
               <option value="revised">Updated / second PDF</option>
               <option value="both">Both PDFs</option>
             </select>
           </label>
+          <p className="chat-muted">Auto scope recognizes phrases such as “original notice”, “updated notice” and “both PDFs”. If a requested source is missing, it will not substitute another PDF.</p>
           <div className="chat-examples">{examples.map(example =>
             <button type="button" key={example} className="chat-button" onClick={() => {
               setQuestion(example); setReuse(false); inputRef.current?.focus();

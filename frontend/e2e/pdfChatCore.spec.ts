@@ -106,3 +106,24 @@ test('follow-up context is explicit and bounded', () => {
   expect(() => resolveQuestion('follow-up', null, true)).toThrow();
   expect(() => resolveQuestion('a'.repeat(200), 'b'.repeat(200), true)).toThrow();
 });
+
+
+test('notice phrase normalization works on both question and PDF text', () => {
+  const source: Passage = { role: 'original', page: 1, ordinal: 1,
+    text: 'Application last date: 13 December 2026' };
+  const result = answerQuestion(buildIndex([source]), 'What is the application deadline?', 'original');
+  expect(result.citations).toEqual([source]);
+  expect(result.printedFields[0]).toEqual({ citation: 1, label: 'Application last date', value: '13 December 2026' });
+});
+test('how much time is not a fee question', () => {
+  const source: Passage = { role: 'original', page: 1, ordinal: 1,
+    text: 'Application time: 30 minutes' };
+  const result = answerQuestion(buildIndex([source, rows[1]]), 'How much application time?', 'original');
+  expect(result.citations).toEqual([source]);
+});
+test('application charges retain original printed wording', () => {
+  const source: Passage = { role: 'original', page: 1, ordinal: 1, text: 'Application charges: Rs. 500' };
+  const result = answerQuestion(buildIndex([source]), 'What is the application fee?', 'original');
+  expect(result.citations).toEqual([source]);
+  expect(result.printedFields[0]?.label).toBe('Application charges');
+});

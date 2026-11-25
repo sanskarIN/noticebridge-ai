@@ -39,6 +39,37 @@ export function resolveChatQuestion(input: string, previous: string | null, reus
   return resolveQuestion(input, prior, true);
 }
 
+export type ChatScope = Scope | 'auto';
+
+/** Recognize only explicit version phrases, never bare words such as
+ * "new", "old" or "current" that might refer to the notice's subject.
+ */
+export function requestedScope(question: string): Scope | null {
+  const old = /\b(?:original|previous|earlier|first)\s+(?:pdf|notice|document|version)\b/i.test(question);
+  const revised = /\b(?:updated|revised|second)\s+(?:pdf|notice|document|version)\b/i.test(question);
+  const both = /\bboth\s+(?:pdfs?|notices?|documents?|versions?)\b/i.test(question);
+  return both || (old && revised) ? 'both' : old ? 'original' : revised ? 'revised' : null;
+}
+
+export function effectiveScope(question: string, selection: ChatScope, attached: Role[]): Scope {
+  if (selection !== 'auto') return selection;
+  const explicit = requestedScope(question);
+  if (explicit) return explicit;
+  if (attached.includes('original') && attached.includes('revised')) return 'both';
+  return attached.includes('revised') ? 'revised' : 'original';
+}
+
+export function answerScopedQuestions(
+  index: SearchIndex, question: string, selection: ChatScope, attached: Role[],
+): Answer[] {
+  return planQuestions(question).map(part => {
+    const scope = effectiveScope(part, selection, attached);
+    // The existing ranker already abstains for an unavailable role. Do
+    // not replace a requested but absent source with the other document.
+    return answerQuestion(index, part, scope);
+  });
+}
+
 export type PrintedValueGroup = {
   label: string;
   role: Role;
