@@ -157,3 +157,21 @@ If replay or a remaining comparison fails, the new index records only
 its own successfully completed prefix. An interrupted directory without
 a valid index cannot be recovered through this command. Verify the new
 complete batch separately to replay every case.
+
+
+## Inspect the actual source PDFs
+
+For an opened case, attach the original and updated PDF separately in the
+source inspection panel. Each file is limited to 10 MiB; its bytes must
+match the role-specific saved SHA-256 before the viewer will render it.
+The application creates an immutable snapshot of the checked bytes for the
+local PDF.js viewer, rather than rereading unchecked filesystem bytes.
+
+Use a finding's source-page button to display its recorded page. Valid
+saved geometry is passed to the existing rotation-aware renderer, which
+may reject a mismatched rectangle. Missing geometry displays an
+unhighlighted page, not a guessed rectangle. Changing cases, clearing
+files or loading a mismatched replacement invalidates the relevant preview.
+No file is uploaded. This is manual source inspection; a matching saved
+hash does not authenticate a notice, independently establish the accuracy
+of a quotation, or replace full engine replay.

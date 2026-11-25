@@ -52,7 +52,18 @@ export type BatchIndex = {
   cases: CaseSummary[];
 };
 
-export type Quote = { page: number; text: string };
+export type SourceRole = 'original' | 'revised';
+export type QuoteGeometry = {
+  bbox: [number, number, number, number];
+  page_width: number;
+  page_height: number;
+  page_rotation: 0 | 90 | 180 | 270;
+};
+export type Quote = {
+  page: number;
+  text: string;
+  geometry: QuoteGeometry | null;
+};
 export type FindingPreview = {
   number: number;
   status: Status;
@@ -212,7 +223,7 @@ function decode(data: ArrayBuffer): unknown {
   }
 }
 
-async function fingerprint(data: ArrayBuffer): Promise<string> {
+export async function fingerprint(data: ArrayBuffer): Promise<string> {
   if (!globalThis.crypto?.subtle) fail('crypto');
   const result = await globalThis.crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(result), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -250,7 +261,28 @@ export async function checkManifest(file: File, index: BatchIndex): Promise<void
   });
 }
 
-function quote(input: unknown, role: 'original' | 'revised'): Quote | null {
+function quoteGeometry(value: Obj): QuoteGeometry | null {
+  // A preview is allowed without a highlight when the saved geometry cannot
+  // be established. Never invent coordinates or silently repair the box.
+  const { bbox, page_width, page_height, page_rotation } = value;
+  if (!Array.isArray(bbox) || bbox.length !== 4 ||
+      !bbox.every(n => typeof n === 'number' && Number.isFinite(n)) ||
+      typeof page_width !== 'number' || !Number.isFinite(page_width) || page_width <= 0 ||
+      typeof page_height !== 'number' || !Number.isFinite(page_height) || page_height <= 0 ||
+      (page_rotation !== 0 && page_rotation !== 90 &&
+        page_rotation !== 180 && page_rotation !== 270)) return null;
+  const [x0, y0, x1, y1] = bbox as number[];
+  const width = page_rotation % 180 ? page_height : page_width;
+  const height = page_rotation % 180 ? page_width : page_height;
+  if (x0 >= x1 || y0 >= y1 || x1 <= 0 || y1 <= 0 || x0 >= width || y0 >= height) {
+    return null;
+  }
+  return {
+    bbox: [x0, y0, x1, y1], page_width, page_height, page_rotation,
+  };
+}
+
+function quote(input: unknown, role: SourceRole): Quote | null {
   if (input === null) return null;
   const value = object(input);
   if (value.document_id !== role || value.extraction_method !== 'native' ||
@@ -258,7 +290,7 @@ function quote(input: unknown, role: 'original' | 'revised'): Quote | null {
   const page = count(value.page, 80);
   if (!page) fail();
   const text = value.text.length > MAX_QUOTE ? value.text.slice(0, MAX_QUOTE) + '…' : value.text;
-  return { page, text };
+  return { page, text, geometry: quoteGeometry(value) };
 }
 
 function checkSourceDocuments(input: unknown, expected: HashPair): void {
@@ -335,4 +367,26 @@ export async function inspectReport(file: File, row: CaseSummary): Promise<Repor
     fail('counts');
   }
   return { findings, truncated: row.findings > MAX_FINDING_PREVIEW, count: row.findings };
+}
+
+
+export const MAX_SOURCE_PDF_BYTES = 10 * 1024 * 1024;
+
+/** Bind the selected immutable File to its saved SHA-256 before PDF.js sees it. */
+export async function checkSourcePdf(file: File, expected: string): Promise<File> {
+  hash(expected);
+  if (!file.name.toLowerCase().endsWith('.pdf')) fail('source');
+  const data = await fileBytes(file, MAX_SOURCE_PDF_BYTES);
+  // Match the local CLI's PDF signature expectation, allowing leading ASCII
+  // whitespace without decoding arbitrary binary PDF contents as text.
+  const bytes = new Uint8Array(data);
+  let offset = 0;
+  while (offset < bytes.length &&
+    (bytes[offset] === 32 || (bytes[offset] >= 9 && bytes[offset] <= 13))) offset++;
+  const signature = [37, 80, 68, 70, 45];
+  if (!signature.every((byte, i) => bytes[offset + i] === byte)) fail('source');
+  if (await fingerprint(data) !== expected) fail('hash');
+  // Freeze the exact checked bytes into a new immutable File snapshot rather
+  // than relying on a filesystem-backed File being read identically later.
+  return new File([data], 'matched-source.pdf', { type: 'application/pdf' });
 }

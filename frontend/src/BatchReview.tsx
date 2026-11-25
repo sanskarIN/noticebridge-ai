@@ -4,6 +4,7 @@ import {
   statuses, statusNames, type BatchIndex, type CaseSummary, type FindingPreview,
   type ReportPreview, type Status,
 } from './batchIndex';
+import BatchSourceReview, { type PageSelection } from './BatchSourceReview';
 import './batchReview.css';
 
 const messages: Record<BatchReadError['code'], string> = {
@@ -23,19 +24,22 @@ function Hash({ value }: { value: string }) {
   return <code className="batch-hash">{value}</code>;
 }
 
-function SourceQuote({ title, quote }: {
-  title: string; quote: FindingPreview['original'];
+function SourceQuote({ title, quote, onOpen }: {
+  title: string; quote: FindingPreview['original']; onOpen: () => void;
 }) {
   return <div className="batch-quote">
     <h4>{title}</h4>
     {quote ? <><p className="batch-muted">Saved page reference: {quote.page}</p>
-      <blockquote>{quote.text}</blockquote></> : <p className="batch-muted">No saved passage.</p>}
+      <blockquote>{quote.text}</blockquote>
+      <button type="button" className="batch-secondary batch-open-source"
+        onClick={onOpen}>Inspect {title.toLowerCase()} page {quote.page}</button></> : <p className="batch-muted">No saved passage.</p>}
   </div>;
 }
 
 function CaseDetails({ row, manifestMatched }: { row: CaseSummary; manifestMatched: boolean }) {
   const [preview, setPreview] = useState<ReportPreview | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selection, setSelection] = useState<PageSelection | null>(null);
   const [feedback, setFeedback] = useState('');
   const [filter, setFilter] = useState<Status | 'all'>('all');
   const generation = useRef(0);
@@ -49,6 +53,7 @@ function CaseDetails({ row, manifestMatched }: { row: CaseSummary; manifestMatch
     setPreview(null);
     setFeedback('');
     setFilter('all');
+    setSelection(null);
     setLoading(true);
     try {
       const result = await inspectReport(file, row);
@@ -64,6 +69,7 @@ function CaseDetails({ row, manifestMatched }: { row: CaseSummary; manifestMatch
     generation.current++;
     setPreview(null);
     setFeedback('');
+    setSelection(null);
     setLoading(false);
   }
 
@@ -111,15 +117,21 @@ function CaseDetails({ row, manifestMatched }: { row: CaseSummary; manifestMatch
           <div className="batch-quote-grid">
             {finding.supporting.length ? finding.supporting.map((quote, i) =>
               <SourceQuote key={i} quote={quote}
-                title={quote.role === 'original' ? 'Original notice' : 'Updated notice'} />) :
+                title={quote.role === 'original' ? 'Original notice' : 'Updated notice'}
+                onOpen={() => setSelection({ role: quote.role, quote })} />) :
               <>
-                <SourceQuote title="Original notice" quote={finding.original} />
-                <SourceQuote title="Updated notice" quote={finding.revised} />
+                <SourceQuote title="Original notice" quote={finding.original}
+                  onOpen={() => finding.original &&
+                    setSelection({ role: 'original', quote: finding.original })} />
+                <SourceQuote title="Updated notice" quote={finding.revised}
+                  onOpen={() => finding.revised &&
+                    setSelection({ role: 'revised', quote: finding.revised })} />
               </>}
           </div>
         </article>)}
       </div>
     </div>}
+    <BatchSourceReview row={row} selection={selection} onClose={() => setSelection(null)} />
   </section>;
 }
 

@@ -222,3 +222,41 @@
     flex-wrap: wrap;
   }
 }
+
+
+.batch-open-source {
+  margin-top: 12px;
+}
+.batch-source-panel {
+  border-top: 1px solid #33445c;
+  margin-top: 24px;
+  padding-top: 20px;
+}
+.batch-source-slots {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.batch-source-slot, .batch-page-panel {
+  border: 1px solid #33445c;
+  background: #0b1829;
+  border-radius: 12px;
+  padding: 16px;
+  min-width: 0;
+}
+.batch-page-panel {
+  margin-top: 20px;
+}
+.batch-page-panel .pdf-stage {
+  max-height: min(70vh, 700px);
+  overflow: auto;
+}
+.batch-page-panel h3:focus {
+  outline: 2px solid #82e2c6;
+  outline-offset: 5px;
+}
+@media (max-width: 640px) {
+  .batch-source-slots {
+    grid-template-columns: 1fr;
+  }
+}
