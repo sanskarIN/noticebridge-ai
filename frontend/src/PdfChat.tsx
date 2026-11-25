@@ -63,7 +63,8 @@ export default function PdfChat() {
   )), [slots]);
   const ready = (role: Role) => slots[role].kind === 'ready';
   const attached = (['original', 'revised'] as const).filter(ready);
-  const canAsk = scope === 'auto' ? attached.length > 0 : scope === 'both' ? ready('original') && ready('revised') : ready(scope);
+  const indexing = demoLoading || Object.values(slots).some(slot => slot.kind === 'loading');
+  const canAsk = !indexing && (scope === 'auto' ? attached.length > 0 : scope === 'both' ? ready('original') && ready('revised') : ready(scope));
 
   function clearConversation() {
     setTurns([]);
@@ -196,6 +197,9 @@ export default function PdfChat() {
               {answers.length > 1 && <h4 className="chat-subquestion">Question {part + 1}: {answer.question}</h4>}
               <h3>{answer.kind === 'passages' ? 'Relevant source passages' : 'Insufficient matching evidence'}</h3>
               <p className="chat-muted">Scope: {answer.scope === 'both' ? 'Both PDFs' : names[answer.scope]}</p>
+              {answer.missingRoles.some(role => !attached.includes(role)) && <p className="chat-note">
+                Requested source not attached: {answer.missingRoles.filter(role => !attached.includes(role)).map(role => names[role]).join(', ')}.
+              </p>}
               {answer.kind === 'insufficient' && <p>No sufficiently matching passage was found. This does not establish that the answer is absent. Try more specific wording or inspect the PDF.</p>}
               {answer.missingRoles.length > 0 && answer.kind === 'passages' && <p className="chat-note">
                 No sufficiently matching passage in {answer.missingRoles.map(role => names[role]).join(', ')}.
@@ -247,7 +251,7 @@ export default function PdfChat() {
             <span className="chat-muted">{question.length}/{MAX_QUESTION} · {turns.length}/{MAX_TURNS} turns</span>
             <button type="submit" className="primary-button" disabled={!canAsk || !question.trim() || turns.length >= MAX_TURNS}>Ask PDF</button>
           </div>
-          {!canAsk && <p className="chat-muted">Attach the PDF or PDFs selected in the scope before asking.</p>}
+          {!canAsk && <p className="chat-muted">{indexing ? 'Finish indexing the selected PDFs before asking.' : 'Attach the PDF or PDFs selected in the scope before asking.'}</p>}
           {turns.length >= MAX_TURNS && <p className="chat-note">Conversation limit reached. Clear the conversation to continue.</p>}
           {error && <p role="alert" className="chat-error">{error}</p>}
         </form>

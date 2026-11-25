@@ -36,7 +36,9 @@ export function resolveChatQuestion(input: string, previous: string | null, reus
     throw new Error('A follow-up must be one question.');
   }
   const prior = previous.replace(/[?;]+$/g, '').trim();
-  return resolveQuestion(input, prior, true);
+  // A new explicit version request supersedes a prior version phrase.
+  const context = requestedScope(input) ? stripScopePhrases(prior) : prior;
+  return resolveQuestion(input, context, true);
 }
 
 export type ChatScope = Scope | 'auto';
@@ -49,6 +51,12 @@ export function requestedScope(question: string): Scope | null {
   const revised = /\b(?:updated|revised|second)\s+(?:pdf|notice|document|version)\b/i.test(question);
   const both = /\bboth\s+(?:pdfs?|notices?|documents?|versions?)\b/i.test(question);
   return both || (old && revised) ? 'both' : old ? 'original' : revised ? 'revised' : null;
+}
+
+function stripScopePhrases(question: string): string {
+  return question.replace(/\b(?:original|previous|earlier|first|updated|revised|second)\s+(?:pdf|notice|document|version)\b/gi, ' ')
+    .replace(/\bboth\s+(?:pdfs?|notices?|documents?|versions?)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
 }
 
 export function effectiveScope(question: string, selection: ChatScope, attached: Role[]): Scope {
@@ -66,7 +74,8 @@ export function answerScopedQuestions(
     const scope = effectiveScope(part, selection, attached);
     // The existing ranker already abstains for an unavailable role. Do
     // not replace a requested but absent source with the other document.
-    return answerQuestion(index, part, scope);
+    const content = stripScopePhrases(part);
+    return { ...answerQuestion(index, content || '?', scope), question: part };
   });
 }
 

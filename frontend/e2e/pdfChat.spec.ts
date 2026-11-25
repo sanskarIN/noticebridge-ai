@@ -181,3 +181,19 @@ test('nearby context is kept separate from the answer quotations', async ({ page
   await expect(panel.getByText('Refund policy: No refunds', { exact: true })).toBeVisible();
   await expect(result.getByText('Refund policy: No refunds', { exact: true })).toHaveCount(0);
 });
+
+
+test('automatic scope answers separate versions and does not substitute a missing source', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  await page.getByLabel('Search scope').selectOption('auto');
+  const missing = await ask(page, 'Application fee in updated notice?');
+  await expect(missing.getByText(/Requested source not attached/)).toBeVisible();
+  await expect(missing.locator('blockquote')).toHaveCount(0);
+  await attach(page, 'Updated / second PDF', ['Application fee: Rs. 350']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  const result = await ask(page, 'Fee in first document? Fee in second version?');
+  await expect(result.locator('.chat-answer').nth(0).locator('blockquote')).toHaveText('Application fee: Rs. 500');
+  await expect(result.locator('.chat-answer').nth(1).locator('blockquote')).toHaveText('Application fee: Rs. 350');
+});

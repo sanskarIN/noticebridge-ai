@@ -136,3 +136,18 @@ test('auto scope never substitutes the available source for a missing requested 
   expect(answer.kind).toBe('insufficient');
   expect(answer.missingRoles).toEqual(['revised']);
 });
+
+
+test('explicit source phrases are not accidental required lexical terms', () => {
+  const answers = answerScopedQuestions(index, 'Fee in first document? Fee in second version?', 'auto', ['original', 'revised']);
+  expect(answers[0].citations).toEqual([rows[2]]);
+  expect(answers[1].citations).toEqual([rows[5]]);
+  expect(answerScopedQuestions(index, 'Fee in both versions?', 'auto', ['original', 'revised'])[0].citations)
+    .toEqual([rows[2], rows[5]]);
+});
+test('follow-up changes explicit role without carrying a stale source phrase', () => {
+  const resolved = resolveChatQuestion('What about the revised notice?', 'Fee in the original notice?', true);
+  const answer = answerScopedQuestions(index, resolved, 'auto', ['original', 'revised'])[0];
+  expect(answer.scope).toBe('revised');
+  expect(answer.citations).toEqual([rows[5]]);
+});
