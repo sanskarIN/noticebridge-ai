@@ -24,7 +24,10 @@ MAX_DIMENSIONS = 2048
 BATCH_SIZE = 16
 MAX_RESULTS_PER_ROLE = 8
 TIMEOUT_SECONDS = 30
-MODEL_NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.:/-]{0,95}")
+MODEL_NAME = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}(?:/[A-Za-z0-9][A-Za-z0-9_.-]{0,63})?"
+    r":[A-Za-z0-9][A-Za-z0-9_.-]{0,63}"
+)
 DIGEST = re.compile(r"[a-f0-9]{64}")
 PASSAGE_ID = re.compile(r"(original|revised):([1-9][0-9]?):([1-9][0-9]{0,5})")
 FORMAT = "noticebridge-chat-embedding-request"
@@ -96,7 +99,7 @@ def parse_request(raw: bytes) -> Request:
 
 
 def validate_model(model: str, digest: str) -> None:
-    if not MODEL_NAME.fullmatch(model) or "cloud" in model.casefold():
+    if len(model) > 96 or not MODEL_NAME.fullmatch(model) or "cloud" in model.casefold():
         raise EmbeddingError("Specify an installed local embedding model.")
     if not DIGEST.fullmatch(digest):
         raise EmbeddingError("Specify the installed model's exact SHA-256 digest.")

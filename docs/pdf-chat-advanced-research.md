@@ -344,3 +344,40 @@ UTF-16 offsets, surrogate boundaries, and overlapping spans. It returns
 only locally resolved source substrings and source objects. Tests include
 malformed proposals and attempted source spoofing. It is not integrated
 with a runtime and cannot prove entailment or sufficient context.
+
+
+## Local embedding experiment implemented
+
+The bounded Python adapter uses Ollama's documented /api/embed endpoint
+(https://docs.ollama.com/api/embed), with array input and truncate=false.
+Before and after inference it checks the exact installed model name and
+digest in /api/tags. The user must separately configure Ollama local-only
+mode (https://docs.ollama.com/faq); a loopback address and manifest digest
+cannot attest that the service is trustworthy or cloud-disabled.
+The CLI requires explicit consent, has no remote endpoint, automatic
+download, model generation or external network fallback. Its asyncio
+deadline covers the client work; cancellation cannot guarantee a model
+server stops computation immediately.
+
+In the browser, use the experimental semantic retrieval panel after
+one question. Explicitly approve the export of the full scoped indexed
+text. The request is limited to 512 fragments; narrow the physical page
+or source if necessary. Run from backend (with the existing dependencies
+installed) against an already installed, trusted local embedding model:
+
+```bash
+python -m noticebridge.chat_embedding_cli noticebridge-embedding-request.json --output ranking.json --model MODEL:TAG --digest EXACT_64_HEX_DIGEST --allow-local-processing
+```
+
+Replace the placeholders with the exact installed name and digest.
+Do not upload request files to a shared service. The output is an
+atomic no-overwrite JSON of candidate IDs, request hash and model
+metadata, not vectors, quotes or answers. Import it in the same chat
+question while the request remains in memory. The browser validates
+the request digest, schema, canonical result encoding and role-specific
+candidate sets before local reciprocal rank fusion. It renders all
+candidate text from its own index, separate from the unchanged answer.
+An imported file is not signed: a dishonest local process can report
+arbitrary permitted ranks and model metadata. Treat them only as
+unverified review suggestions. No actual model benchmark or real model
+runtime compatibility has been established yet.

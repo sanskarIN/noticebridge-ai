@@ -72,3 +72,6 @@
 .chat-session h3{margin:0 0 8px}
 .chat-session-file{display:grid;gap:6px;min-width:0;max-width:100%;font-size:14px}
 .chat-session-file input{background:#071325;color:#e8edf7;border:1px solid #50627d;border-radius:8px;padding:8px;max-width:100%;min-width:0}
+
+.chat-embedding-panel summary{cursor:pointer;color:#82e2c6;font-weight:600}
+.chat-embedding-consent{display:flex;align-items:flex-start;gap:8px;margin:12px 0;overflow-wrap:anywhere}

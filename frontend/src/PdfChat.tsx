@@ -5,6 +5,7 @@ import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from '
 import PdfChatSessionPanel from './PdfChatSessionPanel';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
+import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
 import './pdfChat.css';
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
@@ -277,6 +278,9 @@ export default function PdfChat() {
           </article>)}
           <div ref={latestRef} />
         </div>
+        {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel
+          key={generation.current.original + ':' + generation.current.revised + ':' + turns.length + ':' + turns.at(-1)!.resolved}
+          index={index} answer={turns.at(-1)!.answers[0]} onInspect={setPreview} />}
         {!indexing && attached.length > 0 && <PdfChatSessionPanel
           key={generation.current.original + ':' + generation.current.revised}
           files={files} index={index} turns={turns} onRestore={restored => {
