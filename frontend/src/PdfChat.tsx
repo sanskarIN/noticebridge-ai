@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { buildIndex, MAX_QUESTION, type Answer, type Corpus, type Passage, type Role } from './pdfChatCore';
+import { buildIndex, MAX_QUESTION, pageCoverage, type Answer, type Corpus, type Passage, type Role } from './pdfChatCore';
 import { answerScopedQuestions, comparePrintedValues, groupPrintedValues, nearbyPassages, resolveChatQuestion, type ChatScope } from './pdfChatInsights';
 import { readPdf } from './pdfChatExtract';
 import './pdfChat.css';
@@ -12,6 +12,33 @@ type Turn = { input: string; resolved: string; answers: Answer[] };
 const MAX_TURNS = 24;
 const examples = ['What is the application deadline?', 'What is the application fee?', 'Who can apply?', 'What are the application deadline and fee?'];
 const empty = (): Record<Role, Slot> => ({ original: { kind: 'empty' }, revised: { kind: 'empty' } });
+
+function SearchCoverage({ answer, slots }: { answer: Answer; slots: Record<Role, Slot> }) {
+  const roles: Role[] = answer.scope === 'both' ? ['original', 'revised'] : [answer.scope];
+  const warnings = roles.flatMap(role => {
+    const slot = slots[role];
+    if (slot.kind !== 'ready') return [];
+    const corpus = slot.corpus;
+    if (answer.pageFilter !== undefined) {
+      const page = answer.pageFilter;
+      const state = pageCoverage(corpus, page);
+      const description = state === 'not_present' ? 'does not exist in this PDF.'
+        : state === 'not_indexed' ? 'was not indexed within the processing limits.'
+        : state === 'no_indexed_text' ? 'has no indexed text. It may contain scanned or image-only material.'
+        : state === 'limited' ? 'was indexed only partially because processing limits were reached.'
+        : null;
+      return description ? [names[role] + ': physical page ' + page + ' ' + description] : [];
+    }
+    if (corpus.limited || corpus.missingPages.length) {
+      return [names[role] + ': searchable text coverage is incomplete. Some pages or fragments were not indexed.'];
+    }
+    return [];
+  });
+  return warnings.length ? <div className="chat-note" aria-label="Search coverage limitations">
+    {warnings.map(warning => <p key={warning}>{warning}</p>)}
+  </div> : null;
+}
+
 
 function PrintedInsights({ answer }: { answer: Answer }) {
   const groups = groupPrintedValues(answer);
@@ -173,6 +200,8 @@ export default function PdfChat() {
               {slot.kind === 'ready' && <>
                 <p className="chat-filename">{slot.file.name}</p>
                 <p role="status">{slot.corpus.passages.length} extracted passages available.</p>
+                <p className="chat-muted">Processed {slot.corpus.processedPages} of {slot.corpus.pageCount} physical PDF pages. Embedded text is not proof of complete page coverage.</p>
+                {slot.corpus.limitedPages.length > 0 && <p className="chat-note">Processing limits affected pages {slot.corpus.limitedPages.join(', ')}.</p>}
                 {slot.corpus.missingPages.length > 0 && <p className="chat-note">
                   No indexed text on pages {slot.corpus.missingPages.join(', ')}. Inspect scanned or image-only pages directly.
                 </p>}
@@ -203,6 +232,7 @@ export default function PdfChat() {
               {answer.missingRoles.some(role => !attached.includes(role)) && <p className="chat-note">
                 Requested source not attached: {answer.missingRoles.filter(role => !attached.includes(role)).map(role => names[role]).join(', ')}.
               </p>}
+              <SearchCoverage answer={answer} slots={slots} />
               {answer.kind === 'insufficient' && <p>No sufficiently matching passage was found. This does not establish that the answer is absent. Try more specific wording or inspect the PDF.</p>}
               {answer.missingRoles.length > 0 && answer.kind === 'passages' && <p className="chat-note">
                 No sufficiently matching passage in {answer.missingRoles.map(role => names[role]).join(', ')}.

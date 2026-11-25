@@ -5,7 +5,24 @@ export const MAX_PASSAGE_CHARS = 900;
 export type Role = 'original' | 'revised';
 export type Scope = Role | 'both';
 export type Passage = { role: Role; page: number; text: string; ordinal: number };
-export type Corpus = { passages: Passage[]; missingPages: number[]; limited: boolean };
+export type Corpus = {
+  passages: Passage[];
+  missingPages: number[];
+  limited: boolean;
+  pageCount: number;
+  processedPages: number;
+  limitedPages: number[];
+};
+export type PageCoverage = 'not_present' | 'not_indexed' | 'no_indexed_text' | 'limited' | 'some_text';
+
+/** "Some text" never means complete extraction, including image or hidden text. */
+export function pageCoverage(corpus: Corpus, page: number): PageCoverage {
+  if (!Number.isSafeInteger(page) || page < 1 || page > corpus.pageCount) return 'not_present';
+  if (page > corpus.processedPages) return 'not_indexed';
+  if (corpus.limitedPages.includes(page)) return 'limited';
+  if (corpus.missingPages.includes(page)) return 'no_indexed_text';
+  return 'some_text';
+}
 export type Answer = {
   kind: 'passages' | 'insufficient';
   scope: Scope;

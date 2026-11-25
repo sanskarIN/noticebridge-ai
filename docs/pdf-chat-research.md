@@ -164,3 +164,15 @@ PDF order rather than a printed page number, section or clause number.
 Multiple page filters, ranges and out-of-budget page numbers are rejected.
 An explicit new page in a follow-up replaces the preceding page constraint.
 Lexical ranking uses full-corpus statistics even when candidates are filtered.
+
+
+## Coverage-aware answers
+
+Each extraction records total physical pages, processed prefix length,
+pages with no indexed text, and pages affected by indexing bounds.
+Question responses warn when their requested source has incomplete
+coverage. Page-scoped questions distinguish nonexistent pages, unprocessed
+pages, pages with no indexed text, and partially indexed pages. The
+presence of some indexed text is never treated as proof that a page was
+fully extracted. Even a fully processed PDF may contain unsearched images
+or incorrectly encoded embedded text.

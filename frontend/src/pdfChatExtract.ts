@@ -25,6 +25,8 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
     const pdf = await task.promise;
     const passages: Passage[] = [];
     const missingPages: number[] = [];
+    const limitedPages: number[] = [];
+    let processedPages = 0;
     let chars = 0;
     let limited = pdf.numPages > MAX_PAGES;
     for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, MAX_PAGES); pageNumber++) {
@@ -36,6 +38,7 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
       let ordinal = 0;
       let items = 0;
       let oversized = false;
+      let pageLimited = false;
       let previous: { x: number; y: number; width: number; height: number } | null = null;
       function flush() {
         const text = line.trim();
@@ -45,12 +48,14 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
           ordinal++; // Preserve the gap; contextual retrieval must not bridge omitted text.
           oversized = false;
           limited = true;
+          pageLimited = true;
           return;
         }
         if (!text) return;
         ordinal++;
         if (chars + text.length > MAX_CHARS || passages.length >= MAX_PASSAGES / 2) {
           limited = true;
+          pageLimited = true;
           return;
         }
         chars += text.length;
@@ -64,6 +69,7 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
           for (const item of value.items) {
             if (++items > MAX_ITEMS) {
               limited = true;
+              pageLimited = true;
               break;
             }
             if (!('str' in item)) continue;
@@ -88,6 +94,7 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
           }
           if (items > MAX_ITEMS || chars >= MAX_CHARS || passages.length >= MAX_PASSAGES / 2) {
             limited = true;
+            pageLimited = true;
             // A partially streamed line cannot be a complete source quote.
             line = '';
             oversized = false;
@@ -96,6 +103,8 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
         }
         flush();
         if (passages.length === before) missingPages.push(pageNumber);
+        if (pageLimited) limitedPages.push(pageNumber);
+        processedPages = pageNumber;
       } finally {
         await reader.cancel().catch(() => {});
         reader.releaseLock();
@@ -106,7 +115,7 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
         break;
       }
     }
-    return { passages, missingPages, limited };
+    return { passages, missingPages, limited, pageCount: pdf.numPages, processedPages, limitedPages };
   } catch {
     signal.throwIfAborted();
     throw new Error('Unable to index the PDF within local processing limits.');
