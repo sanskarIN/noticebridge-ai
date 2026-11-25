@@ -1,0 +1,35 @@
+.chat-main{max-width:1050px;padding:32px 24px 64px}
+.chat-intro{max-width:790px;margin-bottom:26px}
+.chat-eyebrow{color:#82e2c6;font-size:12px;font-weight:700;letter-spacing:1.4px}
+.chat-intro h1{font-size:clamp(32px,5vw,57px);margin:12px 0;letter-spacing:-1.5px}
+.chat-main p{line-height:1.6}
+.chat-note,.chat-error{padding:12px 16px;border-left:3px solid #82e2c6;background:#172d3c;overflow-wrap:anywhere}
+.chat-error{border-color:#f7b17e;background:#382b2c;color:#ffe0c7}
+.chat-muted{color:#b2c1d6;font-size:14px}
+.chat-panel{border:1px solid #33445c;background:#101f33;border-radius:16px;padding:clamp(16px,3vw,28px);margin:16px 0;min-width:0}
+.chat-panel h2{font-size:23px;margin:0 0 16px}
+.chat-file-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.chat-file{background:#0b1829;border:1px solid #33445c;padding:16px;border-radius:12px;min-width:0}
+.chat-file label,.chat-form label{display:grid;gap:8px}
+.chat-file input,.chat-form textarea,.chat-form select{background:#071325;color:#e8edf7;border:1px solid #50627d;border-radius:8px;padding:10px;max-width:100%;min-width:0;font:inherit}
+.chat-file input::file-selector-button{background:#28495d;border:0;color:#fff;padding:7px;border-radius:5px}
+.chat-filename{overflow-wrap:anywhere}
+.chat-toolbar,.chat-examples{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.chat-toolbar{justify-content:space-between}
+.chat-button{background:#172a41;border:1px solid #62748e;color:#e8edf7;padding:9px 12px;border-radius:8px;min-height:40px}
+.chat-button:disabled{opacity:.5}
+.chat-history{display:grid;gap:16px;max-height:65vh;overflow:auto;padding:4px}
+.chat-turn{display:grid;gap:10px}
+.chat-user{background:#243c51;border-radius:12px;padding:12px;overflow-wrap:anywhere;margin:0}
+.chat-user strong{display:block;color:#82e2c6}
+.chat-answer{background:#0b1829;border:1px solid #33445c;border-radius:12px;padding:16px;min-width:0}
+.chat-answer h3{margin:0;font-size:18px}
+.chat-citation{background:#13243a;border-radius:8px;margin:10px 0;padding:12px}
+.chat-citation p{margin:0}
+.chat-main blockquote{white-space:pre-wrap;overflow-wrap:anywhere;margin:10px 0;line-height:1.6}
+.chat-form{display:grid;gap:12px;border-top:1px solid #33445c;padding-top:16px;margin-top:16px}
+.chat-form textarea{resize:vertical;width:100%}
+.chat-form .chat-checkbox{display:flex;align-items:center;gap:8px}
+.pdf-chat :is(button,input,textarea,select,a):focus-visible{outline:3px solid #82e2c6;outline-offset:3px}
+.chat-panel .pdf-stage{max-height:65vh;overflow:auto}
+@media(max-width:640px){.chat-main{padding:20px 12px 36px}.chat-file-grid{grid-template-columns:1fr}.pdf-chat .topbar{height:auto;padding:16px;flex-wrap:wrap}.chat-toolbar{align-items:start}}

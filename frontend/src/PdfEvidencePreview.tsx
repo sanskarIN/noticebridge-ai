@@ -84,11 +84,12 @@ function highlightForPage(
   };
 }
 
-export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheckedImage }: {
+export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheckedImage, inspectionOnly }: {
   file: File;
   pageNumber: number;
   evidence?: PdfEvidence;
   uncheckedImage?: boolean;
+  inspectionOnly?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -203,7 +204,7 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheck
       </div>
     </div>
     {state === 'ready' && <p className="preview-help">
-      {evidence ? (highlight ? t.highlight : t.geometry) : uncheckedImage ? t.uncheckedImage : t.uncovered}
+      {evidence ? (highlight ? t.highlight : t.geometry) : inspectionOnly ? 'Source page shown for manual inspection.' : uncheckedImage ? t.uncheckedImage : t.uncovered}
     </p>}
   </div>;
 }
