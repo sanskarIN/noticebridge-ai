@@ -222,3 +222,30 @@ Omit the resolution option if there are no conflicts. The combined ledger
 can be restored in the browser. No input is overwritten. This is workflow
 coordination, not independent annotation of notice accuracy; markers are
 not proof of user identity, review quality, verified evidence, or authority.
+
+
+## Try the complete workflow with fictional documents
+
+The reproducible demonstration generator creates a new directory containing
+three explicitly fictional notice pairs, a plan, a pinned manifest and an
+actual batch report. It exercises deadline and fee changes, a blank page
+with incomplete text coverage, and same-page conflicting deadline statements.
+
+```bash
+python backend/benchmarks/generate_batch_fixture.py --output fictional-batch --verify
+```
+
+Open fictional-batch/batch/index.json in the browser's local batch workspace,
+then select fictional-batch/manifest.json. Choose each case report and its
+matching original and updated PDF files from the generated directory.
+Use review markers and export the ledger to try the reconciliation commands
+above. The generator refuses to overwrite an existing destination. All
+example documents are invented; the fixture must not be described as an
+independent accuracy evaluation. The optional verify switch runs a separate
+engine replay after generating the reports.
+
+The automated browser interoperability tests generate the same fixture using
+the production CLI, load the resulting report bytes rather than mocked
+findings, export human markers, reconcile two ledgers through Python, and
+restore the merged ledger in the browser. This tests contract compatibility
+without requiring external services or real applicant information.
