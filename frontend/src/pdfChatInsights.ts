@@ -1,4 +1,5 @@
 import { answerQuestion, resolveQuestion, MAX_QUESTION, type Answer, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
+import { extractKnownField } from './pdfChatOverview';
 
 export const MAX_SUBQUESTIONS = 4;
 
@@ -111,6 +112,7 @@ export function answerScopedQuestions(
 }
 
 export type PrintedValueGroup = {
+  key: string;
   label: string;
   role: Role;
   values: { value: string; citations: number[] }[];
@@ -120,7 +122,7 @@ function normalizedLabel(label: string): string {
   return label.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-/** Group only identical normalized labels, not semantically similar fields.
+/** Group identical normalized labels or fixed explicit notice-field aliases.
  * Values stay verbatim: different spellings are not necessarily different facts.
  */
 export function groupPrintedValues(answer: Answer): PrintedValueGroup[] {
@@ -128,10 +130,12 @@ export function groupPrintedValues(answer: Answer): PrintedValueGroup[] {
   for (const field of answer.printedFields) {
     const source = answer.citations[field.citation - 1];
     if (!source) continue;
-    const key = source.role + ':' + normalizedLabel(field.label);
+    const known = extractKnownField(source);
+    const fieldKey = known ? 'known:' + known.definition.id : 'literal:' + normalizedLabel(field.label);
+    const key = source.role + ':' + fieldKey;
     let group = groups.get(key);
     if (!group) {
-      group = { label: field.label, role: source.role, values: [] };
+      group = { key: fieldKey, label: field.label, role: source.role, values: [] };
       groups.set(key, group);
     }
     const existing = group.values.find(item => item.value === field.value);
@@ -151,9 +155,9 @@ export type PrintedComparison = {
 /** Textual comparison, not confirmation of a real-world amendment. */
 export function comparePrintedValues(groups: PrintedValueGroup[]): PrintedComparison[] {
   const revised = new Map(groups.filter(group => group.role === 'revised')
-    .map(group => [normalizedLabel(group.label), group]));
+    .map(group => [group.key, group]));
   return groups.filter(group => group.role === 'original').flatMap(original => {
-    const updated = revised.get(normalizedLabel(original.label));
+    const updated = revised.get(original.key);
     if (!updated) return [];
     const outcome = original.values.length !== 1 || updated.values.length !== 1
       ? 'multiple_printed_values'

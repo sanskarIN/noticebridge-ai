@@ -222,3 +222,17 @@ physical PDF page for each displayed field. Missing labels are not treated
 as removed requirements; unrecognized, multi-line and scanned fields can
 be missed. The overview is not an abstractive summary or a substitute for
 official-source verification.
+
+
+### Question-to-field alignment
+
+For a bare normalized question that uniquely matches one field's fixed
+label vocabulary, retrieval may also select fragments whose complete
+printed label maps to the same field. This is an additional exact
+vocabulary route, not a learned semantic model. Extra query terms must
+not be discarded; qualified questions continue to require lexical
+coverage. Recognized field aliases may also group printed values in
+chat comparisons. The original extracted label and full quoted source
+remain available. A fragment containing a second recognized printed
+field is excluded from compact field extraction rather than partially
+interpreted.

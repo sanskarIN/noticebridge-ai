@@ -1,4 +1,5 @@
 /** Bounded extractive document QA. Retrieval scores are not confidence probabilities. */
+import { extractKnownField, fieldDefinitions, type FieldId } from './pdfChatOverview';
 export const MAX_QUESTION = 400;
 export const MAX_PASSAGES = 12000;
 export const MAX_PASSAGE_CHARS = 900;
@@ -90,12 +91,30 @@ export function queryTerms(question: string): string[] {
   return terms(expanded);
 }
 
-function rank(index: SearchIndex, words: string[], role: Role): { matches: Passage[]; count: number } {
+// An exact normalized query for one vocabulary field can retrieve the same
+// field printed under a different recognized label. Additional qualifiers
+// must not disappear: "application fee for rural applicants" is not a bare
+// field query. If normalization makes two fields collide, abstain from expansion.
+export function knownQuestionField(words: string[]): FieldId | null {
+  if (!words.length) return null;
+  const matching = fieldDefinitions.filter(definition =>
+    definition.aliases.some(alias => {
+      const labelWords = terms(alias);
+      return labelWords.length === words.length && words.every(word => labelWords.includes(word));
+    }),
+  );
+  return matching.length === 1 ? matching[0].id : null;
+}
+
+function rank(index: SearchIndex, words: string[], role: Role, field: FieldId | null): { matches: Passage[]; count: number } {
   // Full query-term coverage prevents a result based solely on a generic
   // shared word such as "application". This is intentionally conservative.
   const scores = [];
   for (const row of index.rows) {
-    if (row.passage.role !== role || !words.every(word => row.counts.has(word))) continue;
+    if (row.passage.role !== role) continue;
+    const lexical = words.every(word => row.counts.has(word));
+    const known = field !== null && extractKnownField(row.passage)?.definition.id === field;
+    if (!lexical && !known) continue;
     let score = 0;
     for (const word of words) {
       const df = index.df.get(word) ?? 0;
@@ -177,6 +196,7 @@ export function answerQuestion(
   const clean = question.trim();
   if (!clean || clean.length > MAX_QUESTION) throw new Error('Invalid question length.');
   const words = queryTerms(clean);
+  const knownField = knownQuestionField(words);
   const roles: Role[] = scope === 'both' ? ['original', 'revised'] : [scope];
   const citations: Passage[] = [];
   const missingRoles: Role[] = [];
@@ -185,7 +205,7 @@ export function answerQuestion(
   const matchedCounts: Record<Role, number> = { original: 0, revised: 0 };
   for (const role of roles) {
     const { matches, count } = words.length && words.length <= 16
-      ? rank(index, words, role) : { matches: [], count: 0 };
+      ? rank(index, words, role, knownField) : { matches: [], count: 0 };
     matchedCounts[role] = count;
     if (matches.length) {
       citations.push(...matches);
@@ -212,7 +232,11 @@ export function answerQuestion(
       const label = passage.text.slice(0, colon).trim();
       const value = passage.text.slice(colon + 1).trim();
       const labelTerms = terms(label);
-      if (!value || value.length > 300 || !words.every(word => labelTerms.includes(word))) return [];
+      const known = knownField !== null && extractKnownField(passage)?.definition.id === knownField;
+      if (!value || value.length > 300 || (!known && !words.every(word => labelTerms.includes(word)))) return [];
+      // If the row looks like a recognized field but has a second field in
+      // its value, avoid promoting the ambiguous line to a printed answer.
+      if (knownQuestionField(labelTerms) !== null && !extractKnownField(passage)) return [];
       return [{ citation: i + 1, label, value }];
     }),
   };

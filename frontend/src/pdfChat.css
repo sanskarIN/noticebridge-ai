@@ -63,3 +63,6 @@
 .chat-overview-value+.chat-overview-value{border-top:1px solid #38546c;margin-top:12px;padding-top:8px}
 .chat-overview-value p{margin:6px 0}
 .chat-overview-value button{margin-bottom:8px}
+
+.chat-overview-filter{min-width:0;max-width:100%}
+.chat-overview-filter select{width:100%;min-width:0}
