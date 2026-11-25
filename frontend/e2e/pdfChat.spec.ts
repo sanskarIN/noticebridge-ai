@@ -1,4 +1,6 @@
 import { Buffer } from 'node:buffer';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 
 function pdf(lines: string[]): Buffer {
@@ -293,4 +295,69 @@ test('overview review filter preserves competing values and hides identical disp
   await expect(overview.getByText('Field found in one indexed source only')).toBeVisible();
   await page.getByRole('button', { name: 'Clear revised PDF' }).click();
   await expect(overview.getByText('Rs. 900', { exact: true })).toHaveCount(0);
+});
+
+
+async function exportQuestions(page: Page) {
+  const waiting = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export question plan JSON' }).click();
+  const download = await waiting;
+  return readFile((await download.path())!);
+}
+
+test('question plan exports pinned questions and replays answers with explicit confirmation', async ({ page }) => {
+  const lines = ['Application fee: Rs. 500', 'Eligibility: Class 12'];
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', lines);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  await ask(page, 'Application fee');
+  await ask(page, 'Eligibility');
+  const bytes = await exportQuestions(page);
+  const raw = JSON.parse(bytes.toString());
+  expect(raw.sources).toEqual({ original: createHash('sha256').update(pdf(lines)).digest('hex') });
+  expect(raw.questions.map((item: {input: string}) => item.input)).toEqual(['Application fee', 'Eligibility']);
+  expect(bytes.toString()).not.toContain('Rs. 500');
+  expect(bytes.toString()).not.toContain('Class 12');
+  await page.getByRole('button', { name: 'Clear conversation' }).click();
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  await page.getByLabel('Replay saved question plan').setInputFiles({
+    name: 'questions.json', mimeType: 'application/json', buffer: bytes,
+  });
+  await expect(page.getByRole('region', { name: 'Replay confirmation' })).toBeVisible();
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Apply replayed conversation' }).click();
+  await expect(page.locator('.chat-turn')).toHaveCount(2);
+  await expect(page.locator('.chat-turn').nth(0).locator('blockquote')).toHaveText('Application fee: Rs. 500');
+  await expect(page.locator('.chat-turn').nth(1).locator('blockquote')).toHaveText('Eligibility: Class 12');
+});
+test('question plan fails closed if the source PDF was replaced', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  await ask(page, 'Application fee');
+  const bytes = await exportQuestions(page);
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 350']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  await ask(page, 'Application fee');
+  await page.getByLabel('Replay saved question plan').setInputFiles({
+    name: 'questions.json', mimeType: 'application/json', buffer: bytes,
+  });
+  await expect(page.getByRole('alert')).toHaveText('The question plan requires the exact same attached PDF bytes and roles.');
+  await expect(page.getByRole('region', { name: 'Replay confirmation' })).toHaveCount(0);
+  await expect(page.locator('.chat-turn').last().locator('blockquote')).toHaveText('Application fee: Rs. 350');
+});
+test('pending replay is discarded when the source changes', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  await ask(page, 'Application fee');
+  const bytes = await exportQuestions(page);
+  await page.getByLabel('Replay saved question plan').setInputFiles({
+    name: 'questions.json', mimeType: 'application/json', buffer: bytes,
+  });
+  await expect(page.getByRole('region', { name: 'Replay confirmation' })).toBeVisible();
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 350']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Replay confirmation' })).toHaveCount(0);
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
 });
