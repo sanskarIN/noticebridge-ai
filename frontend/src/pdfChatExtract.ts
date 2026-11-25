@@ -42,17 +42,19 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
         line = '';
         previous = null;
         if (oversized) {
+          ordinal++; // Preserve the gap; contextual retrieval must not bridge omitted text.
           oversized = false;
           limited = true;
           return;
         }
         if (!text) return;
+        ordinal++;
         if (chars + text.length > MAX_CHARS || passages.length >= MAX_PASSAGES / 2) {
           limited = true;
           return;
         }
         chars += text.length;
-        passages.push({ role, page: pageNumber, text, ordinal: ++ordinal });
+        passages.push({ role, page: pageNumber, text, ordinal });
       }
       try {
         for (;;) {

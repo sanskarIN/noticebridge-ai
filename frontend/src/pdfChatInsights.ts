@@ -68,14 +68,14 @@ export function effectiveScope(question: string, selection: ChatScope, attached:
 }
 
 export function answerScopedQuestions(
-  index: SearchIndex, question: string, selection: ChatScope, attached: Role[],
+  index: SearchIndex, question: string, selection: ChatScope, attached: Role[], includeContext = false,
 ): Answer[] {
   return planQuestions(question).map(part => {
     const scope = effectiveScope(part, selection, attached);
     // The existing ranker already abstains for an unavailable role. Do
     // not replace a requested but absent source with the other document.
     const content = stripScopePhrases(part);
-    return { ...answerQuestion(index, content || '?', scope), question: part };
+    return { ...answerQuestion(index, content || '?', scope, includeContext), question: part };
   });
 }
 

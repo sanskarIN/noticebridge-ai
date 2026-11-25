@@ -49,3 +49,6 @@
 .chat-nearby summary{cursor:pointer;color:#82e2c6}
 .chat-selected-fragment{border-left:3px solid #82e2c6;padding-left:10px}
 @media(max-width:640px){.chat-field-grid{grid-template-columns:1fr}}
+
+.chat-context-results{border:1px solid #38546c;border-radius:10px;padding:12px;margin:12px 0;overflow-wrap:anywhere}
+.chat-context-results h4{margin:0 0 8px}

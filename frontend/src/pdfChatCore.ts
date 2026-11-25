@@ -13,8 +13,10 @@ export type Answer = {
   citations: Passage[];
   missingRoles: Role[];
   matchedCounts: Record<Role, number>;
+  contextGroups: ContextGroup[];
   printedFields: { citation: number; label: string; value: string }[];
 };
+export type ContextGroup = { role: Role; page: number; citations: number[] };
 const STOP = new Set(('what which when where who how is are was were be been being the a an of to for in on at from by with and or does do did can could would should will shall me tell please show find give about pdf notice original revised updated old new both previous version current i we you it its this that these those as per mentioned stated according information detail details change changed changes compare between versus vs much many').split(' '));
 const ALIASES: Record<string, string> = {
   fees: 'fee', cost: 'fee', costs: 'fee', charges: 'fee', charge: 'fee',
@@ -55,7 +57,7 @@ export function buildIndex(passages: Passage[]): SearchIndex {
   return { rows, df, average: Math.max(1, rows.reduce((n, row) => n + row.length, 0) / Math.max(1, rows.length)) };
 }
 
-function queryTerms(question: string): string[] {
+export function queryTerms(question: string): string[] {
   // Normalize familiar notice-specific paraphrases without broad semantic guesses.
   const expanded = question
     .replace(/\blast date\b/gi, 'deadline')
@@ -98,27 +100,95 @@ function rank(index: SearchIndex, words: string[], role: Role): { matches: Passa
   return { matches: unique.slice(0, 4).map(row => row.passage), count: unique.length };
 }
 
-export function answerQuestion(index: SearchIndex, question: string, scope: Scope): Answer {
+/** Adjacent-line retrieval is a fallback, not an entailment model.
+ * Require all distinct query terms in a minimal contiguous window. Each
+ * endpoint must contribute evidence not present in the other fragments.
+ * Keep fragments separate; never turn a window into a printed value.
+ */
+export function contextualMatches(index: SearchIndex, words: string[], role: Role): Passage[][] {
+  if (words.length < 2 || words.length > 16) return [];
+  const rows = index.rows.filter(row => row.passage.role === role)
+    .sort((a, b) => a.passage.page - b.passage.page || a.passage.ordinal - b.passage.ordinal);
+  const candidates: { rows: IndexedPassage[]; score: number }[] = [];
+  const covers = (window: IndexedPassage[]) =>
+    words.every(word => window.some(row => row.counts.has(word)));
+  for (let start = 0; start < rows.length; start++) {
+    const first = rows[start];
+    // A window must start on a query-bearing fragment.
+    if (!words.some(word => first.counts.has(word))) continue;
+    const window = [first];
+    for (let offset = 1; offset <= 2 && start + offset < rows.length; offset++) {
+      const next = rows[start + offset];
+      const last = window[window.length - 1];
+      if (next.passage.page !== first.passage.page ||
+          next.passage.ordinal !== last.passage.ordinal + 1) break;
+      window.push(next);
+      if (!covers(window)) continue;
+      if (!covers(window.slice(1)) && !covers(window.slice(0, -1))) {
+        const chars = window.reduce((n, row) => n + row.passage.text.length, 0);
+        if (chars <= 1400) {
+          // Prefer short minimal windows and concentrated query evidence.
+          const score = words.reduce((n, word) => n + Math.log(1 +
+            (index.rows.length - (index.df.get(word) ?? 0) + 0.5) /
+            ((index.df.get(word) ?? 0) + 0.5)), 0) / (1 + chars / 500 + (window.length - 2));
+          candidates.push({ rows: [...window], score });
+        }
+      }
+      // Longer windows would not be minimal.
+      break;
+    }
+  }
+  candidates.sort((a, b) => b.score - a.score ||
+    a.rows[0].passage.page - b.rows[0].passage.page ||
+    a.rows[0].passage.ordinal - b.rows[0].passage.ordinal);
+  const seen = new Set<string>();
+  const result: Passage[][] = [];
+  for (const candidate of candidates) {
+    const keys = candidate.rows.map(row => row.passage.page + ':' + row.passage.ordinal);
+    if (keys.some(key => seen.has(key))) continue;
+    keys.forEach(key => seen.add(key));
+    result.push(candidate.rows.map(row => row.passage));
+    if (result.length === 2) break;
+  }
+  return result;
+}
+
+export function answerQuestion(
+  index: SearchIndex, question: string, scope: Scope, includeContext = false,
+): Answer {
   const clean = question.trim();
   if (!clean || clean.length > MAX_QUESTION) throw new Error('Invalid question length.');
   const words = queryTerms(clean);
   const roles: Role[] = scope === 'both' ? ['original', 'revised'] : [scope];
   const citations: Passage[] = [];
   const missingRoles: Role[] = [];
+  const contextGroups: ContextGroup[] = [];
+  const contextualCitationIds = new Set<number>();
   const matchedCounts: Record<Role, number> = { original: 0, revised: 0 };
   for (const role of roles) {
     const { matches, count } = words.length && words.length <= 16
       ? rank(index, words, role) : { matches: [], count: 0 };
     matchedCounts[role] = count;
-    if (matches.length) citations.push(...matches);
-    else missingRoles.push(role);
+    if (matches.length) {
+      citations.push(...matches);
+      continue;
+    }
+    const windows = includeContext ? contextualMatches(index, words, role) : [];
+    if (!windows.length) missingRoles.push(role);
+    for (const window of windows) {
+      const ids = window.map((_, i) => citations.length + i + 1);
+      ids.forEach(id => contextualCitationIds.add(id));
+      contextGroups.push({ role, page: window[0].page, citations: ids });
+      citations.push(...window);
+    }
   }
   return {
     kind: citations.length ? 'passages' : 'insufficient',
-    scope, question: clean, citations, missingRoles, matchedCounts,
+    scope, question: clean, citations, missingRoles, matchedCounts, contextGroups,
     printedFields: citations.flatMap((passage, i) => {
       // Only a literal colon-delimited printed field whose label covers all
       // query terms qualifies for the compact answer. Never synthesize values.
+      if (contextualCitationIds.has(i + 1)) return [];
       const colon = passage.text.indexOf(':');
       if (colon <= 0 || colon > 100) return [];
       const label = passage.text.slice(0, colon).trim();

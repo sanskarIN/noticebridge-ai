@@ -133,3 +133,22 @@ question's source scope. Otherwise it searches the attached source(s).
 An explicitly requested but unattached source produces no matching evidence;
 the other source is never silently substituted. Explicit manual scope
 selection remains available and takes precedence when chosen.
+
+
+## Adjacent-line retrieval
+
+When a single source line does not contain every query term, the optional
+nearby-line search (enabled by default in the UI) considers minimal
+windows of two or three consecutive extracted fragments on the same
+physical page. Every query term must be present across the window and
+each endpoint must be necessary for coverage. Windows are bounded to
+1,400 characters; at most two non-overlapping windows per role are shown.
+Single-line retrieval remains preferred independently per source role.
+
+Each fragment receives its own citation. The interface labels these
+groups as nearby matches rather than verified answers, never joins
+fragments into a fabricated quote, and never creates a printed-field
+value from contextual matches. Omitted oversized lines leave ordinal
+gaps so retrieval cannot bridge them. Visual columns, unrelated nearby
+statements, and conditions remain important failure modes. Users may
+disable nearby-line search to retain the original strict retrieval mode.

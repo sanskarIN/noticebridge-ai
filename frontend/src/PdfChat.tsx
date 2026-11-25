@@ -44,6 +44,7 @@ export default function PdfChat() {
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [reuse, setReuse] = useState(false);
+  const [includeContext, setIncludeContext] = useState(true);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<Passage | null>(null);
   const controllers = useRef<Partial<Record<Role, AbortController>>>({});
@@ -132,7 +133,7 @@ export default function PdfChat() {
     if (!canAsk || turns.length >= MAX_TURNS) return;
     try {
       const resolved = resolveChatQuestion(question, turns.at(-1)?.resolved ?? null, reuse);
-      const answers = answerScopedQuestions(index, resolved, scope, attached);
+      const answers = answerScopedQuestions(index, resolved, scope, attached, includeContext);
       setTurns(old => [...old, { input: question.trim(), resolved, answers }]);
       setQuestion('');
       setReuse(false);
@@ -213,11 +214,19 @@ export default function PdfChat() {
                 <p className="chat-muted">Literal fields only; no inferred or calculated values.</p>
               </div>}
               <PrintedInsights answer={answer} />
+              {answer.contextGroups.length > 0 && <section className="chat-context-results" aria-label="Nearby matching fragments">
+                <h4>Nearby matching fragments</h4>
+                <p className="chat-note">No individual line matched every term in these sources. Nearby lines collectively match the query, but may describe unrelated conditions. These are not verified answers.</p>
+                {answer.contextGroups.map((group, k) => <p key={k} className="chat-muted">
+                  {names[group.role]} · page {group.page} · citations {group.citations.map(n => '[' + n + ']').join(' ')}
+                </p>)}
+              </section>}
               {Object.values(answer.matchedCounts).some(count => count > 4) &&
                 <p className="chat-note">More passages matched than are displayed (maximum four per PDF).
                   Narrow the question or inspect the full document.</p>}
               {answer.citations.map((citation, j) => <div className="chat-citation" key={j}>
                 <p className="chat-muted">[{j + 1}] {names[citation.role]} · PDF page {citation.page}</p>
+                {answer.contextGroups.some(group => group.citations.includes(j + 1)) && <p className="chat-muted">Context fragment, not a standalone answer</p>}
                 <blockquote>{citation.text}</blockquote>
                 <button type="button" className="chat-button" onClick={() => setPreview(citation)}>
                   Inspect source [{j + 1}]
@@ -245,6 +254,8 @@ export default function PdfChat() {
           <label>Your question<textarea ref={inputRef} value={question} maxLength={MAX_QUESTION}
             onChange={event => setQuestion(event.target.value)} rows={3} placeholder="Ask about the notice…" /></label>
           <p className="chat-muted">Ask separate questions with question marks or semicolons (up to four). Results are evaluated independently.</p>
+          <label className="chat-checkbox"><input type="checkbox" checked={includeContext}
+            onChange={event => setIncludeContext(event.target.checked)} /> Search nearby lines when no single line matches</label>
           <label className="chat-checkbox"><input type="checkbox" checked={reuse} disabled={!turns.length || turns.at(-1)?.answers.length !== 1}
             onChange={event => setReuse(event.target.checked)} /> Include previous question as search context</label>
           <div className="chat-toolbar">
