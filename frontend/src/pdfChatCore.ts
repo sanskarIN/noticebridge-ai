@@ -5,7 +5,8 @@ export const MAX_PASSAGES = 12000;
 export const MAX_PASSAGE_CHARS = 900;
 export type Role = 'original' | 'revised';
 export type Scope = Role | 'both';
-export type Passage = { role: Role; page: number; text: string; ordinal: number };
+export type TextPosition = { x0: number; x1: number; y: number; height: number };
+export type Passage = { role: Role; page: number; text: string; ordinal: number; position?: TextPosition };
 export type Corpus = {
   passages: Passage[];
   missingPages: number[];

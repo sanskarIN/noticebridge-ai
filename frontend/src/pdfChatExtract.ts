@@ -1,6 +1,6 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { MAX_PASSAGE_CHARS, MAX_PASSAGES, type Corpus, type Passage, type Role } from './pdfChatCore';
+import { MAX_PASSAGE_CHARS, MAX_PASSAGES, type Corpus, type Passage, type Role, type TextPosition } from './pdfChatCore';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 export const MAX_PDF_BYTES = 10 * 1024 * 1024;
@@ -40,10 +40,15 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
       let oversized = false;
       let pageLimited = false;
       let previous: { x: number; y: number; width: number; height: number } | null = null;
+      let position: TextPosition | null = null;
+      let positionInvalid = false;
       function flush() {
         const text = line.trim();
+        const geometry = positionInvalid ? null : position;
         line = '';
         previous = null;
+        position = null;
+        positionInvalid = false;
         if (oversized) {
           ordinal++; // Preserve the gap; contextual retrieval must not bridge omitted text.
           oversized = false;
@@ -59,7 +64,7 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
           return;
         }
         chars += text.length;
-        passages.push({ role, page: pageNumber, text, ordinal });
+        passages.push({ role, page: pageNumber, text, ordinal, ...(geometry ? { position: geometry } : {}) });
       }
       try {
         for (;;) {
@@ -73,7 +78,7 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
               break;
             }
             if (!('str' in item)) continue;
-            const [,,,, x, y] = item.transform;
+            const [a, b, c, d, x, y] = item.transform;
             const height = Math.max(1, Math.abs(item.height));
             // Split widely separated fragments, rows and reverse-direction
             // jumps. This reduces accidental column stitching; it does not
@@ -89,6 +94,21 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
                 line = '';
               } else line += separator + item.str;
             }
+            // Position metadata is a layout hint, not verified highlight geometry.
+            // Do not manufacture coordinates for rotated/skewed/invalid text.
+            if (item.str.trim()) {
+              if (![a, b, c, d, x, y, item.width, item.height, x + item.width].every(Number.isFinite) ||
+                  a <= 0 || d <= 0 || Math.abs(b) > 0.01 || Math.abs(c) > 0.01 ||
+                  item.width <= 0 || item.height <= 0 ||
+                  (position !== null && Math.abs(position.y - y) > 2)) {
+                positionInvalid = true;
+              } else if (position === null) {
+                position = { x0: x, x1: x + item.width, y, height };
+              } else {
+                position = { x0: Math.min(position.x0, x), x1: Math.max(position.x1, x + item.width),
+                  y: position.y, height: Math.max(position.height, height) };
+              }
+            }
             previous = { x, y, width: item.width, height };
             if (item.hasEOL) flush();
           }
@@ -98,6 +118,8 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
             // A partially streamed line cannot be a complete source quote.
             line = '';
             oversized = false;
+            position = null;
+            positionInvalid = false;
             break;
           }
         }

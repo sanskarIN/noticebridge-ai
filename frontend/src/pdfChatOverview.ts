@@ -62,6 +62,11 @@ const embeddedLabel = new RegExp('(?:^|[^\\p{L}\\p{N}])(?:' + [...aliases.keys()
   alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
 ).join('|') + ')\\s*:', 'u');
 
+/** Exact, explicit printed label vocabulary (not a semantic guess). */
+export function fieldForLabel(label: string): FieldDefinition | undefined {
+  return aliases.get(normalizeLabel(label));
+}
+
 export type ExtractedField = {
   definition: FieldDefinition;
   label: string;
@@ -74,7 +79,7 @@ export function extractKnownField(passage: Passage): ExtractedField | null {
   if (colon < 1 || colon > 100) return null;
   const label = passage.text.slice(0, colon).trim();
   const value = passage.text.slice(colon + 1).trim();
-  const definition = aliases.get(normalizeLabel(label));
+  const definition = fieldForLabel(label);
   if (!definition || !value || value.length > 300) return null;
   // A single line containing a second recognized field is ambiguous.
   // Do not promote a partial substring as the value of the first field.
