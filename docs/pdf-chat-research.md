@@ -111,3 +111,8 @@ A source inspection panel can show up to two neighboring extracted fragments
 on each side of the citation, restricted to the same PDF and physical page.
 The fragments remain separate and are not treated as verified reading order
 or additional answer claims.
+
+A follow-up can reuse a single previous question only. Multi-question turns
+require an explicit new question rather than guessing which subquestion the
+user means. Prior trailing question punctuation is removed before adding
+context so that a follow-up does not accidentally become two searches.

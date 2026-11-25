@@ -1,4 +1,4 @@
-import { answerQuestion, MAX_QUESTION, type Answer, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
+import { answerQuestion, resolveQuestion, MAX_QUESTION, type Answer, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
 
 export const MAX_SUBQUESTIONS = 4;
 
@@ -22,6 +22,21 @@ export function planQuestions(question: string): string[] {
 
 export function answerQuestionSet(index: SearchIndex, question: string, scope: Scope): Answer[] {
   return planQuestions(question).map(part => answerQuestion(index, part, scope));
+}
+
+/** Reuse one explicit question only. A multi-part turn has no unique
+ * referent; the user must specify which question to repeat.
+ */
+export function resolveChatQuestion(input: string, previous: string | null, reuse: boolean): string {
+  if (!reuse) return resolveQuestion(input, previous, false);
+  if (!previous || planQuestions(previous).length !== 1) {
+    throw new Error('Choose a specific earlier question rather than a multi-part turn.');
+  }
+  if (planQuestions(input).length !== 1) {
+    throw new Error('A follow-up must be one question.');
+  }
+  const prior = previous.replace(/[?;]+$/g, '').trim();
+  return resolveQuestion(input, prior, true);
 }
 
 export type PrintedValueGroup = {

@@ -130,3 +130,54 @@ test('narrow view and clear conversation stay usable', async ({ page }) => {
   await expect(page.locator('.chat-turn')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(321);
 });
+
+
+test('compound question provides separate grounded answers and printed comparisons', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByRole('button', { name: 'Try fictional notices' }).click();
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  const result = await ask(page, 'What are the application deadline and fee?');
+  const sections = result.locator('.chat-answer');
+  await expect(sections).toHaveCount(2);
+  await expect(sections.nth(0).locator('blockquote')).toHaveText([
+    'Application deadline: 19 December 2026', 'Application deadline: 13 December 2026',
+  ]);
+  await expect(sections.nth(1).locator('blockquote')).toHaveText([
+    'Application fee: Rs. 500', 'Application fee: Rs. 350',
+  ]);
+  await expect(result.getByText('Different displayed wording')).toHaveCount(2);
+  await expect(page.getByLabel('Include previous question as search context')).toBeDisabled();
+});
+test('compound question preserves a missing answer without hiding a supported one', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const result = await ask(page, 'Application fee? Refund policy?');
+  await expect(result.locator('.chat-answer')).toHaveCount(2);
+  await expect(result.locator('blockquote')).toHaveText('Application fee: Rs. 500');
+  await expect(result.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
+});
+test('same-label competing printed values trigger manual review wording', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Application fee: Rs. 500', 'Application fee: Rs. 900',
+  ]);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const result = await ask(page, 'Application fee');
+  await expect(result.locator('blockquote')).toHaveCount(2);
+  await expect(result.getByText(/Multiple printed values for Application fee/)).toBeVisible();
+});
+test('nearby context is kept separate from the answer quotations', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Fictional notice only', 'Application fee: Rs. 500', 'Refund policy: No refunds',
+  ]);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const result = await ask(page, 'Application fee');
+  await expect(result.locator('blockquote')).toHaveText('Application fee: Rs. 500');
+  await result.getByRole('button', { name: 'Inspect source [1]' }).click();
+  await page.getByText('Nearby extracted passages (same PDF page)').click();
+  const panel = page.getByRole('region', { name: 'Source page inspection' });
+  await expect(panel.getByText('Refund policy: No refunds', { exact: true })).toBeVisible();
+  await expect(result.getByText('Refund policy: No refunds', { exact: true })).toHaveCount(0);
+});

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { buildIndex, MAX_QUESTION, resolveQuestion, type Answer, type Corpus, type Passage, type Role, type Scope } from './pdfChatCore';
-import { answerQuestionSet, comparePrintedValues, groupPrintedValues, nearbyPassages } from './pdfChatInsights';
+import { buildIndex, MAX_QUESTION, type Answer, type Corpus, type Passage, type Role, type Scope } from './pdfChatCore';
+import { answerQuestionSet, comparePrintedValues, groupPrintedValues, nearbyPassages, resolveChatQuestion } from './pdfChatInsights';
 import { readPdf } from './pdfChatExtract';
 import './pdfChat.css';
 
@@ -129,7 +129,7 @@ export default function PdfChat() {
     event.preventDefault();
     if (!canAsk || turns.length >= MAX_TURNS) return;
     try {
-      const resolved = resolveQuestion(question, turns.at(-1)?.resolved ?? null, reuse);
+      const resolved = resolveChatQuestion(question, turns.at(-1)?.resolved ?? null, reuse);
       const answers = answerQuestionSet(index, resolved, scope);
       setTurns(old => [...old, { input: question.trim(), resolved, answers }]);
       setQuestion('');
@@ -137,8 +137,8 @@ export default function PdfChat() {
       setPreview(null);
       setError('');
       inputRef.current?.focus();
-    } catch {
-      setError('Enter up to four nonempty questions within the combined 400-character limit.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Unable to search the selected PDFs.');
     }
   }
   useEffect(() => { if (turns.length) latestRef.current?.scrollIntoView({ block: 'nearest' }); }, [turns.length]);
@@ -238,7 +238,7 @@ export default function PdfChat() {
           <label>Your question<textarea ref={inputRef} value={question} maxLength={MAX_QUESTION}
             onChange={event => setQuestion(event.target.value)} rows={3} placeholder="Ask about the notice…" /></label>
           <p className="chat-muted">Ask separate questions with question marks or semicolons (up to four). Results are evaluated independently.</p>
-          <label className="chat-checkbox"><input type="checkbox" checked={reuse} disabled={!turns.length}
+          <label className="chat-checkbox"><input type="checkbox" checked={reuse} disabled={!turns.length || turns.at(-1)?.answers.length !== 1}
             onChange={event => setReuse(event.target.checked)} /> Include previous question as search context</label>
           <div className="chat-toolbar">
             <span className="chat-muted">{question.length}/{MAX_QUESTION} · {turns.length}/{MAX_TURNS} turns</span>
