@@ -176,3 +176,28 @@ pages, pages with no indexed text, and partially indexed pages. The
 presence of some indexed text is never treated as proof that a page was
 fully extracted. Even a fully processed PDF may contain unsearched images
 or incorrectly encoded embedded text.
+
+
+## Labeled retrieval regression suite
+
+The browser test suite now includes a hand-authored fictional training
+notice corpus with 15 labeled queries (nine answerable and six
+unanswerable). The test records exact citation identities (source role,
+physical page, extraction ordinal) rather than checking only answer
+wording. It separately measures citation precision, citation recall,
+complete relevant-citation retrieval and abstention on unanswerable
+questions for strict and adjacent-line modes.
+
+Run the suite from the frontend directory with:
+
+```bash
+npx playwright test pdfChatEvaluation.spec.ts
+```
+
+The aggregate assertions require the nearby-line mode to recover the
+two split-evidence cases that strict search cannot retrieve, while
+retaining the expected abstentions. These are regression expectations,
+not measured performance until the test actually runs. The corpus is
+small, authored alongside the implementation, and does not evaluate
+OCR, natural-language entailment, real-world retrieval accuracy or
+independent human relevance labels.
