@@ -7,7 +7,6 @@ a configuration check, not attestation of the runtime or its network policy.
 
 import asyncio
 import hashlib
-import json
 import math
 import re
 from dataclasses import dataclass
