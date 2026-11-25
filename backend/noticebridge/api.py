@@ -99,7 +99,7 @@ async def validate_compare_form(request: Request) -> None:
     """
     form = await request.form()
     seen: set[str] = set()
-    for field, value in form.multi_items():
+    for field, _ in form.multi_items():
         if field not in COMPARE_FORM_FIELDS or field in seen:
             # Field names can contain submitted private data, too.
             raise HTTPException(
