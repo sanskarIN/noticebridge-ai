@@ -469,3 +469,30 @@ test('concise field answer preserves all value counts and links to local source 
   const qualified = await ask(page, 'Application fee for rural applicants');
   await expect(qualified.getByRole('region', { name: 'Concise printed-field answer' })).toHaveCount(0);
 });
+
+
+test('same-question replay with a different scope invalidates old model exchange', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
+  await attach(page, 'Updated / second PDF', ['Application fee: Rs. 350']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  await page.getByLabel('Search scope').selectOption('original');
+  await ask(page, 'Application fee');
+  const plan = JSON.parse((await exportQuestions(page)).toString());
+  plan.questions[0].scope = 'revised';
+  await page.getByText('Experimental semantic retrieval (local file workflow)', { exact: true }).click();
+  await page.getByLabel('I understand that the exported request contains document text.').check();
+  const waiting = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export semantic retrieval request' }).click();
+  await waiting;
+  await expect(page.getByLabel('Import local candidate ranking')).toBeEnabled();
+  await page.getByLabel('Replay saved question plan').setInputFiles({
+    name: 'questions.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(plan, null, 2) + '\n'),
+  });
+  await page.getByRole('button', { name: 'Apply replayed conversation' }).click();
+  await expect(page.locator('.chat-turn').last().locator('blockquote')).toHaveText('Application fee: Rs. 350');
+  await page.getByText('Experimental semantic retrieval (local file workflow)', { exact: true }).click();
+  await expect(page.getByLabel('I understand that the exported request contains document text.')).not.toBeChecked();
+  await expect(page.getByLabel('Import local candidate ranking')).toBeDisabled();
+});
