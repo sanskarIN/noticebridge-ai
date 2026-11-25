@@ -54,7 +54,9 @@ export default function PdfChat() {
   async function choose(role: Role, event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
-    if (!file) return;
+    if (file) await indexFile(role, file);
+  }
+  async function indexFile(role: Role, file: File) {
     remove(role);
     const token = generation.current[role];
     const controller = new AbortController();
@@ -73,6 +75,13 @@ export default function PdfChat() {
         update(role, { kind: 'error', message: 'Unable to index this PDF. Choose a text-based PDF up to 10 MiB.' });
       }
     }
+  }
+  async function tryDemo() {
+    const { loadShowcase } = await import('./showcase/load');
+    const sample = loadShowcase();
+    // Both operations synchronously invalidate previous state before awaiting.
+    setScope('both');
+    await Promise.all([indexFile('original', sample.original), indexFile('revised', sample.revised)]);
   }
   function ask(event: FormEvent) {
     event.preventDefault();
@@ -105,7 +114,9 @@ export default function PdfChat() {
         <p className="chat-note">This is extractive question answering, not a generative language model. Files and questions stay in this browser session. A matching passage is not a verified answer or proof of official authority.</p>
       </section>
       <section className="chat-panel" aria-labelledby="chat-files-title">
-        <h2 id="chat-files-title">1. Attach notices</h2>
+        <div className="chat-toolbar"><h2 id="chat-files-title">1. Attach notices</h2>
+          <button type="button" className="chat-button" onClick={() => void tryDemo()}
+            disabled={Object.values(slots).some(slot => slot.kind === 'loading')}>Try fictional notices</button></div>
         <div className="chat-file-grid">
           {(['original', 'revised'] as const).map(role => {
             const slot = slots[role];
@@ -146,6 +157,16 @@ export default function PdfChat() {
                 No sufficiently matching passage in {answer.missingRoles.map(role => names[role]).join(', ')}.
                 Do not infer that a requirement was removed.
               </p>}
+              {answer.printedFields.length > 0 && <div className="chat-printed-fields">
+                <h4>Printed values in matching passages</h4>
+                {answer.printedFields.map(field => <p key={field.citation}>
+                  <strong>{field.label}:</strong> {field.value} [{field.citation}]
+                </p>)}
+                <p className="chat-muted">Literal fields only; no inferred or calculated values.</p>
+              </div>}
+              {Object.values(answer.matchedCounts).some(count => count > 4) &&
+                <p className="chat-note">More passages matched than are displayed (maximum four per PDF).
+                  Narrow the question or inspect the full document.</p>}
               {answer.citations.map((citation, j) => <div className="chat-citation" key={j}>
                 <p className="chat-muted">[{j + 1}] {names[citation.role]} · PDF page {citation.page}</p>
                 <blockquote>{citation.text}</blockquote>

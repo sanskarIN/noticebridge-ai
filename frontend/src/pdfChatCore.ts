@@ -12,13 +12,15 @@ export type Answer = {
   question: string;
   citations: Passage[];
   missingRoles: Role[];
+  matchedCounts: Record<Role, number>;
+  printedFields: { citation: number; label: string; value: string }[];
 };
-const STOP = new Set(('what which when where who how is are was were be been being the a an of to for in on at from by with and or does do did can could would should will shall me tell please show find give about document pdf notice original revised updated old new both previous version current it its this that these those as per mentioned stated according information detail details change changed changes compare between versus vs much many').split(' '));
+const STOP = new Set(('what which when where who how is are was were be been being the a an of to for in on at from by with and or does do did can could would should will shall me tell please show find give about pdf notice original revised updated old new both previous version current i we you it its this that these those as per mentioned stated according information detail details change changed changes compare between versus vs much many').split(' '));
 const ALIASES: Record<string, string> = {
   fees: 'fee', cost: 'fee', costs: 'fee', charges: 'fee', charge: 'fee',
   deadlines: 'deadline', closing: 'deadline', cutoff: 'deadline',
   eligible: 'eligibility', qualifications: 'eligibility', qualification: 'eligibility',
-  requirements: 'requirement', documents: 'document', certificates: 'certificate',
+  requirements: 'requirement', documents: 'document', certificates: 'certificate', required: 'requirement',
   timings: 'time', timing: 'time', starts: 'start', begins: 'start',
   applicants: 'applicant', applications: 'application', exams: 'exam',
   examinations: 'exam', examination: 'exam', dates: 'date',
@@ -26,7 +28,8 @@ const ALIASES: Record<string, string> = {
 };
 function tokens(text: string): string[] {
   return (text.normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
-    .map(word => ALIASES[word] ?? word).filter(word => !STOP.has(word));
+    .map(word => Object.prototype.hasOwnProperty.call(ALIASES, word) ? ALIASES[word] : word)
+    .filter(word => !STOP.has(word));
 }
 function terms(text: string): string[] {
   return [...new Set(tokens(text))];
@@ -59,7 +62,7 @@ function queryTerms(question: string): string[] {
   return terms(expanded);
 }
 
-function rank(index: SearchIndex, words: string[], role: Role): Passage[] {
+function rank(index: SearchIndex, words: string[], role: Role): { matches: Passage[]; count: number } {
   // Full query-term coverage prevents a result based solely on a generic
   // shared word such as "application". This is intentionally conservative.
   const scores = [];
@@ -78,12 +81,13 @@ function rank(index: SearchIndex, words: string[], role: Role): Passage[] {
     a.passage.ordinal - b.passage.ordinal);
   // Keep repeated wording on distinct pages: it may be relevant to ambiguity.
   const seen = new Set<string>();
-  return scores.filter(({ passage }) => {
+  const unique = scores.filter(({ passage }) => {
     const key = passage.page + ':' + passage.text;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 4).map(row => row.passage);
+  });
+  return { matches: unique.slice(0, 4).map(row => row.passage), count: unique.length };
 }
 
 export function answerQuestion(index: SearchIndex, question: string, scope: Scope): Answer {
@@ -93,14 +97,28 @@ export function answerQuestion(index: SearchIndex, question: string, scope: Scop
   const roles: Role[] = scope === 'both' ? ['original', 'revised'] : [scope];
   const citations: Passage[] = [];
   const missingRoles: Role[] = [];
+  const matchedCounts: Record<Role, number> = { original: 0, revised: 0 };
   for (const role of roles) {
-    const matches = words.length && words.length <= 16 ? rank(index, words, role) : [];
+    const { matches, count } = words.length && words.length <= 16
+      ? rank(index, words, role) : { matches: [], count: 0 };
+    matchedCounts[role] = count;
     if (matches.length) citations.push(...matches);
     else missingRoles.push(role);
   }
   return {
     kind: citations.length ? 'passages' : 'insufficient',
-    scope, question: clean, citations, missingRoles,
+    scope, question: clean, citations, missingRoles, matchedCounts,
+    printedFields: citations.flatMap((passage, i) => {
+      // Only a literal colon-delimited printed field whose label covers all
+      // query terms qualifies for the compact answer. Never synthesize values.
+      const colon = passage.text.indexOf(':');
+      if (colon <= 0 || colon > 100) return [];
+      const label = passage.text.slice(0, colon).trim();
+      const value = passage.text.slice(colon + 1).trim();
+      const labelTerms = terms(label);
+      if (!value || value.length > 300 || !words.every(word => labelTerms.includes(word))) return [];
+      return [{ citation: i + 1, label, value }];
+    }),
   };
 }
 
