@@ -38,7 +38,8 @@ export function resolveChatQuestion(input: string, previous: string | null, reus
   const prior = previous.replace(/[?;]+$/g, '').trim();
   // A new explicit version request supersedes a prior version phrase.
   const context = requestedScope(input) ? stripScopePhrases(prior) : prior;
-  return resolveQuestion(input, context, true);
+  const page = parsePageFilter(input).page;
+  return resolveQuestion(input, page === undefined ? context : parsePageFilter(context).content, true);
 }
 
 export type ChatScope = Scope | 'auto';
@@ -67,6 +68,26 @@ export function effectiveScope(question: string, selection: ChatScope, attached:
   return attached.includes('revised') ? 'revised' : 'original';
 }
 
+/** Only explicit physical-page phrases are routing directives. Bare page
+ * numbers, clause identifiers and values remain lexical query terms.
+ * Reject ambiguous filters rather than silently searching another page.
+ */
+export function parsePageFilter(question: string): { content: string; page?: number } {
+  const pattern = /\b(?:on|from|in)\s+(?:physical\s+)?(?:pdf\s+)?page\s+([0-9]+)\b/gi;
+  const matches = [...question.matchAll(pattern)];
+  if (!matches.length) return { content: question };
+  if (matches.length !== 1) throw new Error('Choose one physical PDF page per question.');
+  const match = matches[0];
+  const page = Number(match[1]);
+  const tail = question.slice((match.index ?? 0) + match[0].length);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 80 ||
+      /^\s*(?:[-–—/,.]\s*\d|(?:to|through|and|or)\s+(?:page\s+)?\d)/i.test(tail)) {
+    throw new Error('Choose a single physical PDF page from 1 to 80.');
+  }
+  const content = question.replace(pattern, ' ').replace(/\s+/g, ' ').trim();
+  return { content, page };
+}
+
 export function answerScopedQuestions(
   index: SearchIndex, question: string, selection: ChatScope, attached: Role[], includeContext = false,
 ): Answer[] {
@@ -74,8 +95,14 @@ export function answerScopedQuestions(
     const scope = effectiveScope(part, selection, attached);
     // The existing ranker already abstains for an unavailable role. Do
     // not replace a requested but absent source with the other document.
-    const content = stripScopePhrases(part);
-    return { ...answerQuestion(index, content || '?', scope, includeContext), question: part };
+    const { content, page } = parsePageFilter(stripScopePhrases(part));
+    // Keep original corpus term statistics; restrict candidates, not ranking
+    // normalization. Physical page references are not printed page labels.
+    const selected = page === undefined ? index : {
+      ...index, rows: index.rows.filter(row => row.passage.page === page),
+    };
+    const answer = answerQuestion(selected, content || '?', scope, includeContext);
+    return { ...answer, question: part, ...(page === undefined ? {} : { pageFilter: page }) };
   });
 }
 

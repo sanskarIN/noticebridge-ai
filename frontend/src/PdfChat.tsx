@@ -197,7 +197,9 @@ export default function PdfChat() {
             {answers.map((answer, part) => <div className="chat-answer" key={part}>
               {answers.length > 1 && <h4 className="chat-subquestion">Question {part + 1}: {answer.question}</h4>}
               <h3>{answer.kind === 'passages' ? 'Relevant source passages' : 'Insufficient matching evidence'}</h3>
-              <p className="chat-muted">Scope: {answer.scope === 'both' ? 'Both PDFs' : names[answer.scope]}</p>
+              <p className="chat-muted">Scope: {answer.scope === 'both' ? 'Both PDFs' : names[answer.scope]}
+                {answer.pageFilter !== undefined && <> · Physical PDF page {answer.pageFilter} only</>}
+              </p>
               {answer.missingRoles.some(role => !attached.includes(role)) && <p className="chat-note">
                 Requested source not attached: {answer.missingRoles.filter(role => !attached.includes(role)).map(role => names[role]).join(', ')}.
               </p>}
@@ -253,7 +255,7 @@ export default function PdfChat() {
             }}>{example}</button>)}</div>
           <label>Your question<textarea ref={inputRef} value={question} maxLength={MAX_QUESTION}
             onChange={event => setQuestion(event.target.value)} rows={3} placeholder="Ask about the notice…" /></label>
-          <p className="chat-muted">Ask separate questions with question marks or semicolons (up to four). Results are evaluated independently.</p>
+          <p className="chat-muted">Ask separate questions with question marks or semicolons (up to four). Use “on page 2” to restrict a question to physical PDF page 2.</p>
           <label className="chat-checkbox"><input type="checkbox" checked={includeContext}
             onChange={event => setIncludeContext(event.target.checked)} /> Search nearby lines when no single line matches</label>
           <label className="chat-checkbox"><input type="checkbox" checked={reuse} disabled={!turns.length || turns.at(-1)?.answers.length !== 1}

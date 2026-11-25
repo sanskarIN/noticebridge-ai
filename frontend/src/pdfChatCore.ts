@@ -14,6 +14,7 @@ export type Answer = {
   missingRoles: Role[];
   matchedCounts: Record<Role, number>;
   contextGroups: ContextGroup[];
+  pageFilter?: number;
   printedFields: { citation: number; label: string; value: string }[];
 };
 export type ContextGroup = { role: Role; page: number; citations: number[] };
@@ -42,7 +43,7 @@ function terms(text: string): string[] {
   return [...new Set(tokens(text))];
 }
 export type IndexedPassage = { passage: Passage; counts: Map<string, number>; length: number };
-export type SearchIndex = { rows: IndexedPassage[]; df: Map<string, number>; average: number };
+export type SearchIndex = { rows: IndexedPassage[]; df: Map<string, number>; average: number; corpusSize: number };
 export function buildIndex(passages: Passage[]): SearchIndex {
   if (passages.length > MAX_PASSAGES) throw new Error('Passage budget exceeded.');
   const df = new Map<string, number>();
@@ -54,7 +55,7 @@ export function buildIndex(passages: Passage[]): SearchIndex {
     for (const word of counts.keys()) df.set(word, (df.get(word) ?? 0) + 1);
     return { passage, counts, length: words.length };
   });
-  return { rows, df, average: Math.max(1, rows.reduce((n, row) => n + row.length, 0) / Math.max(1, rows.length)) };
+  return { rows, df, corpusSize: rows.length, average: Math.max(1, rows.reduce((n, row) => n + row.length, 0) / Math.max(1, rows.length)) };
 }
 
 export function queryTerms(question: string): string[] {
@@ -82,7 +83,7 @@ function rank(index: SearchIndex, words: string[], role: Role): { matches: Passa
     for (const word of words) {
       const df = index.df.get(word) ?? 0;
       const tf = row.counts.get(word) ?? 0;
-      const idf = Math.log(1 + (index.rows.length - df + 0.5) / (df + 0.5));
+      const idf = Math.log(1 + (index.corpusSize - df + 0.5) / (df + 0.5));
       score += idf * tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * row.length / index.average));
     }
     scores.push({ passage: row.passage, score });
@@ -129,7 +130,7 @@ export function contextualMatches(index: SearchIndex, words: string[], role: Rol
         if (chars <= 1400) {
           // Prefer short minimal windows and concentrated query evidence.
           const score = words.reduce((n, word) => n + Math.log(1 +
-            (index.rows.length - (index.df.get(word) ?? 0) + 0.5) /
+            (index.corpusSize - (index.df.get(word) ?? 0) + 0.5) /
             ((index.df.get(word) ?? 0) + 0.5)), 0) / (1 + chars / 500 + (window.length - 2));
           candidates.push({ rows: [...window], score });
         }

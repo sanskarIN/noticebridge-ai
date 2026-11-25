@@ -152,3 +152,15 @@ value from contextual matches. Omitted oversized lines leave ordinal
 gaps so retrieval cannot bridge them. Visual columns, unrelated nearby
 statements, and conditions remain important failure modes. Users may
 disable nearby-line search to retain the original strict retrieval mode.
+
+
+## Physical page constraints
+
+Explicit "on page 2", "from PDF page 2" or "in physical page 2" syntax
+restricts retrieval to that physical PDF page in each selected source.
+It applies to strict and contextual retrieval; no other page is searched
+if the requested page has no evidence. Page numbering refers to physical
+PDF order rather than a printed page number, section or clause number.
+Multiple page filters, ranges and out-of-budget page numbers are rejected.
+An explicit new page in a follow-up replaces the preceding page constraint.
+Lexical ranking uses full-corpus statistics even when candidates are filtered.
