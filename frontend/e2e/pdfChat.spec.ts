@@ -45,6 +45,7 @@ test('fictional notices answer fee and deadline questions locally with real PDF 
   await page.route('**/api/**', route => { api.push(route.request().url()); return route.abort(); });
   await page.goto('/?view=chat');
   await page.getByRole('button', { name: 'Try fictional notices' }).click();
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
   await page.getByLabel('Your question').fill('What is the application fee?');
   await expect(page.getByRole('button', { name: 'Ask PDF' })).toBeEnabled();
   const fee = await ask(page, 'What is the application fee?');
@@ -75,6 +76,7 @@ test('a single local PDF includes unchanged facts and does not guess unsupported
 test('follow-up reuses explicit prior question and selected source scope', async ({ page }) => {
   await page.goto('/?view=chat');
   await page.getByRole('button', { name: 'Try fictional notices' }).click();
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
   await page.getByLabel('Your question').fill('Application fee');
   await expect(page.getByRole('button', { name: 'Ask PDF' })).toBeEnabled();
   await page.getByLabel('Search scope').selectOption('original');
