@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { buildIndex, type Corpus, type Passage, type Role } from '../src/pdfChatCore';
 import { answerScopedQuestions } from '../src/pdfChatInsights';
-import { answerCategoryTable, buildCategoryTables, tableQuestion } from '../src/pdfChatTables';
+import { answerCategoryTable, buildCategoryTables, tableCellQuestion, tableQuestion } from '../src/pdfChatTables';
 
 type Cell = { text: string; x: number; y: number; width?: number };
 function corpus(cells: Cell[], role: Role = 'original', page = 1): Corpus {
@@ -115,4 +115,21 @@ test('explicit page directive and category grammar remain visible', () => {
   const doc = corpus(fixture);
   const answer = answerScopedQuestions(buildIndex(doc.passages), 'Application fee for Reserved category on page 1?', 'original', ['original'])[0];
   expect(tableQuestion(answer)).toEqual({ field: 'application_fee', category: 'reserved' });
+});
+
+
+test('source phrases do not contaminate the exact category', () => {
+  expect(ask('Application fee for General category in the original notice?')?.matches[0].value.text).toBe('Rs. 500');
+});
+test('guided questions round-trip exact field and page', () => {
+  const table = buildCategoryTables(corpus(fixture, 'original', 2)).tables[0];
+  expect(tableCellQuestion(table, 1, 1)).toBe('Application fee for Reserved on page 2?');
+  expect(tableCellQuestion(table, 1, 2)).toBe('Examination fee for Reserved on page 2?');
+  expect(tableCellQuestion(table, 0, 0)).toBeNull();
+  expect(tableCellQuestion(table, 99, 1)).toBeNull();
+});
+test('guidance is disabled rather than throwing for routing-like printed labels', () => {
+  const odd = corpus(fixture.map(cell => cell.text === 'Reserved' ? { ...cell, text: 'Reserved on page 2' } : cell));
+  const table = buildCategoryTables(odd).tables[0];
+  expect(tableCellQuestion(table, 1, 1)).toBeNull();
 });

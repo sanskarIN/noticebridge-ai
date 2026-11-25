@@ -560,3 +560,22 @@ test('table values are source-scoped and never silently choose one version', asy
   await expect(scoped.getByText('Rs. 350', { exact: true })).toBeVisible();
   await expect(scoped.getByText('Rs. 500', { exact: true })).toHaveCount(0);
 });
+
+
+test('table explorer offers source-scoped guided questions without submitting automatically', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Updated / second PDF', { exact: true }).setInputFiles({
+    name: 'second.pdf', mimeType: 'application/pdf', buffer: categoryTablePdf(false, true),
+  });
+  await expect(page.getByText('1 aligned category table candidates.')).toBeVisible();
+  await page.getByText('Explore aligned category tables (1)', { exact: true }).click();
+  const table = page.getByRole('region', { name: 'Aligned category table preview' });
+  await expect(table.getByRole('columnheader', { name: /Application fee/ })).toBeVisible();
+  await expect(table.getByRole('rowheader', { name: /Reserved/ })).toBeVisible();
+  await table.getByRole('button', { name: 'Ask Application fee for Reserved' }).click();
+  await expect(page.getByLabel('Your question')).toHaveValue('Application fee for Reserved on page 1?');
+  await expect(page.getByLabel('Search scope')).toHaveValue('revised');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Ask PDF' }).click();
+  await expect(page.locator('.chat-turn').last().getByRole('region', { name: 'Aligned table evidence candidates' }).getByText('Rs. 250', { exact: true })).toBeVisible();
+});

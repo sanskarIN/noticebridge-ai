@@ -225,7 +225,13 @@ export function tableCellQuestion(table: CategoryTable, row: number, column: num
       row < 0 || row >= table.rows.length || column < 1 || column >= table.headers.length) return null;
   const question = table.headers[column].text + ' for ' + table.rows[row][0].text + ' on page ' + table.page + '?';
   if (question.length > 400) return null;
-  const parsed = tableQuestion({ question, pageFilter: table.page });
-  return parsed?.field === table.fields[column - 1] && parsed.category === categoryKey(table.rows[row][0].text)
-    ? question : null;
+  try {
+    const parsed = tableQuestion({ question, pageFilter: table.page });
+    return parsed?.field === table.fields[column - 1] && parsed.category === categoryKey(table.rows[row][0].text)
+      ? question : null;
+  } catch {
+    // Printed labels may themselves contain routing-like text. Do not
+    // let a malformed generated question break the table explorer.
+    return null;
+  }
 }
