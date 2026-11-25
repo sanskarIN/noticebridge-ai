@@ -107,7 +107,9 @@ def validate_model(model: str, digest: str) -> None:
 
 async def _json_response(client: httpx.AsyncClient, method: str, path: str, **kwargs) -> object:
     # No user-supplied URL; redirect responses and environment proxies are disabled.
-    if path not in {"/api/tags", "/api/embed"}:
+    if (method, path) not in {
+        ("GET", "/api/tags"), ("POST", "/api/embed"), ("POST", "/api/generate"),
+    }:
         raise EmbeddingError("Invalid local endpoint.")
     async with client.stream(method, BASE_URL + path, **kwargs) as response:
         if response.status_code != 200:
