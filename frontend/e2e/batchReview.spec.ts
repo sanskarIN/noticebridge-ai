@@ -285,3 +285,185 @@ test('coverage filter and narrow mobile layout remain usable', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Case 1 details' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(321);
 });
+
+
+// Construct a small valid PDF with computed byte offsets; use no private or
+// external document. The browser PDF.js renderer must actually open it.
+function fictionalPdf(day: number): Buffer {
+  const stream = 'BT /F1 12 Tf 40 720 Td (Application deadline: ' + day + ' December) Tj ET\n';
+  const bodies = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Count 1 /Kids [3 0 R] >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ' +
+      '/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Length ' + Buffer.byteLength(stream) + ' >>\nstream\n' + stream + 'endstream',
+  ];
+  let text = '%PDF-1.4\n';
+  const offsets = [0];
+  bodies.forEach((body, i) => {
+    offsets.push(Buffer.byteLength(text));
+    text += (i + 1) + ' 0 obj\n' + body + '\nendobj\n';
+  });
+  const xref = Buffer.byteLength(text);
+  text += 'xref\n0 6\n0000000000 65535 f \n';
+  offsets.slice(1).forEach(offset => {
+    text += String(offset).padStart(10, '0') + ' 00000 n \n';
+  });
+  text += 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+  return Buffer.from(text, 'ascii');
+}
+
+function sourceFixture(options: { geometry?: boolean; page?: number } = {}) {
+  const old = fictionalPdf(13);
+  const updated = fictionalPdf(19);
+  const saved = report();
+  const fingerprints = { original: hash(old), revised: hash(updated) };
+  saved.documents[0].sha256 = fingerprints.original;
+  saved.documents[1].sha256 = fingerprints.revised;
+  if (options.page) saved.findings[0].original.page = options.page;
+  if (options.geometry) {
+    Object.assign(saved.findings[0].original, {
+      bbox: [40, 58, 235, 76], page_width: 612, page_height: 792, page_rotation: 0,
+    });
+    Object.assign(saved.findings[0].revised, {
+      bbox: [40, 58, 235, 76], page_width: 612, page_height: 792, page_rotation: 0,
+    });
+  }
+  const input = fixture({ saved });
+  input.index.cases[0].source_fingerprints = fingerprints;
+  const manifest = JSON.parse(input.manifest.toString());
+  manifest.cases[0].original_sha256 = fingerprints.original;
+  manifest.cases[0].revised_sha256 = fingerprints.revised;
+  input.manifest = json(manifest);
+  input.index.manifest_sha256 = hash(input.manifest);
+  return { input, old, updated };
+}
+
+async function attachPdf(page: Page, role: 'Original notice' | 'Updated notice', bytes: Buffer,
+  name = 'local.pdf') {
+  await page.getByLabel(role + ' PDF for this case').setInputFiles({
+    name, buffer: bytes, mimeType: 'application/pdf',
+  });
+}
+
+async function openSourceCase(page: Page, options: { geometry?: boolean; page?: number } = {}) {
+  const files = sourceFixture(options);
+  await openIndex(page, files.input);
+  await selectReport(page, files.input.body);
+  await expect(page.getByText(/Report bytes match the saved digest/)).toBeVisible();
+  return files;
+}
+
+test('renders only a fingerprint-matched source PDF with the saved rectangle', async ({ page }) => {
+  const files = await openSourceCase(page, { geometry: true });
+  await page.getByRole('button', { name: 'Inspect original notice page 1' }).click();
+  await expect(page.getByText(/Attach the matching original notice PDF above/)).toBeVisible();
+  await expect(page.locator('.batch-page-panel canvas')).toHaveCount(0);
+  await attachPdf(page, 'Original notice', files.old);
+  await expect(page.getByText('Original notice PDF bytes match the saved fingerprint.')).toBeVisible();
+  await expect(page.locator('.batch-page-panel canvas')).toBeVisible();
+  await expect(page.locator('.batch-page-panel .evidence-highlight')).toBeVisible();
+  await expect(page.getByText('1 of 2 PDF fingerprints matched.')).toBeVisible();
+  await attachPdf(page, 'Updated notice', files.updated);
+  await expect(page.getByText('2 of 2 PDF fingerprints matched.')).toBeVisible();
+  await page.getByRole('button', { name: 'Inspect updated notice page 1' }).click();
+  await expect(page.getByRole('heading', { name: 'Updated notice · page 1' })).toBeFocused();
+  await expect(page.locator('.batch-page-panel .evidence-highlight')).toBeVisible();
+});
+
+test('role-swapped PDF does not reach the renderer', async ({ page }) => {
+  const files = await openSourceCase(page);
+  await page.getByRole('button', { name: 'Inspect original notice page 1' }).click();
+  await attachPdf(page, 'Original notice', files.updated);
+  await expect(page.getByRole('alert')).toHaveText(
+    'PDF bytes do not match this saved source fingerprint.',
+  );
+  await expect(page.locator('.batch-page-panel canvas')).toHaveCount(0);
+  await expect(page.getByText('0 of 2 PDF fingerprints matched.')).toBeVisible();
+});
+
+test('replacing a checked PDF with unrelated bytes clears its source preview', async ({ page }) => {
+  const files = await openSourceCase(page, { geometry: true });
+  await attachPdf(page, 'Original notice', files.old);
+  await expect(page.getByText('Original notice PDF bytes match the saved fingerprint.')).toBeVisible();
+  await page.getByRole('button', { name: 'Inspect original notice page 1' }).click();
+  await expect(page.locator('.batch-page-panel .evidence-highlight')).toBeVisible();
+  await attachPdf(page, 'Original notice', files.updated);
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.locator('.batch-page-panel canvas')).toHaveCount(0);
+  await expect(page.locator('.batch-page-panel .evidence-highlight')).toHaveCount(0);
+});
+
+test('missing geometry displays a page without fabricating a highlight', async ({ page }) => {
+  const files = await openSourceCase(page);
+  await attachPdf(page, 'Original notice', files.old);
+  await page.getByRole('button', { name: 'Inspect original notice page 1' }).click();
+  await expect(page.getByText('Source page shown without a verified highlight.')).toBeVisible();
+  await expect(page.locator('.batch-page-panel .evidence-highlight')).toHaveCount(0);
+});
+
+test('out-of-range saved page does not render as another page', async ({ page }) => {
+  const files = await openSourceCase(page, { page: 2 });
+  await attachPdf(page, 'Original notice', files.old);
+  await page.getByRole('button', { name: 'Inspect original notice page 2' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Requested page is outside the source PDF.');
+  await expect(page.locator('.batch-page-panel .evidence-highlight')).toHaveCount(0);
+});
+
+test('clearing attached sources closes the active source preview', async ({ page }) => {
+  const files = await openSourceCase(page);
+  await attachPdf(page, 'Original notice', files.old);
+  await page.getByRole('button', { name: 'Inspect original notice page 1' }).click();
+  await expect(page.getByText('Source page shown without a verified highlight.')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear attached PDFs' }).click();
+  await expect(page.locator('.batch-page-panel')).toHaveCount(0);
+  await expect(page.getByText('0 of 2 PDF fingerprints matched.')).toBeVisible();
+});
+
+test('rejects a non-PDF filename even when the file bytes match', async ({ page }) => {
+  const files = await openSourceCase(page);
+  await attachPdf(page, 'Original notice', files.old, 'not-a-pdf.txt');
+  await expect(page.getByRole('alert')).toHaveText('Choose a PDF with a valid PDF signature.');
+});
+
+test('rejects a non-PDF signature before checking the stored digest', async ({ page }) => {
+  await openSourceCase(page);
+  await attachPdf(page, 'Original notice', Buffer.from('not a PDF'));
+  await expect(page.getByRole('alert')).toHaveText('Choose a PDF with a valid PDF signature.');
+});
+
+test('rejects empty and oversized source PDFs', async ({ page }) => {
+  await openSourceCase(page);
+  await attachPdf(page, 'Original notice', Buffer.alloc(0));
+  await expect(page.getByRole('alert')).toHaveText('Choose a nonempty PDF no larger than 10 MiB.');
+  const large = Buffer.alloc(10 * 1024 * 1024 + 1, 32);
+  large.write('%PDF-');
+  await attachPdf(page, 'Original notice', large);
+  await expect(page.getByRole('alert')).toHaveText('Choose a nonempty PDF no larger than 10 MiB.');
+});
+
+test('clearing the workspace releases source attachments and report quotations', async ({ page }) => {
+  const files = await openSourceCase(page);
+  await attachPdf(page, 'Original notice', files.old);
+  await expect(page.getByText('Original notice PDF bytes match the saved fingerprint.')).toBeVisible();
+  await page.getByRole('button', { name: 'Inspect original notice page 1' }).click();
+  await expect(page.getByText('Source page shown without a verified highlight.')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear workspace' }).click();
+  await expect(page.locator('.batch-page-panel')).toHaveCount(0);
+  await expect(page.getByLabel('Original notice PDF for this case')).toHaveCount(0);
+  await expect(page.getByText('Fictional deadline: 13 December')).toHaveCount(0);
+});
+
+test('source inspection sends neither PDFs nor evidence to the API', async ({ page }) => {
+  const requests: string[] = [];
+  await page.route('**/api/**', route => {
+    requests.push(route.request().url());
+    return route.abort();
+  });
+  const files = await openSourceCase(page);
+  await attachPdf(page, 'Original notice', files.old);
+  await page.getByRole('button', { name: 'Inspect original notice page 1' }).click();
+  await expect(page.getByText('Source page shown without a verified highlight.')).toBeVisible();
+  expect(requests).toEqual([]);
+});
