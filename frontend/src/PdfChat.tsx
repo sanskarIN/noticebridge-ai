@@ -74,6 +74,7 @@ export default function PdfChat() {
   const [scope, setScope] = useState<ChatScope>('original');
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [conversationEpoch, setConversationEpoch] = useState(0);
   const [reuse, setReuse] = useState(false);
   const [includeContext, setIncludeContext] = useState(true);
   const [error, setError] = useState('');
@@ -104,6 +105,7 @@ export default function PdfChat() {
   const canAsk = !indexing && (scope === 'auto' ? attached.length > 0 : scope === 'both' ? ready('original') && ready('revised') : ready(scope));
 
   function clearConversation() {
+    setConversationEpoch(epoch => epoch + 1);
     setTurns([]);
     setPreview(null);
     setReuse(false);
@@ -281,7 +283,7 @@ export default function PdfChat() {
           <div ref={latestRef} />
         </div>
         {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel
-          key={generation.current.original + ':' + generation.current.revised + ':' + turns.length + ':' + turns.at(-1)!.resolved}
+          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
           index={index} answer={turns.at(-1)!.answers[0]} onInspect={setPreview} />}
         {!indexing && attached.length > 0 && <PdfChatSessionPanel
           key={generation.current.original + ':' + generation.current.revised}

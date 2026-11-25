@@ -127,3 +127,15 @@ test('application charges retain original printed wording', () => {
   expect(result.citations).toEqual([source]);
   expect(result.printedFields[0]?.label).toBe('Application charges');
 });
+
+
+test('opening and closing questions are distinct; generic application timing is not a deadline', () => {
+  const opening: Passage = { role: 'original', page: 1, ordinal: 1, text: 'Application opening date: 1 December 2026' };
+  const closing: Passage = { role: 'original', page: 1, ordinal: 2, text: 'Application deadline: 19 December 2026' };
+  const window: Passage = { role: 'original', page: 1, ordinal: 3, text: 'Application window: 1 to 19 December 2026' };
+  const idx = buildIndex([opening, closing, window]);
+  expect(answerQuestion(idx, 'When will applications open?', 'original').citations).toEqual([opening]);
+  expect(answerQuestion(idx, 'When will the application close?', 'original').citations).toEqual([closing]);
+  expect(answerQuestion(idx, 'When can I apply?', 'original').citations).toEqual([window]);
+  expect(answerQuestion(buildIndex([closing]), 'When can I apply?', 'original').kind).toBe('insufficient');
+});

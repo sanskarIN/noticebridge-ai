@@ -79,3 +79,13 @@ test('no values are synthesized from unlabeled or ambiguous multi-field fragment
   ]);
   expect(directFieldAnswer(idx, answerQuestion(idx, 'Application fee', 'original'))).toBeNull();
 });
+
+
+test('generic application timing is not summarized as a closing date', () => {
+  expect(directFieldAnswer(index, answerQuestion(index, 'When can I apply?', 'both'))).toBeNull();
+  const opening = row('Application opening date: 1 December 2026', 3);
+  const idx = buildIndex([original, opening]);
+  const result = directFieldAnswer(idx, answerQuestion(idx, 'When will applications open?', 'original'));
+  expect(result?.field.id).toBe('application_start');
+  expect(result?.sides[0].values[0].value).toBe('1 December 2026');
+});

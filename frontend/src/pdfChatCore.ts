@@ -86,7 +86,11 @@ export function queryTerms(question: string): string[] {
     .replace(/\bwho (?:can|may|is eligible to) apply\b/gi, 'eligibility')
     .replace(/\bwhen do applications close\b/gi, 'application deadline')
     .replace(/\bwhat (?:is|are) the (documents|certificates) (?:needed|required)\b/gi, 'required $1')
-    .replace(/\bwhen (?:can|do|should|must) (?:i|we) apply\b/gi, 'application deadline')
+    // An opening date, closing date and application window are distinct.
+    // A generic "when can I apply" is not automatically a deadline.
+    .replace(/\bwhen (?:do|does|will) (?:the )?applications? (?:open|start|begin)\b/gi, 'application start date')
+    .replace(/\bwhen (?:do|does|will) (?:the )?applications? (?:close|end)\b/gi, 'application deadline')
+    .replace(/\bwhen (?:can|do|should|must) (?:i|we) apply\b/gi, 'application window')
     .replace(/\bwhen is the application due\b/gi, 'application deadline');
   return terms(expanded);
 }

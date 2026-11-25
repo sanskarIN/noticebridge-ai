@@ -434,3 +434,9 @@ qualifiers and for ambiguous vocabulary keys. It does not infer
 equivalent dates, fees, eligibility, legal effect or official authority.
 Other matches and coverage warnings remain visible. This is templated
 extractive synthesis, not free-form generative QA.
+
+Generic application timing is not automatically interpreted as a closing
+date. Opening and closing question patterns remain distinct; general
+window questions require matching window text. Conversation replay and
+clearing invalidate pending experimental model exchanges even when the
+last question text is unchanged.

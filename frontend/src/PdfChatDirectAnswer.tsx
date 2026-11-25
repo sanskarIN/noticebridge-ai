@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { Answer, Passage, Role, SearchIndex } from './pdfChatCore';
 import { directFieldAnswer, directSourceKey } from './pdfChatDirectAnswer';
 
@@ -15,7 +16,7 @@ const comparisonText = {
 export default function PdfChatDirectAnswer({ index, answer, onInspect }: {
   index: SearchIndex; answer: Answer; onInspect: (passage: Passage) => void;
 }) {
-  const result = directFieldAnswer(index, answer);
+  const result = useMemo(() => directFieldAnswer(index, answer), [index, answer]);
   if (!result) return null;
   return <section className="chat-direct-answer" aria-label="Concise printed-field answer">
     <h4>At a glance: {result.field.label}</h4>
