@@ -219,3 +219,20 @@ test('nearby-line fallback shows separate source fragments and can be disabled',
   await expect(strict.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
   await expect(strict.locator('blockquote')).toHaveCount(0);
 });
+
+
+test('explicit physical page filter does not silently search other pages', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
+  await expect(page.getByText(/extracted passages available/)).toBeVisible();
+  const found = await ask(page, 'Application fee on page 1?');
+  await expect(found.getByText(/Physical PDF page 1 only/)).toBeVisible();
+  await expect(found.locator('blockquote')).toHaveText('Application fee: Rs. 500');
+  const absent = await ask(page, 'Application fee on page 2?');
+  await expect(absent.getByText(/Physical PDF page 2 only/)).toBeVisible();
+  await expect(absent.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
+  await expect(absent.locator('blockquote')).toHaveCount(0);
+  await page.getByLabel('Your question').fill('Fee on pages 1-2');
+  await page.getByRole('button', { name: 'Ask PDF' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Use one physical PDF page number from 1 to 80.');
+});

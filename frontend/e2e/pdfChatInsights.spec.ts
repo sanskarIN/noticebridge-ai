@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { answerQuestion, buildIndex, type Passage } from '../src/pdfChatCore';
 import { answerQuestionSet, comparePrintedValues, groupPrintedValues, nearbyPassages,
-  planQuestions, resolveChatQuestion, requestedScope, effectiveScope, answerScopedQuestions } from '../src/pdfChatInsights';
+  planQuestions, resolveChatQuestion, requestedScope, effectiveScope, answerScopedQuestions, parsePageFilter } from '../src/pdfChatInsights';
 
 const rows: Passage[] = [
   { role: 'original', page: 1, ordinal: 1, text: 'Fictional notice only' },
@@ -150,4 +150,56 @@ test('follow-up changes explicit role without carrying a stale source phrase', (
   const answer = answerScopedQuestions(index, resolved, 'auto', ['original', 'revised'])[0];
   expect(answer.scope).toBe('revised');
   expect(answer.citations).toEqual([rows[5]]);
+});
+
+
+test('page filter strips only the explicit routing phrase', () => {
+  expect(parsePageFilter('Application fee on page 2?')).toEqual({ content: 'Application fee ?', page: 2 });
+  expect(parsePageFilter('Clause 2 application fee')).toEqual({ content: 'Clause 2 application fee' });
+  expect(parsePageFilter('Application fee from PDF page 3')).toEqual({ content: 'Application fee', page: 3 });
+});
+test('physical page constraints do not retrieve matches from other pages', () => {
+  const answer = answerScopedQuestions(index, 'Application fee on page 2?', 'both', ['original', 'revised'])[0];
+  expect(answer.pageFilter).toBe(2);
+  expect(answer.kind).toBe('insufficient');
+  expect(answer.citations).toEqual([]);
+});
+test('page-filtered search preserves full corpus IDF statistics', () => {
+  const repeated = buildIndex([...rows, ...Array.from({ length: 8 }, (_, i): Passage => ({
+    role: 'original', page: i + 3, ordinal: 1, text: 'Application fee: Rs. 100',
+  }))]);
+  const answer = answerScopedQuestions(repeated, 'Application fee on page 1?', 'both', ['original', 'revised'])[0];
+  expect(answer.citations).toEqual([rows[2], rows[5]]);
+  expect(answer.pageFilter).toBe(1);
+});
+test('page filter applies independently to multiple questions', () => {
+  const answers = answerScopedQuestions(index, 'Application fee on page 1? Eligibility on page 2?',
+    'both', ['original', 'revised']);
+  expect(answers.map(answer => answer.pageFilter)).toEqual([1, 2]);
+  expect(answers[0].citations).toEqual([rows[2], rows[5]]);
+  expect(answers[1].citations).toEqual([rows[3], rows[6]]);
+});
+test('new page constraints replace earlier constraints in an explicit follow-up', () => {
+  const resolved = resolveChatQuestion('What about on page 2?', 'Application fee on page 1?', true);
+  const result = answerScopedQuestions(index, resolved, 'original', ['original'])[0];
+  expect(result.pageFilter).toBe(2);
+  expect(result.kind).toBe('insufficient');
+});
+test('page constraints cannot bridge contextual fragments on another page', () => {
+  const parts: Passage[] = [
+    { role: 'original', page: 1, ordinal: 1, text: 'Rural applicants' },
+    { role: 'original', page: 1, ordinal: 2, text: 'Residence certificate' },
+    { role: 'original', page: 2, ordinal: 1, text: 'Rural applicants' },
+  ];
+  const answer = answerScopedQuestions(buildIndex(parts), 'Rural certificate on page 2?', 'original', ['original'], true)[0];
+  expect(answer.kind).toBe('insufficient');
+  expect(answer.contextGroups).toEqual([]);
+});
+for (const value of ['0', '81', '-1', '2.5', '1-3', '2 to 3', '2 and 3', '2 on page 3', 'two', '9999999999999999999']) {
+  test('rejects invalid or ambiguous physical page filter: ' + value, () => {
+    expect(() => parsePageFilter('Fee on page ' + value)).toThrow();
+  });
+}
+test('plural page constraints are rejected rather than silently broadened', () => {
+  expect(() => parsePageFilter('Fee on pages 1-3')).toThrow();
 });

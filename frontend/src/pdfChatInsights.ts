@@ -75,6 +75,10 @@ export function effectiveScope(question: string, selection: ChatScope, attached:
 export function parsePageFilter(question: string): { content: string; page?: number } {
   const pattern = /\b(?:on|from|in)\s+(?:physical\s+)?(?:pdf\s+)?page\s+([0-9]+)\b/gi;
   const matches = [...question.matchAll(pattern)];
+  const directives = [...question.matchAll(/\b(?:on|from|in)\s+(?:physical\s+)?(?:pdf\s+)?pages?\b/gi)];
+  if (directives.length !== matches.length) {
+    throw new Error('Use one physical PDF page number from 1 to 80.');
+  }
   if (!matches.length) return { content: question };
   if (matches.length !== 1) throw new Error('Choose one physical PDF page per question.');
   const match = matches[0];
