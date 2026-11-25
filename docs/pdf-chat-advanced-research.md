@@ -335,3 +335,12 @@ merge or release is authorized by this research document.
 16. Ollama official API and embedding documentation.
     https://github.com/ollama/ollama/blob/main/docs/api.md
     https://github.com/ollama/ollama/blob/main/docs/capabilities/embeddings.mdx
+
+## Research prototype: extractive protocol
+
+The pure validator in `pdfChatProposal.ts` checks bounded UTF-8 JSON,
+object shape, nesting, decoded duplicate keys, scoped candidate identity,
+UTF-16 offsets, surrogate boundaries, and overlapping spans. It returns
+only locally resolved source substrings and source objects. Tests include
+malformed proposals and attempted source spoofing. It is not integrated
+with a runtime and cannot prove entailment or sufficient context.
