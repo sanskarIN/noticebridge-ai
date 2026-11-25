@@ -338,7 +338,7 @@ export async function inspectReport(file: File, row: CaseSummary): Promise<Repor
     const original = quote(item.original, 'original');
     const revised = quote(item.revised, 'revised');
     if (!Array.isArray(item.supporting_evidence) || item.supporting_evidence.length > 2) fail();
-    const supporting = item.supporting_evidence.map(input => {
+    const supporting = item.supporting_evidence.map((input): Quote & { role: 'original' | 'revised' } => {
       const evidence = object(input);
       const role = evidence.document_id;
       if (role !== 'original' && role !== 'revised') fail();
