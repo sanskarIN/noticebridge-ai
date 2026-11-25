@@ -52,3 +52,14 @@
 
 .chat-context-results{border:1px solid #38546c;border-radius:10px;padding:12px;margin:12px 0;overflow-wrap:anywhere}
 .chat-context-results h4{margin:0 0 8px}
+
+
+.chat-overview-field{border-top:1px solid #38546c;padding:16px 0;margin:0}
+.chat-overview-field h3{margin:0}
+.chat-overview-filter{display:grid;gap:6px;color:#b2c1d6;font-size:14px}
+.chat-overview-filter select{background:#071325;color:#e8edf7;border:1px solid #50627d;border-radius:8px;padding:9px;max-width:100%;font:inherit}
+.chat-overview-side{min-width:0;overflow-wrap:anywhere}
+.chat-overview-side h4{margin:0 0 10px}
+.chat-overview-value+.chat-overview-value{border-top:1px solid #38546c;margin-top:12px;padding-top:8px}
+.chat-overview-value p{margin:6px 0}
+.chat-overview-value button{margin-bottom:8px}

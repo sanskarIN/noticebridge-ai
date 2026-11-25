@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent,
 import { buildIndex, MAX_QUESTION, pageCoverage, type Answer, type Corpus, type Passage, type Role } from './pdfChatCore';
 import { answerScopedQuestions, comparePrintedValues, groupPrintedValues, nearbyPassages, resolveChatQuestion, type ChatScope } from './pdfChatInsights';
 import { readPdf } from './pdfChatExtract';
+import PdfChatOverview from './PdfChatOverview';
 import './pdfChat.css';
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
@@ -214,6 +215,8 @@ export default function PdfChat() {
         </div>
         <p className="chat-muted">Maximum 10 MiB and 80 pages per PDF; native embedded text only. No OCR or external AI service is used here.</p>
       </section>
+      {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={setPreview}
+        onAsk={value => { setQuestion(value); setReuse(false); setScope('auto'); inputRef.current?.focus(); }} />}
       <section className="chat-panel" aria-labelledby="chat-title">
         <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
           <button type="button" className="chat-button" disabled={!turns.length} onClick={clearConversation}>Clear conversation</button>

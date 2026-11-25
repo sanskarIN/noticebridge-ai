@@ -201,3 +201,24 @@ not measured performance until the test actually runs. The corpus is
 small, authored alongside the implementation, and does not evaluate
 OCR, natural-language entailment, real-world retrieval accuracy or
 independent human relevance labels.
+
+
+## Extractive document overview
+
+The chat workspace now builds a separate extractive overview of recognized
+colon-delimited fields from all indexed fragments, even before a question
+is entered. A fixed 15-category vocabulary covers application/registration
+deadlines and fees, opening dates, eligibility, documents, examination
+and interview details, reporting time and contact email. It groups only
+explicit known label aliases, keeps the original label and source citation,
+and compares literal value strings rather than inferring equivalent dates
+or currency amounts. All distinct values are counted before display limits
+are applied, so a hidden fifth value cannot make a field look unambiguous.
+At most four values and three references per value per role are displayed.
+
+The overview can filter fields needing comparison review and prefill a
+question without submitting it automatically. It can open the original
+physical PDF page for each displayed field. Missing labels are not treated
+as removed requirements; unrecognized, multi-line and scanned fields can
+be missed. The overview is not an abstractive summary or a substitute for
+official-source verification.
