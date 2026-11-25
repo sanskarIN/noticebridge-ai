@@ -250,3 +250,47 @@ test('page coverage distinguishes blank and nonexistent physical pages', async (
   await expect(whole.getByText(/searchable text coverage is incomplete/)).toBeVisible();
   await expect(whole.locator('blockquote')).toHaveCount(0);
 });
+
+
+test('overview exposes recognized printed fields, aliases and page citations before chat', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Last date to apply: 19 December 2026', 'Application fee: Rs. 500',
+  ]);
+  await attach(page, 'Updated / second PDF', [
+    'Application closing date: 13 December 2026', 'Application charges: Rs. 350',
+  ]);
+  const overview = page.getByRole('region', { name: 'Document overview' });
+  await expect(overview).toBeVisible();
+  await expect(overview.getByText('2 recognized field categories.', { exact: false })).toBeVisible();
+  const deadline = overview.locator('article').filter({ has: page.getByRole('heading', { name: 'Application deadline', exact: true }) });
+  await expect(deadline.getByText('Different printed value text')).toBeVisible();
+  await expect(deadline.getByText('19 December 2026')).toBeVisible();
+  await expect(deadline.getByText('13 December 2026')).toBeVisible();
+  await deadline.getByRole('button', { name: 'Inspect original page 1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  await deadline.getByRole('button', { name: 'Ask about application deadline' }).click();
+  await expect(page.getByLabel('Your question')).toHaveValue('Application deadline');
+  await expect(page.getByLabel('Search scope')).toHaveValue('auto');
+  await page.getByRole('button', { name: 'Ask PDF' }).click();
+  await expect(page.locator('.chat-turn').last().locator('blockquote')).toHaveText([
+    'Last date to apply: 19 December 2026', 'Application closing date: 13 December 2026',
+  ]);
+});
+test('overview review filter preserves competing values and hides identical displayed fields', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Application fee: Rs. 500', 'Eligibility: Class 12', 'Interview date: 21 December 2026',
+  ]);
+  await attach(page, 'Updated / second PDF', [
+    'Application fee: Rs. 350', 'Application fee: Rs. 900', 'Eligibility: Class 12',
+  ]);
+  const overview = page.getByRole('region', { name: 'Document overview' });
+  await expect(overview.getByRole('heading', { name: 'Eligibility', exact: true })).toBeVisible();
+  await overview.getByLabel('Overview filter').selectOption('review');
+  await expect(overview.getByRole('heading', { name: 'Eligibility', exact: true })).toHaveCount(0);
+  await expect(overview.getByText(/More than one distinct value/)).toBeVisible();
+  await expect(overview.getByText('Field found in one indexed source only')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear revised PDF' }).click();
+  await expect(overview.getByText('Rs. 900', { exact: true })).toHaveCount(0);
+});
