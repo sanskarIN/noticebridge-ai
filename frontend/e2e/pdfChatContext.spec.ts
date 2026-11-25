@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { answerQuestion, buildIndex, contextualMatches, queryTerms, pageCoverage, type Corpus, type Passage } from '../src/pdfChatCore';
+import { answerQuestion, buildIndex, contextualMatches, queryTerms, pageCoverage, sameTextFlow, type Corpus, type Passage } from '../src/pdfChatCore';
 
 function line(text: string, ordinal: number, page = 1, role: Passage['role'] = 'original'): Passage {
   return { role, page, ordinal, text };
@@ -131,4 +131,25 @@ test('coverage distinguishes physical page availability and indexing limitations
   expect(pageCoverage(corpus, 6)).toBe('not_present');
   expect(pageCoverage(corpus, 0)).toBe('not_present');
   expect(pageCoverage(corpus, 1.5)).toBe('not_present');
+});
+
+
+test('native layout guard prevents joining distinct table columns or distant rows', () => {
+  const first: Passage = { ...line('Rural applicants', 1), position: { x0: 40, x1: 120, y: 700, height: 12 } };
+  const variants: Passage[] = [
+    { ...line('Residence certificate', 2), position: { x0: 220, x1: 340, y: 700, height: 12 } },
+    { ...line('Residence certificate', 2), position: { x0: 220, x1: 340, y: 670, height: 12 } },
+    { ...line('Residence certificate', 2), position: { x0: 40, x1: 160, y: 600, height: 12 } },
+    { ...line('Residence certificate', 2), position: { x0: 40, x1: 160, y: 730, height: 12 } },
+  ];
+  for (const second of variants) {
+    expect(sameTextFlow(first, second)).toBe(false);
+    expect(answerQuestion(buildIndex([first, second]), 'rural residence certificate', 'original', true).kind).toBe('insufficient');
+  }
+});
+test('native layout guard preserves ordinary nearby lines and bounded indentation', () => {
+  const first: Passage = { ...line('Rural applicants', 1), position: { x0: 40, x1: 120, y: 700, height: 12 } };
+  const second: Passage = { ...line('Residence certificate', 2), position: { x0: 52, x1: 180, y: 675, height: 12 } };
+  expect(sameTextFlow(first, second)).toBe(true);
+  expect(answerQuestion(buildIndex([first, second]), 'rural residence certificate', 'original', true).citations).toEqual([first, second]);
 });

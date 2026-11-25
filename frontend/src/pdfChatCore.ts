@@ -148,6 +148,19 @@ function rank(index: SearchIndex, words: string[], role: Role, field: FieldId | 
   return { matches: unique.slice(0, 4).map(row => row.passage), count: unique.length };
 }
 
+/** Geometry is optional. Where both hints exist, do not combine same-baseline
+ * cells, far-apart columns, reversed reading direction or distant rows.
+ * This is a conservative reading-flow guard, not a proof of semantic linkage.
+ */
+export function sameTextFlow(first: Passage, next: Passage): boolean {
+  const a = first.position, b = next.position;
+  if (!a || !b) return true;
+  const height = Math.max(a.height, b.height);
+  const drop = a.y - b.y;
+  return [a.x0, b.x0, a.y, b.y, height].every(Number.isFinite) && height > 0 &&
+    drop >= height * 0.5 && drop <= height * 4 && Math.abs(a.x0 - b.x0) <= height * 2;
+}
+
 /** Adjacent-line retrieval is a fallback, not an entailment model.
  * Require all distinct query terms in a minimal contiguous window. Each
  * endpoint must contribute evidence not present in the other fragments.
@@ -169,7 +182,8 @@ export function contextualMatches(index: SearchIndex, words: string[], role: Rol
       const next = rows[start + offset];
       const last = window[window.length - 1];
       if (next.passage.page !== first.passage.page ||
-          next.passage.ordinal !== last.passage.ordinal + 1) break;
+          next.passage.ordinal !== last.passage.ordinal + 1 ||
+          !sameTextFlow(last.passage, next.passage)) break;
       window.push(next);
       if (!covers(window)) continue;
       if (!covers(window.slice(1)) && !covers(window.slice(0, -1))) {

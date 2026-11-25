@@ -476,3 +476,9 @@ including explicit headers and all recognized rows. Every cell has a
 source inspection link. A guided question is offered only when the
 same parser round-trips the exact category and field, and is prefilled
 with the correct source role and physical page rather than auto-submitted.
+
+Native position hints also constrain adjacent-line retrieval when both
+fragments have valid geometry: same-baseline cells, far-separated columns,
+reversed order and large vertical gaps cannot form a contextual window.
+Missing geometry retains the existing bounded ordinal-only fallback;
+neither route proves that neighboring text is semantically connected.
