@@ -22,12 +22,15 @@ export default function PdfChat() {
   const [preview, setPreview] = useState<Passage | null>(null);
   const controllers = useRef<Partial<Record<Role, AbortController>>>({});
   const generation = useRef({ original: 0, revised: 0 });
+  const demoGeneration = useRef(0);
+  const [demoLoading, setDemoLoading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const latestRef = useRef<HTMLDivElement>(null);
   useEffect(() => () => {
     for (const controller of Object.values(controllers.current)) controller?.abort();
     generation.current.original++;
     generation.current.revised++;
+    demoGeneration.current++;
   }, []);
   const index = useMemo(() => buildIndex(Object.values(slots).flatMap(slot =>
     slot.kind === 'ready' ? slot.corpus.passages : [],
@@ -54,7 +57,11 @@ export default function PdfChat() {
   async function choose(role: Role, event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
-    if (file) await indexFile(role, file);
+    if (file) {
+      demoGeneration.current++;
+      setDemoLoading(false);
+      await indexFile(role, file);
+    }
   }
   async function indexFile(role: Role, file: File) {
     remove(role);
@@ -77,11 +84,20 @@ export default function PdfChat() {
     }
   }
   async function tryDemo() {
-    const { loadShowcase } = await import('./showcase/load');
-    const sample = loadShowcase();
-    // Both operations synchronously invalidate previous state before awaiting.
-    setScope('both');
-    await Promise.all([indexFile('original', sample.original), indexFile('revised', sample.revised)]);
+    const token = ++demoGeneration.current;
+    setDemoLoading(true);
+    setError('');
+    try {
+      const { loadShowcase } = await import('./showcase/load');
+      if (token !== demoGeneration.current) return;
+      const sample = loadShowcase();
+      setScope('both');
+      await Promise.all([indexFile('original', sample.original), indexFile('revised', sample.revised)]);
+    } catch {
+      if (token === demoGeneration.current) setError('Unable to load fictional notices.');
+    } finally {
+      if (token === demoGeneration.current) setDemoLoading(false);
+    }
   }
   function ask(event: FormEvent) {
     event.preventDefault();
@@ -116,7 +132,7 @@ export default function PdfChat() {
       <section className="chat-panel" aria-labelledby="chat-files-title">
         <div className="chat-toolbar"><h2 id="chat-files-title">1. Attach notices</h2>
           <button type="button" className="chat-button" onClick={() => void tryDemo()}
-            disabled={Object.values(slots).some(slot => slot.kind === 'loading')}>Try fictional notices</button></div>
+            disabled={demoLoading || Object.values(slots).some(slot => slot.kind === 'loading')}>Try fictional notices</button></div>
         <div className="chat-file-grid">
           {(['original', 'revised'] as const).map(role => {
             const slot = slots[role];
@@ -134,7 +150,7 @@ export default function PdfChat() {
                 {slot.corpus.limited && <p className="chat-note">Indexing limits were reached. Some content is not searchable.</p>}
               </>}
               <button type="button" className="chat-button" disabled={slot.kind === 'empty'}
-                onClick={() => remove(role)}>Clear {role} PDF</button>
+                onClick={() => { demoGeneration.current++; setDemoLoading(false); remove(role); }}>Clear {role} PDF</button>
             </div>;
           })}
         </div>

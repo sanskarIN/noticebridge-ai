@@ -178,3 +178,7 @@ Planned for **GenHacks 2026**, AI/Agentic Systems/Cybersecurity/Dev Tools track.
 ## License
 
 Apache-2.0. Contributions welcome through issues and pull requests.
+
+### Local PDF chat (experimental)
+
+Use **Chat with PDFs** to ask English-oriented questions about one or two local text-based PDFs, view matching printed fields and open page citations. This browser-only feature does not upload files, invoke a generative model or perform OCR. See [PDF chat research and design](docs/pdf-chat-research.md) for evaluation criteria and limitations.

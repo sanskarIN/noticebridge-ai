@@ -33,3 +33,7 @@
 .pdf-chat :is(button,input,textarea,select,a):focus-visible{outline:3px solid #82e2c6;outline-offset:3px}
 .chat-panel .pdf-stage{max-height:65vh;overflow:auto}
 @media(max-width:640px){.chat-main{padding:20px 12px 36px}.chat-file-grid{grid-template-columns:1fr}.pdf-chat .topbar{height:auto;padding:16px;flex-wrap:wrap}.chat-toolbar{align-items:start}}
+
+.chat-printed-fields{border:1px solid #38546c;background:#142b3c;border-radius:8px;padding:12px;margin:12px 0;overflow-wrap:anywhere}
+.chat-printed-fields h4{margin:0 0 8px}
+.chat-printed-fields p{margin:6px 0}
