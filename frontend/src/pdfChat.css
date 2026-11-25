@@ -83,3 +83,6 @@
 .chat-direct-value p{margin:8px 0}
 .chat-direct-links{display:flex;flex-wrap:wrap;gap:6px}
 .chat-direct-links button{max-width:100%;white-space:normal;text-align:left}
+
+.chat-table-evidence{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:6px 10px;overflow-wrap:anywhere}
+.chat-table-evidence dt{color:#9aadc2}.chat-table-evidence dd{margin:0;min-width:0}

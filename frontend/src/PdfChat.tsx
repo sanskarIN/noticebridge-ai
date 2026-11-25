@@ -7,6 +7,8 @@ import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
 import PdfChatDirectAnswer from './PdfChatDirectAnswer';
+import PdfChatTableAnswer from './PdfChatTableAnswer';
+import { buildCategoryTables, type TableIndex } from './pdfChatTables';
 import './pdfChat.css';
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
@@ -94,6 +96,10 @@ export default function PdfChat() {
   const index = useMemo(() => buildIndex(Object.values(slots).flatMap(slot =>
     slot.kind === 'ready' ? slot.corpus.passages : [],
   )), [slots]);
+  const tableIndexes = useMemo<Record<Role, TableIndex | null>>(() => ({
+    original: slots.original.kind === 'ready' ? buildCategoryTables(slots.original.corpus) : null,
+    revised: slots.revised.kind === 'ready' ? buildCategoryTables(slots.revised.corpus) : null,
+  }), [slots]);
   const ready = (role: Role) => slots[role].kind === 'ready';
   const attached = (['original', 'revised'] as const).filter(ready);
   const files: AttachedFiles = {};
@@ -216,6 +222,8 @@ export default function PdfChat() {
                   No indexed text on pages {slot.corpus.missingPages.join(', ')}. Inspect scanned or image-only pages directly.
                 </p>}
                 {slot.corpus.limited && <p className="chat-note">Indexing limits were reached. Some content is not searchable.</p>}
+                {tableIndexes[role] && tableIndexes[role]!.tables.length > 0 && <p className="chat-muted">{tableIndexes[role]!.tables.length} aligned category table candidates.</p>}
+                {tableIndexes[role] && (tableIndexes[role]!.skippedPages.length > 0 || tableIndexes[role]!.limited) && <p className="chat-muted">Layout analysis is limited for this PDF. Inspect tables directly.</p>}
               </>}
               <button type="button" className="chat-button" disabled={slot.kind === 'empty'}
                 onClick={() => { demoGeneration.current++; setDemoLoading(false); remove(role); }}>Clear {role} PDF</button>
@@ -246,6 +254,7 @@ export default function PdfChat() {
               </p>}
               <SearchCoverage answer={answer} slots={slots} />
               <PdfChatDirectAnswer index={index} answer={answer} onInspect={setPreview} />
+              <PdfChatTableAnswer indexes={tableIndexes} answer={answer} onInspect={setPreview} />
               {answer.kind === 'insufficient' && <p>No sufficiently matching passage was found. This does not establish that the answer is absent. Try more specific wording or inspect the PDF.</p>}
               {answer.missingRoles.length > 0 && answer.kind === 'passages' && <p className="chat-note">
                 No sufficiently matching passage in {answer.missingRoles.map(role => names[role]).join(', ')}.
