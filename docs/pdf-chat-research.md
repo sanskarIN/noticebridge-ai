@@ -88,3 +88,26 @@ Open the application's Chat with PDFs navigation link. Attach one PDF or
 select Try fictional notices. Choose one or both source roles and ask a
 question. Click a citation's Inspect source button to display the page.
 The feature also works in the static showcase build without an API.
+
+
+## Compound questions and comparative evidence
+
+Explicit semicolon or question-mark separators create up to four independent
+retrieval queries. A narrow grammar additionally recognizes bare lists of
+deadline, fee and eligibility fields. Other conjunctions and alternatives
+are not automatically split, because they may represent conditions rather
+than independent questions. Each subquestion independently retrieves or
+abstains; no successful answer can mask a missing second answer.
+
+Printed fields with identical normalized labels are grouped per source role.
+Repeated identical strings retain all displayed citations; multiple distinct
+strings in one role are flagged without choosing one. Across roles, the
+interface distinguishes identical displayed text, differing displayed text
+and multiple displayed values. This is not numerical equivalence, a
+confirmed amendment, or semantic contradiction detection. Only the displayed
+retrieval results participate; additional matches may exist.
+
+A source inspection panel can show up to two neighboring extracted fragments
+on each side of the citation, restricted to the same PDF and physical page.
+The fragments remain separate and are not treated as verified reading order
+or additional answer claims.

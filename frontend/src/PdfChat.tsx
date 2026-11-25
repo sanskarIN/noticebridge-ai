@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { answerQuestion, buildIndex, MAX_QUESTION, resolveQuestion, type Answer, type Corpus, type Passage, type Role, type Scope } from './pdfChatCore';
+import { buildIndex, MAX_QUESTION, resolveQuestion, type Answer, type Corpus, type Passage, type Role, type Scope } from './pdfChatCore';
+import { answerQuestionSet, comparePrintedValues, groupPrintedValues, nearbyPassages } from './pdfChatInsights';
 import { readPdf } from './pdfChatExtract';
 import './pdfChat.css';
 
@@ -7,10 +8,35 @@ const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
 const names: Record<Role, string> = { original: 'Original / first PDF', revised: 'Updated / second PDF' };
 type Slot = { kind: 'empty' } | { kind: 'loading' } | { kind: 'error'; message: string } |
   { kind: 'ready'; file: File; corpus: Corpus };
-type Turn = { input: string; answer: Answer };
+type Turn = { input: string; resolved: string; answers: Answer[] };
 const MAX_TURNS = 24;
-const examples = ['What is the application deadline?', 'What is the application fee?', 'Who can apply?'];
+const examples = ['What is the application deadline?', 'What is the application fee?', 'Who can apply?', 'What are the application deadline and fee?'];
 const empty = (): Record<Role, Slot> => ({ original: { kind: 'empty' }, revised: { kind: 'empty' } });
+
+function PrintedInsights({ answer }: { answer: Answer }) {
+  const groups = groupPrintedValues(answer);
+  const comparisons = comparePrintedValues(groups);
+  const multiple = groups.filter(group => group.values.length > 1);
+  if (!comparisons.length && !multiple.length) return null;
+  return <section className="chat-insights" aria-label="Printed field comparisons">
+    {multiple.map(group => <p className="chat-note" key={group.role + group.label}>
+      Multiple printed values for {group.label} in {names[group.role]}. Check their context; no single value has been selected.
+    </p>)}
+    {comparisons.map(comparison => <div key={comparison.label} className="chat-field-pair">
+      <h4>{comparison.label}</h4>
+      <p className="chat-muted">{comparison.outcome === 'same_printed_text' ? 'Same displayed wording'
+        : comparison.outcome === 'different_printed_text' ? 'Different displayed wording'
+        : 'Multiple displayed values; comparison requires review'}</p>
+      <div className="chat-field-grid">
+        {[comparison.original, comparison.revised].map(group => <div key={group.role}>
+          <strong>{names[group.role]}</strong>
+          {group.values.map(value => <p key={value.value}>{value.value} {value.citations.map(n => '[' + n + ']').join(' ')}</p>)}
+        </div>)}
+      </div>
+    </div>)}
+    {comparisons.length > 0 && <p className="chat-muted">Printed wording only. These comparisons do not establish equivalent values, an official amendment, or authority. Undisplayed matches may change the interpretation.</p>}
+  </section>;
+}
 
 export default function PdfChat() {
   const [slots, setSlots] = useState(empty);
@@ -103,16 +129,16 @@ export default function PdfChat() {
     event.preventDefault();
     if (!canAsk || turns.length >= MAX_TURNS) return;
     try {
-      const resolved = resolveQuestion(question, turns.at(-1)?.answer.question ?? null, reuse);
-      const answer = answerQuestion(index, resolved, scope);
-      setTurns(old => [...old, { input: question.trim(), answer }]);
+      const resolved = resolveQuestion(question, turns.at(-1)?.resolved ?? null, reuse);
+      const answers = answerQuestionSet(index, resolved, scope);
+      setTurns(old => [...old, { input: question.trim(), resolved, answers }]);
       setQuestion('');
       setReuse(false);
       setPreview(null);
       setError('');
       inputRef.current?.focus();
     } catch {
-      setError('Enter a nonempty question within the 400-character limit.');
+      setError('Enter up to four nonempty questions within the combined 400-character limit.');
     }
   }
   useEffect(() => { if (turns.length) latestRef.current?.scrollIntoView({ block: 'nearest' }); }, [turns.length]);
@@ -162,12 +188,13 @@ export default function PdfChat() {
         </div>
         <div className="chat-history" role="log" aria-label="Document chat history" aria-live="polite">
           {!turns.length && <p className="chat-muted">Your questions and matching document passages will appear here.</p>}
-          {turns.map(({ input, answer }, i) => <article className="chat-turn" key={i}>
+          {turns.map(({ input, resolved, answers }, i) => <article className="chat-turn" key={i}>
             <p className="chat-user"><strong>You</strong> {input}</p>
-            <div className="chat-answer">
+            {resolved !== input && <p className="chat-muted">Search context: {resolved}</p>}
+            {answers.map((answer, part) => <div className="chat-answer" key={part}>
+              {answers.length > 1 && <h4 className="chat-subquestion">Question {part + 1}: {answer.question}</h4>}
               <h3>{answer.kind === 'passages' ? 'Relevant source passages' : 'Insufficient matching evidence'}</h3>
               <p className="chat-muted">Scope: {answer.scope === 'both' ? 'Both PDFs' : names[answer.scope]}</p>
-              {answer.question !== input && <p className="chat-muted">Search context: {answer.question}</p>}
               {answer.kind === 'insufficient' && <p>No sufficiently matching passage was found. This does not establish that the answer is absent. Try more specific wording or inspect the PDF.</p>}
               {answer.missingRoles.length > 0 && answer.kind === 'passages' && <p className="chat-note">
                 No sufficiently matching passage in {answer.missingRoles.map(role => names[role]).join(', ')}.
@@ -180,6 +207,7 @@ export default function PdfChat() {
                 </p>)}
                 <p className="chat-muted">Literal fields only; no inferred or calculated values.</p>
               </div>}
+              <PrintedInsights answer={answer} />
               {Object.values(answer.matchedCounts).some(count => count > 4) &&
                 <p className="chat-note">More passages matched than are displayed (maximum four per PDF).
                   Narrow the question or inspect the full document.</p>}
@@ -191,7 +219,7 @@ export default function PdfChat() {
                 </button>
               </div>)}
               {answer.citations.length > 0 && <p className="chat-muted">Quoted extracted text only. Review nearby context, images and the official publication before acting.</p>}
-            </div>
+            </div>)}
           </article>)}
           <div ref={latestRef} />
         </div>
@@ -209,6 +237,7 @@ export default function PdfChat() {
             }}>{example}</button>)}</div>
           <label>Your question<textarea ref={inputRef} value={question} maxLength={MAX_QUESTION}
             onChange={event => setQuestion(event.target.value)} rows={3} placeholder="Ask about the notice…" /></label>
+          <p className="chat-muted">Ask separate questions with question marks or semicolons (up to four). Results are evaluated independently.</p>
           <label className="chat-checkbox"><input type="checkbox" checked={reuse} disabled={!turns.length}
             onChange={event => setReuse(event.target.checked)} /> Include previous question as search context</label>
           <div className="chat-toolbar">
@@ -224,6 +253,11 @@ export default function PdfChat() {
         <div className="chat-toolbar"><h2>{names[preview.role]} · page {preview.page}</h2>
           <button type="button" className="chat-button" onClick={() => setPreview(null)}>Close source page</button></div>
         <blockquote>{preview.text}</blockquote>
+        <details className="chat-nearby"><summary>Nearby extracted passages (same PDF page)</summary>
+          <p className="chat-muted">Extraction order may differ from visual reading order. These fragments are not additional answer claims.</p>
+          {nearbyPassages(index, preview).map(passage => <p key={passage.ordinal}
+            className={passage.ordinal === preview.ordinal ? 'chat-selected-fragment' : undefined}>{passage.text}</p>)}
+        </details>
         <p className="chat-note">This page is shown for manual inspection. The chat index does not establish verified highlight geometry.</p>
         <Suspense fallback={<p role="status">Preparing local PDF viewer…</p>}>
           <PdfEvidencePreview file={previewSlot.file} pageNumber={preview.page} inspectionOnly />

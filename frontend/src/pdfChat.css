@@ -37,3 +37,15 @@
 .chat-printed-fields{border:1px solid #38546c;background:#142b3c;border-radius:8px;padding:12px;margin:12px 0;overflow-wrap:anywhere}
 .chat-printed-fields h4{margin:0 0 8px}
 .chat-printed-fields p{margin:6px 0}
+
+
+.chat-subquestion{color:#82e2c6;margin:0 0 12px;overflow-wrap:anywhere}
+.chat-insights{border:1px solid #38546c;border-radius:10px;padding:12px;margin:12px 0}
+.chat-field-pair{margin:8px 0;overflow-wrap:anywhere}
+.chat-field-pair h4{margin:8px 0}
+.chat-field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.chat-field-grid>div{background:#13243a;border-radius:8px;padding:10px}
+.chat-nearby{border:1px solid #38546c;border-radius:8px;padding:12px;margin:12px 0;overflow-wrap:anywhere}
+.chat-nearby summary{cursor:pointer;color:#82e2c6}
+.chat-selected-fragment{border-left:3px solid #82e2c6;padding-left:10px}
+@media(max-width:640px){.chat-field-grid{grid-template-columns:1fr}}
