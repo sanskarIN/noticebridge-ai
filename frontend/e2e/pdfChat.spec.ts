@@ -742,3 +742,42 @@ test('extractive model proposal highlights exact source substring without changi
   await ask(page, 'Eligibility?');
   await expect(review).toHaveCount(0);
 });
+
+test('manual evidence explorer finds exact phrases and explicit references without changing conversation', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Clause 4.2: Application fee Rs. 500', 'Clause 4.20: Application fee Rs. 750']);
+  await expect(page.getByText('2 extracted passages available.')).toBeVisible();
+  await page.getByText('Explore indexed PDF evidence', { exact: true }).click();
+  await page.getByLabel('Evidence search mode').selectOption('reference');
+  await page.getByLabel('Evidence search text').fill('Clause 4.2');
+  await page.getByRole('button', { name: 'Search indexed evidence' }).click();
+  const results = page.locator('.chat-explorer-results');
+  await expect(results.locator('mark')).toHaveText('Clause 4.2');
+  await expect(results.getByText(/1 matching indexed fragments/)).toBeVisible();
+  await expect(results.getByText(/Rs. 750/)).toHaveCount(0);
+  await results.getByRole('button', { name: 'Inspect original page 1, fragment 1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  await page.getByLabel('Evidence search mode').selectOption('literal');
+  await page.getByLabel('Evidence search text').fill('APPLICATION FEE');
+  await page.getByRole('button', { name: 'Search indexed evidence' }).click();
+  await expect(results.getByText(/2 matching indexed fragments/)).toBeVisible();
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  await page.getByLabel('Evidence search scope').selectOption('revised');
+  await page.getByRole('button', { name: 'Search indexed evidence' }).click();
+  await expect(results.getByText(/0 matching indexed fragments/)).toBeVisible();
+});
+test('question evidence explorer exposes all strict matches without changing baseline citations', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', Array.from({ length: 14 }, (_, i) => 'Application fee: Rs. ' + (500 + i)));
+  await expect(page.getByText('14 extracted passages available.')).toBeVisible();
+  const answer = await ask(page, 'Application fee?');
+  const region = answer.getByRole('region', { name: 'Explore question evidence' });
+  await region.getByRole('button', { name: 'Show all strict matching passages' }).click();
+  await expect(region.getByText(/14 matching indexed fragments/)).toBeVisible();
+  await expect(region.locator('.chat-citation')).toHaveCount(12);
+  await region.getByRole('button', { name: 'Next results' }).click();
+  await expect(region.locator('.chat-citation')).toHaveCount(2);
+  await expect(answer.locator('blockquote')).toHaveCount(4);
+  await region.getByRole('button', { name: 'Previous results' }).click();
+  await expect(region.locator('.chat-citation')).toHaveCount(12);
+});

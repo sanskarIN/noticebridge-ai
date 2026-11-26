@@ -122,7 +122,7 @@ def test_actual_isolated_ocr_on_image_only_pdf_when_installed(tmp_path, capsys):
     assert raw["pages"][0]["status"] == "ok"
     text = " ".join(line["text"] for line in raw["pages"][0]["lines"])
     assert "deadline" in text.lower()
-    assert "15 December 2026" in text
+    assert "15 December 2026" in " ".join(text.split())
     assert "Unselected" not in text
     captured = capsys.readouterr()
     assert "deadline" not in captured.out.lower()

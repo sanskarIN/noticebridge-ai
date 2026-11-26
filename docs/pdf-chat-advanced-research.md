@@ -686,3 +686,33 @@ result files cannot attest model identity. No free-form generative
 explanation or real-model accuracy claim is enabled. Tests exercise
 UTF-16 interoperability, invalid quotations, abstention, source scope,
 mocked model calls, request binding and browser review behavior.
+
+## Full indexed evidence explorer and explicit references
+
+The original strict ranker now exposes its complete deduplicated
+ranked results without changing the top-four citations or counts.
+When additional matches exist, each answer offers an opt-in paginated
+review of every strict matching indexed passage in its exact source
+and physical-page scope. Contextual windows are not promoted into
+strict matches. The original answer and export format stay unchanged.
+
+A separate native-text explorer supports literal substring search
+(case-sensitive or ASCII-case-insensitive) and explicit singular
+clause, section, paragraph, rule, article, annexure and schedule
+references. The bounded reference grammar preserves numeric hierarchy
+and parenthetical subparts, distinguishes reference types and does
+not infer definitions from mentions. Questions containing explicit
+references offer scoped lookup buttons. The explorer never joins
+separate fragments, silently widens page filters or interprets
+arbitrary patterns as regular expressions. Results are grouped by
+source, paginated in sets of twelve and include physical page links.
+Highlights are exact offsets in extracted text, not PDF rectangles.
+
+The search exposes coverage limitations and missing source warnings.
+An empty result is not a finding that text or a clause is absent.
+Search is local, independent of model suggestions and OCR, and source
+replacement clears manual search state. Tests cover literal Unicode
+offsets, exact reference boundaries, scope, pagination, source
+deduplication, strict ranking parity and user-visible workflows.
+The OCR runtime regression normalizes whitespace only in its test
+assertion; the exported machine transcription remains unchanged.

@@ -117,7 +117,7 @@ export function knownQuestionField(words: string[]): FieldId | null {
   return questionFields.get(fieldKey(words)) ?? null;
 }
 
-function rank(index: SearchIndex, words: string[], role: Role, field: FieldId | null): { matches: Passage[]; count: number } {
+export function rankedMatches(index: SearchIndex, words: string[], role: Role, field: FieldId | null): Passage[] {
   // Full query-term coverage prevents a result based solely on a generic
   // shared word such as "application". This is intentionally conservative.
   const scores = [];
@@ -145,7 +145,7 @@ function rank(index: SearchIndex, words: string[], role: Role, field: FieldId | 
     seen.add(key);
     return true;
   });
-  return { matches: unique.slice(0, 4).map(row => row.passage), count: unique.length };
+  return unique.map(row => row.passage);
 }
 
 /** Geometry is optional. Where both hints exist, do not combine same-baseline
@@ -229,9 +229,10 @@ export function answerQuestion(
   const contextualCitationIds = new Set<number>();
   const matchedCounts: Record<Role, number> = { original: 0, revised: 0 };
   for (const role of roles) {
-    const { matches, count } = words.length && words.length <= 16
-      ? rank(index, words, role, knownField) : { matches: [], count: 0 };
-    matchedCounts[role] = count;
+    const ranked = words.length && words.length <= 16
+      ? rankedMatches(index, words, role, knownField) : [];
+    const matches = ranked.slice(0, 4);
+    matchedCounts[role] = ranked.length;
     if (matches.length) {
       citations.push(...matches);
       continue;

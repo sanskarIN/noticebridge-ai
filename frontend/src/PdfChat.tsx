@@ -11,6 +11,7 @@ import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
 import PdfChatDirectAnswer from './PdfChatDirectAnswer';
 import PdfChatCrossPage from './PdfChatCrossPage';
+import PdfChatEvidenceExplorer, { PdfChatQuestionEvidence } from './PdfChatEvidenceExplorer';
 import PdfChatTableAnswer from './PdfChatTableAnswer';
 import PdfChatTableExplorer from './PdfChatTableExplorer';
 import { buildCategoryTables, type TableIndex } from './pdfChatTables';
@@ -247,6 +248,9 @@ export default function PdfChat() {
         indexes={tableIndexes} onInspect={inspectNative} onAsk={(value, role) => {
           setQuestion(value); setReuse(false); setScope(role); inputRef.current?.focus();
         }} />}
+      {!indexing && attached.length > 0 && <PdfChatEvidenceExplorer
+        key={generation.current.original + ':' + generation.current.revised}
+        index={index} corpora={corpora} onInspect={inspectNative} />}
       <section className="chat-panel" aria-labelledby="chat-title">
         <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
           <button type="button" className="chat-button" disabled={!turns.length} onClick={clearConversation}>Clear conversation</button>
@@ -301,6 +305,7 @@ export default function PdfChat() {
               </div>)}
               {answer.citations.length > 0 && <p className="chat-muted">Quoted extracted text only. Review nearby context, images and the official publication before acting.</p>}
               <PdfChatCrossPage index={index} answer={answer} onInspect={inspectNative} />
+              <PdfChatQuestionEvidence index={index} answer={answer} corpora={corpora} onInspect={inspectNative} />
             </div>)}
           </article>)}
           <div ref={latestRef} />
