@@ -7,6 +7,7 @@ import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
 import PdfChatDirectAnswer from './PdfChatDirectAnswer';
+import PdfChatCrossPage from './PdfChatCrossPage';
 import PdfChatTableAnswer from './PdfChatTableAnswer';
 import PdfChatTableExplorer from './PdfChatTableExplorer';
 import { buildCategoryTables, type TableIndex } from './pdfChatTables';
@@ -292,6 +293,7 @@ export default function PdfChat() {
                 </button>
               </div>)}
               {answer.citations.length > 0 && <p className="chat-muted">Quoted extracted text only. Review nearby context, images and the official publication before acting.</p>}
+              <PdfChatCrossPage index={index} answer={answer} onInspect={setPreview} />
             </div>)}
           </article>)}
           <div ref={latestRef} />

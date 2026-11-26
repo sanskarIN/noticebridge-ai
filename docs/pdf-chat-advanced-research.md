@@ -540,3 +540,29 @@ route-only follow-ups do not accumulate filler. Portable question plans
 still store only user questions and settings, not answers; on replay
 they use the current deterministic resolver, so results can differ
 from older implementation revisions.
+
+## Optional cross-page evidence exploration
+
+When strict and enabled adjacent-line retrieval leave a requested source
+unanswered, a separate user-triggered search can look for two partial
+lexical matches on distinct physical pages of that same source. Each line
+must contribute at least one term absent from the other; together they
+must contain every normalized query term. The feature is unavailable for
+a physical-page-filtered question, single-term queries, or more than
+16 terms. It cannot combine the original and revised document or replace
+successful strict/contextual retrieval for that source.
+
+Equivalent term masks on a page retain the shortest source line (then
+earliest extraction ordinal). At most 128 page/mask candidates per role
+are considered for pair selection, bounding comparisons to 8,128 pairs.
+The selected pair minimizes shared terms and then total text length;
+the UI reports candidate truncation and never treats a bounded miss as
+evidence of absence. This is a heuristic, not entailment or completeness.
+
+The opt-in panel displays each original fragment, matched terms and a
+physical-page inspection link. The original answer/abstention remains
+unchanged. Leads are not included in strict citations, printed field
+comparisons, local model exchanges or saved question plans. They are
+not automatically recomputed or persisted on replay. Separate pages may
+describe unrelated conditions, so no cross-page factual synthesis is
+performed. A generated two-page PDF exercises the user-visible contract.

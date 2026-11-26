@@ -589,3 +589,49 @@ test('table explorer offers source-scoped guided questions without submitting au
   await page.getByRole('button', { name: 'Ask PDF' }).click();
   await expect(page.locator('.chat-turn').last().getByRole('region', { name: 'Aligned table evidence candidates' }).getByText('Rs. 250', { exact: true })).toBeVisible();
 });
+
+function twoPageEvidencePdf(): Buffer {
+  const streams = [
+    'BT /F1 12 Tf 40 720 Td (Applicants from rural districts) Tj ET\n',
+    'BT /F1 12 Tf 40 720 Td (A residence certificate must be submitted) Tj ET\n',
+  ];
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Count 2 /Kids [3 0 R 4 0 R] >>',
+    ...[6, 7].map(id => '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents ' + id + ' 0 R >>'),
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    ...streams.map(stream => '<< /Length ' + Buffer.byteLength(stream) + ' >>\nstream\n' + stream + 'endstream'),
+  ];
+  let body = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((object, i) => {
+    offsets.push(Buffer.byteLength(body));
+    body += (i + 1) + ' 0 obj\n' + object + '\nendobj\n';
+  });
+  const xref = Buffer.byteLength(body);
+  body += 'xref\n0 8\n0000000000 65535 f \n';
+  for (const offset of offsets) body += String(offset).padStart(10, '0') + ' 00000 n \n';
+  body += 'trailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+  return Buffer.from(body);
+}
+
+test('cross-page leads require explicit exploration and preserve the strict abstention', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'fictional-two-page.pdf', mimeType: 'application/pdf', buffer: twoPageEvidencePdf(),
+  });
+  await expect(page.getByText('2 extracted passages available.')).toBeVisible();
+  const answer = await ask(page, 'Rural residence certificate?');
+  await expect(answer.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
+  const region = answer.getByRole('region', { name: 'Cross-page evidence exploration' });
+  await expect(region.getByText('“Applicants from rural districts”')).toHaveCount(0);
+  await region.getByRole('button', { name: 'Search across pages' }).click();
+  await expect(region.getByText('“Applicants from rural districts”')).toBeVisible();
+  await expect(region.getByText('“A residence certificate must be submitted”')).toBeVisible();
+  await expect(answer.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
+  await expect(answer.locator('blockquote')).toHaveCount(0);
+  await region.getByRole('button', { name: 'Inspect cross-page lead on page 2' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).getByRole('heading', { name: /page 2/ })).toBeVisible();
+  const scoped = await ask(page, 'Rural residence certificate on page 1?');
+  await expect(scoped.getByRole('region', { name: 'Cross-page evidence exploration' })).toHaveCount(0);
+});
