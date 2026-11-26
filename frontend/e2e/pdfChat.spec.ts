@@ -1125,3 +1125,21 @@ test('manual page inspection does not create a native review entry', async ({ pa
   await expect(inspector.getByRole('button', { name: 'Save source to evidence review' })).toHaveCount(0);
   await expect(page.getByText('Evidence review workspace (0)', { exact: true })).toBeVisible();
 });
+
+test('expanded notice questions distinguish date and time with exact linked evidence', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Date of document verification: 12 December 2026',
+    'Document verification time: 10:00',
+    'Venue of document verification: Fictional Hall',
+  ]);
+  await expect(page.getByText('3 extracted passages available.')).toBeVisible();
+  const date = await ask(page, 'When is document verification?');
+  await expect(date.locator('blockquote')).toHaveText('Date of document verification: 12 December 2026');
+  const time = await ask(page, 'What time is document verification?');
+  await expect(time.locator('blockquote')).toHaveText('Document verification time: 10:00');
+  const venue = await ask(page, 'Where is document verification?');
+  await expect(venue.locator('blockquote')).toHaveText('Venue of document verification: Fictional Hall');
+  const unsupported = await ask(page, 'Where is document verification for rural applicants?');
+  await expect(unsupported.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
+});

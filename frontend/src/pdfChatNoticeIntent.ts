@@ -23,7 +23,7 @@ const rules: readonly Rule[] = [
   { field: 'verification_date', pattern: /^(?:when is (?:the )?document verification|on what date is (?:the )?document verification)$/i },
   { field: 'verification_time', pattern: /^what time is (?:the )?document verification$/i },
   { field: 'verification_venue', pattern: /^(?:where is (?:the )?document verification|where will (?:the )?document verification take place)$/i },
-  { field: 'reporting_time', pattern: /^(?:what time (?:should|must) (?:i|we) report|when (?:should|must) (?:i|we) report)$/i },
+  { field: 'reporting_time', pattern: /^what time (?:should|must) (?:i|we) report$/i },
   { field: 'reporting_venue', pattern: /^where (?:should|must) (?:i|we) report$/i },
   { field: 'documents', pattern: /^(?:what (?:documents|certificates) (?:should|must) (?:i|we) (?:bring|submit|provide)|which (?:documents|certificates) are (?:required|needed))$/i },
   { field: 'application_method', pattern: /^(?:how (?:do|should|can) (?:i|we) apply|how (?:do|should) (?:i|we) submit (?:the )?application)$/i },

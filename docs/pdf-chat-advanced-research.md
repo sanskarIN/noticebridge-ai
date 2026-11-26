@@ -908,3 +908,19 @@ rejects unexpected metadata, noncanonical JSON, duplicate identities,
 oversize data, invalid notes and invalid UTF-8. Browser regressions
 exercise consent, filters, source replacement, restore confirmation,
 manual page isolation and persistent notes across chat clearing.
+
+## Expanded notice-field understanding
+
+The fixed printed-label vocabulary now covers 35 distinct categories,
+including registration opening, payment deadlines, correction windows,
+admit card and result publication, document verification date/time/venue,
+examination venue, reporting venue, application and payment methods,
+application portal, contact phone, age limits, selection and vacancy
+counts. Exact labels are not conflated across different events.
+A bounded full-question grammar maps common English phrasing onto these
+fields without removing substantive qualifiers. Explicit source and
+physical-page selection remain independent; all retrieval review
+paths use the same field query. URLs and telephone values remain
+printed text, not endorsements or automatically followed links.
+Tests check canonical field mappings, alias uniqueness, unrecognized
+qualifiers, event separation, source routing and browser answers.
