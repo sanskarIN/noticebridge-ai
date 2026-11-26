@@ -11,7 +11,8 @@
     "test:e2e": "playwright test",
     "test:showcase": "playwright test --config playwright.showcase.config.ts",
     "evaluate:retrieval": "vite build --ssr evaluation/run.ts --outDir .evaluation-build && node .evaluation-build/run.js",
-    "compose:retrieval": "vite build --ssr evaluation/compose.ts --outDir .evaluation-build && node .evaluation-build/compose.js"
+    "compose:retrieval": "vite build --ssr evaluation/compose.ts --outDir .evaluation-build && node .evaluation-build/compose.js",
+    "compare:retrieval": "vite build --ssr evaluation/compare.ts --outDir .evaluation-build && node .evaluation-build/compare.js"
   },
   "dependencies": {
     "react": "^19.0.0",
