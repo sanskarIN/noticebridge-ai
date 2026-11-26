@@ -158,3 +158,23 @@ publishing the combined manifest. Existing files are never overwritten.
 The output lists documents in deterministic ID order, retaining all original
 questions, labels and splits. The console audit reports counts and anonymous
 identifiers only. Use the normal evaluation command with the combined manifest.
+
+## Compare two evaluation runs
+
+Retain evaluation reports from two revisions using the exact same manifest
+bytes, snapshot hashes and split. Then run:
+
+```bash
+npm run compare:retrieval -- --before before.json --after after.json --output comparison.json
+```
+
+The comparison command independently recalculates totals, slice summaries,
+family summaries, transition counts and integrity violations from each
+report's case records. It rejects inconsistent records, differing
+manifest fingerprints, split changes, changed case identities or
+mismatched label provenance. It reports paired gains, losses, unchanged
+successes and unchanged failures for complete evidence-set recovery and
+negative abstention, separately from changes in aggregate rates. Undefined
+denominators remain null. These are descriptive paired results, not
+statistical significance or proof of factual correctness. The output
+pins both report byte hashes and never overwrites an existing file.
