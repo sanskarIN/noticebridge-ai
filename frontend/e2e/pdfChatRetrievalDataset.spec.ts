@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { resolve, join } from 'node:path';
 import { serializeCorpusSnapshot } from '../src/pdfChatCorpusSnapshot';
 import { parseDataset, loadDataset, evaluateDataset, MAX_MANIFEST_BYTES } from '../evaluation/retrievalDataset';
 import type { Passage, Corpus } from '../src/pdfChatCore';
@@ -105,4 +108,62 @@ test('same-family versions may coexist in the same split, not in both splits', (
   expect(report.modes[0].totals.families).toBe(1);
   expect(report.modes[0].totals.cases).toBe(4);
   expect(() => evaluateDataset(dataset, loadDataset(dataset, artifacts), 'holdout')).toThrow();
+});
+
+test('offline evaluation CLI builds, evaluates both splits and rejects unsafe inputs without overwriting output', (_, info) => {
+  test.setTimeout(120_000);
+  const root = info.outputPath('retrieval-cli');
+  const bundle = join(root, 'bundle');
+  mkdirSync(root, { recursive: true });
+  // Use the same Vite SSR entry as the published npm command, with isolated
+  // output so parallel browser workers cannot replace each other's files.
+  execFileSync(process.execPath, [
+    resolve('node_modules/vite/bin/vite.js'), 'build', '--ssr', 'evaluation/run.ts',
+    '--outDir', bundle,
+  ], { encoding: 'utf8', timeout: 60_000, stdio: 'pipe' });
+  writeFileSync(join(bundle, 'package.json'), '{"type":"module"}\n');
+  const entry = join(bundle, 'run.js');
+  const labels = join(root, 'labels.json');
+  const original = join(root, 'a.json');
+  const revised = join(root, 'b.json');
+  writeFileSync(original, a, 'utf8');
+  writeFileSync(revised, b, 'utf8');
+  writeFileSync(labels, JSON.stringify(manifest), 'utf8');
+  function run(split: string, output: string) {
+    return spawnSync(process.execPath, [
+      entry, '--manifest', labels, '--split', split, '--output', output,
+    ], { encoding: 'utf8', timeout: 15_000 });
+  }
+  const development = join(root, 'development.json');
+  const holdout = join(root, 'holdout.json');
+  for (const [split, output, document] of [
+    ['development', development, 'doc-a'],
+    ['holdout', holdout, 'doc-b'],
+  ]) {
+    const result = run(split, output);
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    const report = JSON.parse(readFileSync(output, 'utf8'));
+    expect(report.split).toBe(split);
+    expect(report.documents).toEqual([document]);
+    expect(report.manifest_sha256).toBe(sha(JSON.stringify(manifest)));
+    expect(report.integrity_violations).toBe(0);
+    expect(result.stdout).not.toContain('Application fee');
+    expect(JSON.stringify(report)).not.toContain('Residence certificate');
+  }
+  const existing = readFileSync(development, 'utf8');
+  expect(run('development', development).status).toBe(1);
+  expect(readFileSync(development, 'utf8')).toBe(existing);
+  const failed = join(root, 'failed.json');
+  writeFileSync(original, b, 'utf8');
+  const mismatch = run('development', failed);
+  expect(mismatch.status).toBe(1);
+  expect(mismatch.stderr).not.toContain('INR 900');
+  expect(existsSync(failed)).toBe(false);
+  writeFileSync(original, a, 'utf8');
+  const escaped = structuredClone(manifest);
+  escaped.documents[0].snapshot = '../a.json';
+  writeFileSync(labels, JSON.stringify(escaped), 'utf8');
+  expect(run('development', failed).status).toBe(1);
+  expect(existsSync(failed)).toBe(false);
 });
