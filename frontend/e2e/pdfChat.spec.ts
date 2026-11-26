@@ -1344,3 +1344,24 @@ test('notice timeline exposes chronological literal dates and signed comparison 
   await expect(windows.getByText('Printed closing date minus opening date: 14 calendar day(s).')).toBeVisible();
   await expect(page.locator('.chat-turn')).toHaveCount(0);
 });
+
+test('literal comparison requires two explicitly selected fragments and keeps exact source text', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await attach(page, 'Updated / second PDF', ['Application fee: INR 350']);
+  await expect(page.getByText('1 extracted passages available.')).toHaveCount(2);
+  await page.getByText('Compare manually selected native fragments', { exact: true }).click();
+  const compare = page.getByRole('button', { name: 'Compare selected literal fragments' });
+  await expect(compare).toBeDisabled();
+  await page.getByRole('button', { name: 'Select original:1:1', exact: true }).click();
+  await expect(compare).toBeDisabled();
+  await page.getByRole('button', { name: 'Select revised:1:1', exact: true }).click();
+  await compare.click();
+  const result = page.getByRole('region', { name: 'Literal fragment comparison' });
+  await expect(result.locator('mark')).toHaveText(['500', '350']);
+  await expect(result.getByText('Original: 500', { exact: true })).toBeVisible();
+  await expect(result.getByText('Revised: 350', { exact: true })).toBeVisible();
+  await result.getByRole('button', { name: 'Inspect compared revised:1:1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).locator('blockquote')).toHaveText('Application fee: INR 350');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});

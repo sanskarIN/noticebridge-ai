@@ -979,3 +979,15 @@ inspection only subtracts an opening date from a closing date in the
 same source; it is not an inclusive application-period calculation.
 Coverage, missing labels, repeated occurrences and possible conditions
 remain visible. The explorer never modifies the deterministic answer.
+
+## Literal fragment alignment
+
+Select one native fragment from each attached PDF. The bounded
+token alignment preserves exact text, Unicode offsets, whitespace
+and punctuation. Unpaired wording is highlighted on both sides;
+numeric markers are displayed as literal text, not interpreted as
+amounts or dates. Repeated words may yield multiple alignments.
+The tool makes no automatic counterpart selection and does not
+claim that different wording is a legal amendment. Exact wording
+occurrence counts and original page links support independent
+inspection. The selected comparison never modifies chat answers.
