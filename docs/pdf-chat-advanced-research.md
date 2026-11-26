@@ -885,3 +885,26 @@ by the question. Unsupported labels, category qualifiers, negation,
 extra conditions, and multi-field questions are not simplified.
 Regression tests cover recognized forms, unsupported forms, scope,
 page routing, ranking parity, wrong-direction premises and UI behavior.
+
+## Private native evidence review workspace
+
+The source inspector now supports saving up to 100 distinct indexed
+native fragments with user-authored notes and review statuses. Notes
+are capped at 500 UTF-16 units; saved entries are paginated and
+filterable by source and status. These flags are annotations, not
+verified eligibility or authority. A manual page or OCR transcription
+cannot be silently promoted to a native source fragment. The notebook
+survives conversation clearing and question replay but is cleared on
+source replacement or removal. No automatic browser persistence is used.
+
+With explicit consent, the notebook exports a bounded canonical JSON
+file with source-byte SHA-256 pins, local fragment IDs, extracted-text
+hashes, user notes and statuses. It does not embed PDF bytes or quotes
+unless the user manually types text into a note. Import validates every
+identity and exact extracted text against the attached PDFs, previews
+a complete replacement and requires a separate confirmation. Invalid
+or stale imports never overwrite the current notes. The protocol
+rejects unexpected metadata, noncanonical JSON, duplicate identities,
+oversize data, invalid notes and invalid UTF-8. Browser regressions
+exercise consent, filters, source replacement, restore confirmation,
+manual page isolation and persistent notes across chat clearing.
