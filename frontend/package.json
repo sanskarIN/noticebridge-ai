@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:showcase": "playwright test --config playwright.showcase.config.ts",
-    "evaluate:retrieval": "vite build --ssr evaluation/run.ts --outDir .evaluation-build && node .evaluation-build/run.js"
+    "evaluate:retrieval": "vite build --ssr evaluation/run.ts --outDir .evaluation-build && node .evaluation-build/run.js",
+    "compose:retrieval": "vite build --ssr evaluation/compose.ts --outDir .evaluation-build && node .evaluation-build/compose.js"
   },
   "dependencies": {
     "react": "^19.0.0",
