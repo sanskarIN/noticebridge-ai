@@ -228,3 +228,11 @@ does not choose a winner, create ground truth or certify reviewers.
 Reports include anonymous IDs and evidence identities, not question text
 or quotations, and pin both manifest hashes. Holdout labels should not
 be exposed to retrieval developers before final evaluation.
+
+The adjudication queue preserves complete original alternative sets on both
+sides, including common alternatives and unmatched alternatives. A missing
+reviewer label is represented as null, not as an unanswerable judgment.
+Use the stable case and source identities to review the exact PDF pages.
+An adjudicator should record a separate, independently reasoned final
+label after inspecting the original documents; the tool does not merge
+reviewer labels, resolve conflicts, or alter either input manifest.

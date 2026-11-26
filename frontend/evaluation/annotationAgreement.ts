@@ -71,6 +71,20 @@ export type AgreementReport = {
   paired: AgreementCase[];
   unpaired: UnpairedCase[];
   completePairing: boolean;
+  adjudicationQueue: AdjudicationTask[];
+};
+export type ReviewLabel = { kind: Kind; evidenceSets: string[][] };
+export type AdjudicationTask = {
+  id: string;
+  document: string;
+  family: string;
+  split: DocumentLabels['split'];
+  reason: 'category_disagreement' | 'evidence_alternative_disagreement' | 'missing_left' | 'missing_right';
+  left: ReviewLabel | null;
+  right: ReviewLabel | null;
+  commonAlternatives: string[][];
+  leftUnmatchedAlternatives: string[][];
+  rightUnmatchedAlternatives: string[][];
 };
 type LocatedCase = { document: DocumentLabels; row: RetrievalCase };
 type DatasetSide = { dataset: Dataset; artifacts: DatasetArtifact[] };
@@ -188,6 +202,39 @@ function unpaired(item: LocatedCase, side: UnpairedCase['side']): UnpairedCase {
     split: item.document.split, side };
 }
 
+/** Preserve complete alternatives for adjudication, not just their unions.
+ * The reviewer must still read the original source. This queue deliberately
+ * contains no question wording, answer text, automatically chosen label
+ * or generated adjudication result.
+ */
+function reviewLabel(value: Label): ReviewLabel {
+  return { kind: value.kind, evidenceSets: value.kind === 'answerable'
+    ? alternatives(value).map(set => sorted(set)).sort((a, b) => lexical(a.join('|'), b.join('|'))) : [] };
+}
+function buildTask(id: string, first: LocatedCase | undefined, second: LocatedCase | undefined): AdjudicationTask | null {
+  const located = first ?? second;
+  if (!located) invalid();
+  const left = first ? reviewLabel(first.row.label) : null;
+  const right = second ? reviewLabel(second.row.label) : null;
+  const base = {
+    id, document: located.document.id, family: located.document.family,
+    split: located.document.split, left, right,
+  };
+  const a = left?.evidenceSets ?? [], b = right?.evidenceSets ?? [];
+  const aKeys = new Set(a.map(set => set.join('|'))), bKeys = new Set(b.map(set => set.join('|')));
+  const commonAlternatives = a.filter(set => bKeys.has(set.join('|')));
+  const leftUnmatchedAlternatives = a.filter(set => !bKeys.has(set.join('|')));
+  const rightUnmatchedAlternatives = b.filter(set => !aKeys.has(set.join('|')));
+  const details = { commonAlternatives, leftUnmatchedAlternatives, rightUnmatchedAlternatives };
+  if (!left) return { ...base, ...details, reason: 'missing_left' };
+  if (!right) return { ...base, ...details, reason: 'missing_right' };
+  if (left.kind !== right.kind) return { ...base, ...details, reason: 'category_disagreement' };
+  if (leftUnmatchedAlternatives.length || rightUnmatchedAlternatives.length) {
+    return { ...base, ...details, reason: 'evidence_alternative_disagreement' };
+  }
+  return null;
+}
+
 /** Validate both independently authored manifests against their exact
  * snapshots before comparing. Missing cases remain explicit, not negative
  * labels, and no disagreement is silently resolved or merged.
@@ -203,8 +250,11 @@ export function compareAnnotations(left: DatasetSide, right: DatasetSide): Agree
   }
   const a = locate(left.dataset), b = locate(right.dataset);
   const paired: AgreementCase[] = [], missing: UnpairedCase[] = [];
+  const adjudicationQueue: AdjudicationTask[] = [];
   for (const id of sorted(new Set([...a.keys(), ...b.keys()]))) {
     const first = a.get(id), second = b.get(id);
+    const task = buildTask(id, first, second);
+    if (task) adjudicationQueue.push(task);
     if (!first) { missing.push(unpaired(second!, 'right')); continue; }
     if (!second) { missing.push(unpaired(first, 'left')); continue; }
     assertSameCase(first, second);
@@ -230,6 +280,6 @@ export function compareAnnotations(left: DatasetSide, right: DatasetSide): Agree
     })),
     families: families.map(family => ({ family, summary: summarizeAgreement(paired.filter(row => row.family === family)) })),
     slices: slices.map(slice => ({ slice, summary: summarizeAgreement(paired.filter(row => row.slices.includes(slice))) })),
-    paired, unpaired: missing, completePairing: missing.length === 0,
+    paired, unpaired: missing, completePairing: missing.length === 0, adjudicationQueue,
   };
 }

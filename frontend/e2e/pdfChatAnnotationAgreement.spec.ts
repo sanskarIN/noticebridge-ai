@@ -188,3 +188,71 @@ test('agreement CLI validates both independent source snapshots and publishes on
   expect(run(join(root, 'rejected.json')).status).toBe(1);
   expect(existsSync(join(root, 'rejected.json'))).toBe(false);
 });
+
+test('adjudication queue preserves both alternative sets and makes no automatic decision', () => {
+  const report = compare();
+  expect(report.adjudicationQueue).toEqual([
+    { id: 'certificate', document: 'notice', family: 'family-a', split: 'holdout',
+      reason: 'evidence_alternative_disagreement',
+      left: { kind: 'answerable', evidenceSets: [['original:1:2', 'original:1:3']] },
+      right: { kind: 'answerable', evidenceSets: [['original:1:3']] },
+      commonAlternatives: [],
+      leftUnmatchedAlternatives: [['original:1:2', 'original:1:3']],
+      rightUnmatchedAlternatives: [['original:1:3']] },
+    { id: 'refund', document: 'notice', family: 'family-a', split: 'holdout',
+      reason: 'category_disagreement',
+      left: { kind: 'unanswerable', evidenceSets: [] },
+      right: { kind: 'ambiguous', evidenceSets: [] },
+      commonAlternatives: [], leftUnmatchedAlternatives: [], rightUnmatchedAlternatives: [] },
+  ]);
+  for (const row of report.adjudicationQueue) {
+    expect(row).not.toHaveProperty('resolvedLabel');
+    expect(row).not.toHaveProperty('question');
+    expect(row).not.toHaveProperty('answer');
+  }
+});
+test('adjudication preserves differing sufficiency even when both reviewers select the same union', () => {
+  const right = other(value => {
+    value.documents[0].cases[1].label = label([['original:1:2'], ['original:1:3']]);
+  });
+  const report = compare(right);
+  const row = report.paired.find(item => item.id === 'certificate')!;
+  expect(row.evidence?.unionJaccard).toBe(1);
+  expect(row.needsAdjudication).toBe(true);
+  expect(report.adjudicationQueue[0].leftUnmatchedAlternatives).toEqual([['original:1:2', 'original:1:3']]);
+  expect(report.adjudicationQueue[0].rightUnmatchedAlternatives).toEqual([['original:1:2'], ['original:1:3']]);
+});
+test('adjudication queue identifies missing reviewer labels, preserving the authored other side', () => {
+  const partial = other(value => {
+    value.documents[0].cases = value.documents[0].cases.filter((row: any) => row.id !== 'date');
+    value.documents[0].cases.push({ id: 'extra', slices: ['fee'], scope: 'original',
+      question: 'Fee?', label: label([['original:1:1']]) });
+  });
+  const report = compare(partial);
+  expect(report.adjudicationQueue.map(row => [row.id, row.reason])).toEqual([
+    ['date', 'missing_right'], ['extra', 'missing_left'],
+  ]);
+  expect(report.adjudicationQueue[0].left).toEqual({ kind: 'answerable', evidenceSets: [['original:2:1']] });
+  expect(report.adjudicationQueue[0].right).toBeNull();
+  expect(report.adjudicationQueue[1].left).toBeNull();
+  expect(report.adjudicationQueue[1].right?.evidenceSets).toEqual([['original:1:1']]);
+});
+test('shared alternatives remain distinguishable from unmatched alternatives in an adjudication task', () => {
+  const left = other(value => {
+    value.documents[0].cases[1].label = label([['original:1:2', 'original:1:3'], ['original:1:3']]);
+  });
+  const right = other(value => {
+    value.documents[0].cases[1].label = label([['original:1:3'], ['original:1:2']]);
+  });
+  const result = compareAnnotations(side(left), side(right));
+  expect(result.adjudicationQueue).toHaveLength(1);
+  expect(result.adjudicationQueue[0].commonAlternatives).toEqual([['original:1:3']]);
+  expect(result.adjudicationQueue[0].leftUnmatchedAlternatives).toEqual([['original:1:2', 'original:1:3']]);
+  expect(result.adjudicationQueue[0].rightUnmatchedAlternatives).toEqual([['original:1:2']]);
+});
+test('equal complete labels yield an empty queue and do not expose question text', () => {
+  const result = compare(reference);
+  expect(result.adjudicationQueue).toEqual([]);
+  expect(result.summary.needsAdjudication).toBe(0);
+  expect(JSON.stringify(result)).not.toContain('Rural residence certificate');
+});
