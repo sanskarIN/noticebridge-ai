@@ -924,3 +924,22 @@ paths use the same field query. URLs and telephone values remain
 printed text, not endorsements or automatically followed links.
 Tests check canonical field mappings, alias uniqueness, unrecognized
 qualifiers, event separation, source routing and browser answers.
+
+## Explicit requirement and exception discovery
+
+A bounded English cue index identifies literal mandatory, prohibition,
+condition/exception, permission and recommendation wording. Longest
+non-overlapping markers are preferred so "must not" is not counted as
+an independent "must", and bare May is not treated as permission.
+The index preserves entire native fragments and exact marker offsets.
+A separate explorer supports source, physical-page, category and
+literal text filters; broad explicit questions offer the same scoped
+inspection independently of strict answers. Category counts can overlap.
+
+When both sources are explicitly in scope, exact-wording counterpart
+counts are shown, not claims of changes, omissions or equivalent
+meaning. No model infers applicability, legal meaning or personal
+eligibility. Coverage warnings, bounded highlights, pagination and
+direct source inspection support manual review. Tests include negation,
+Unicode offsets, role/page isolation, cue overlap, exact counterparts,
+literal filters and browser discovery.

@@ -2,6 +2,7 @@ import { answerQuestion, resolveQuestion, MAX_QUESTION, type Answer, type Passag
 import { extractKnownField } from './pdfChatOverview';
 import { scalarComparisonIntent, type ScalarIntent } from './pdfChatScalarIntent';
 import { noticeFieldIntent, type NoticeIntent } from './pdfChatNoticeIntent';
+import { requirementIntent } from './pdfChatRequirements';
 
 export const MAX_SUBQUESTIONS = 4;
 
@@ -149,6 +150,10 @@ export function parseSearchQuestion(question: string): { content: string; page?:
   const noticeIntent = noticeFieldIntent(withoutSourceRoute(raw.content));
   if (noticeIntent) return { content: noticeIntent.field.query, page: raw.page, noticeIntent };
   return parsePageFilter(stripScopePhrases(question));
+}
+
+export function parseRequirementQuestion(question: string) {
+  return requirementIntent(withoutSourceRoute(parsePageFilter(question).content));
 }
 
 export function answerScopedQuestions(

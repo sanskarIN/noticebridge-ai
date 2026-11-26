@@ -1143,3 +1143,41 @@ test('expanded notice questions distinguish date and time with exact linked evid
   const unsupported = await ask(page, 'Where is document verification for rural applicants?');
   await expect(unsupported.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
 });
+
+test('requirement explorer distinguishes prohibited and exception wording without inferring eligibility', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Applicants must submit a certificate.',
+    'Applicants must not submit duplicate forms.',
+    'Fee payment is required unless exempt.',
+    'The exam is on 15 May 2026.',
+  ]);
+  await expect(page.getByText('4 extracted passages available.')).toBeVisible();
+  await page.getByText('Explore requirements and exceptions', { exact: true }).click();
+  await page.getByLabel('Requirement wording category').selectOption('prohibited');
+  await page.getByRole('button', { name: 'Search requirement wording' }).click();
+  const region = page.getByRole('region', { name: 'Requirement discovery results' });
+  await expect(region.locator('mark')).toHaveText('must not');
+  await expect(region.getByText(/1 cue-bearing fragments found/)).toBeVisible();
+  await expect(region.getByText(/certificate/)).toHaveCount(0);
+  await page.getByLabel('Requirement wording category').selectOption('exception');
+  await page.getByRole('button', { name: 'Search requirement wording' }).click();
+  await expect(region.locator('mark')).toHaveText(['required', 'unless', 'exempt']);
+  await region.getByRole('button', { name: 'Inspect requirement source original page 1, fragment 3' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).locator('blockquote'))
+    .toHaveText('Fee payment is required unless exempt.');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});
+test('broad requirement question exposes scoped inspection separately from strict answer', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Applicants must submit a certificate.']);
+  await attach(page, 'Updated / second PDF', ['Applicants must submit two certificates.']);
+  await expect(page.getByText('1 extracted passages available.')).toHaveCount(2);
+  await page.getByLabel('Search scope', { exact: true }).selectOption('auto');
+  const turn = await ask(page, 'List mandatory requirements in the revised notice on page 1?');
+  const region = turn.getByRole('region', { name: 'Question requirement discovery' });
+  await region.getByRole('button', { name: 'Explore mandatory wording' }).click();
+  await expect(region.getByText(/Applicants must submit two certificates/)).toBeVisible();
+  await expect(region.getByText(/Applicants must submit a certificate/)).toHaveCount(0);
+  await expect(turn.locator('blockquote')).toHaveCount(0);
+});

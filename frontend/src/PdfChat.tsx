@@ -8,6 +8,8 @@ import PdfChatOcrReview from './PdfChatOcrReview';
 import PdfChatPageNavigator from './PdfChatPageNavigator';
 import PdfChatReferenceReview from './PdfChatReferenceReview';
 import PdfChatReviewWorkspace from './PdfChatReviewWorkspace';
+import PdfChatRequirements, { PdfChatRequirementAnswer } from './PdfChatRequirements';
+import { buildRequirementIndex } from './pdfChatRequirements';
 import { MAX_REVIEW_ITEMS, pinEvidence, type ReviewEntry } from './pdfChatReviewWorkspace';
 import { passageId } from './pdfChatResearch';
 import type { ChatCorpora } from './pdfChatEvidenceReport';
@@ -110,6 +112,7 @@ export default function PdfChat() {
   const index = useMemo(() => buildIndex(Object.values(slots).flatMap(slot =>
     slot.kind === 'ready' ? slot.corpus.passages : [],
   )), [slots]);
+  const requirements = useMemo(() => buildRequirementIndex(index), [index]);
   const tableIndexes = useMemo<Record<Role, TableIndex | null>>(() => ({
     original: slots.original.kind === 'ready' ? buildCategoryTables(slots.original.corpus) : null,
     revised: slots.revised.kind === 'ready' ? buildCategoryTables(slots.revised.corpus) : null,
@@ -280,6 +283,9 @@ export default function PdfChat() {
       {!indexing && attached.length > 0 && <PdfChatEvidenceExplorer
         key={'explorer:' + generation.current.original + ':' + generation.current.revised}
         index={index} corpora={corpora} onInspect={inspectNative} />}
+      {!indexing && attached.length > 0 && <PdfChatRequirements
+        key={'requirements:' + generation.current.original + ':' + generation.current.revised}
+        index={index} requirements={requirements} corpora={corpora} attached={attached} onInspect={inspectNative} />}
       <section className="chat-panel" aria-labelledby="chat-title">
         <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
           <button type="button" className="chat-button" disabled={!turns.length} onClick={clearConversation}>Clear conversation</button>
@@ -340,6 +346,8 @@ export default function PdfChat() {
               {answer.citations.length > 0 && <p className="chat-muted">Quoted extracted text only. Review nearby context, images and the official publication before acting.</p>}
               <PdfChatCrossPage index={index} answer={answer} onInspect={inspectNative} />
               <PdfChatQuestionEvidence index={index} answer={answer} corpora={corpora} onInspect={inspectNative} />
+              <PdfChatRequirementAnswer index={index} requirements={requirements} corpora={corpora}
+                attached={attached} answer={answer} onInspect={inspectNative} />
             </div>)}
           </article>)}
         </div>
