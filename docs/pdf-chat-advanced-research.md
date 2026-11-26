@@ -835,3 +835,31 @@ references are surfaced per fragment, with omitted-count disclosure and
 eight results per page. Users can follow another reference only by
 explicitly inspecting another fragment. No model, recursive expansion,
 automatic scope widening of the answer or imported OCR is involved.
+
+## Combined local retrieval and extractive workflow
+
+A single opt-in local request now combines existing dense ranking with
+exact-quote generation. The browser can export all scoped candidates
+within 512 fragments or the bounded hybrid shortlist. The request
+contains the question, candidate texts and every baseline identity.
+The CLI validates both model configurations before inference, checks
+each installed model digest before and after its stage, and enforces
+the existing stage timeouts plus an outer 80-second deadline.
+Baseline fragments always enter the second stage before dense-ranked
+candidates; each role has a separate twelve-fragment cap. The result
+contains only ranking identities, source offsets and binding metadata.
+
+```bash
+python -m noticebridge.chat_pipeline_cli noticebridge-pipeline-request.json --output result.json --embedding-model MODEL:TAG --embedding-digest EXACT_DIGEST --answer-model MODEL:TAG --answer-digest EXACT_DIGEST --allow-local-processing
+```
+
+The browser reconstructs both nested request files, recomputes SHA-256,
+validates the exact dense rank and selection ordering independently,
+and verifies literal source spans against its own index. Any malformed
+stage rejects the entire result. No partial result is published when
+local inference fails. Model output never replaces the deterministic
+answer. A new question or source invalidates the exchange. This is
+still an optional local file workflow, not a hosted model service or
+validated factual entailment engine. Mocked transport, nested binding,
+scope, malformed data, timeout, consent and UI regressions accompany
+the implementation; real-model accuracy remains an independent gate.

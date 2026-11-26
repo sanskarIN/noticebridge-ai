@@ -22,7 +22,10 @@ TIMEOUT_SECONDS = 80
 
 
 def encode(value: dict) -> bytes:
-    return (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    try:
+        return (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    except (UnicodeError, ValueError, RecursionError):
+        raise EmbeddingError("Invalid pipeline encoding.") from None
 
 
 @dataclass(frozen=True)

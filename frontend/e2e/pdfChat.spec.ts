@@ -994,3 +994,49 @@ test('source inspector follows explicit references without importing them into c
   await expect(answer.locator('blockquote')).toHaveText('Eligibility: See Clause 4.2.');
   await expect(region.getByText(/1 other indexed fragments/)).toHaveCount(0);
 });
+
+test('single combined local workflow validates both stages and clears result on a new turn', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500', 'Eligibility: Class 12']);
+  await expect(page.getByText('2 extracted passages available.')).toBeVisible();
+  const turn = await ask(page, 'Application fee?');
+  await page.getByText('Experimental combined local AI workflow', { exact: true }).click();
+  const button = page.getByRole('button', { name: 'Export combined workflow request' });
+  await expect(button).toBeDisabled();
+  await page.getByLabel('I approve exporting private text for the combined local workflow.').check();
+  const waiting = page.waitForEvent('download');
+  await button.click();
+  const data = await readFile((await (await waiting).path())!);
+  const request = JSON.parse(data.toString('utf8'));
+  const encode = (value: unknown) => JSON.stringify(value, null, 2) + '\n';
+  const sha = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
+  const embedding = encode({ format: 'noticebridge-chat-embedding-request', version: 1,
+    question: request.question, passages: request.passages });
+  const ids = request.passages.map((row: { id: string }) => row.id);
+  const chosen = [...new Set<string>([...request.baseline, ...ids])];
+  const selection = encode({ format: 'noticebridge-chat-selection-request', version: 1,
+    question: request.question, passages: chosen.map(id => request.passages.find((row: { id: string }) => row.id === id)) });
+  const source = request.passages.find((row: { id: string }) => row.id === request.baseline[0]);
+  const start = source.text.indexOf('INR 500');
+  const result = {
+    format: 'noticebridge-chat-pipeline-result', version: 1, request_sha256: sha(data),
+    ranking: { format: 'noticebridge-chat-embedding-result', version: 1, request_sha256: sha(embedding),
+      model: 'embedding:latest', model_digest: 'a'.repeat(64), dimension: 2,
+      candidate_count: ids.length, ranks: { original: ids }, authority_verified: false },
+    extractive: { format: 'noticebridge-chat-extractive-result', version: 1, request_sha256: sha(selection),
+      model: 'answer:latest', model_digest: 'b'.repeat(64),
+      proposal: { status: 'extract', spans: [{ id: source.id, start, end: start + 7 }] }, authority_verified: false },
+    authority_verified: false,
+  };
+  const input = page.getByLabel('Import combined workflow result');
+  await input.setInputFiles({ name: 'pipeline.json', mimeType: 'application/json', buffer: Buffer.from(encode(result)) });
+  const review = page.getByRole('region', { name: 'Combined workflow review' });
+  await expect(review.locator('mark')).toHaveText('INR 500');
+  await expect(turn.locator('blockquote')).toHaveText('Application fee: INR 500');
+  result.extractive.request_sha256 = 'c'.repeat(64);
+  await input.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(encode(result)) });
+  await expect(page.getByText(/Pipeline result rejected/)).toBeVisible();
+  await expect(review).toHaveCount(0);
+  await ask(page, 'Eligibility?');
+  await expect(input).toBeDisabled();
+});
