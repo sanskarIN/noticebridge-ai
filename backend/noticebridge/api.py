@@ -6,9 +6,12 @@ from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
 from .body_limit import FRONTEND_ORIGINS, CompareBodyLimit
+from .chat_ocr_cli import run_ocr_review
+from .chat_ocr_protocol import OcrReviewError, encode_report, validate_selection
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument, parse_ocr_selection
 from .isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 from .models import ComparisonReport
@@ -124,3 +127,30 @@ async def compare(
     finally:
         await original.close()
         await revised.close()
+
+
+@app.post("/api/chat/ocr")
+async def chat_ocr(
+    source: Annotated[UploadFile, File()],
+    role: Annotated[str, Form()],
+    pages: Annotated[str, Form()],
+    consent: Annotated[bool, Form()] = False,
+) -> Response:
+    """Explicitly enabled loopback-only OCR; the ASGI guard runs before parsing."""
+    try:
+        if consent is not True or role not in ("original", "revised"):
+            raise HTTPException(status_code=422, detail="Explicit local OCR consent and role required")
+        selected = validate_selection(list(parse_ocr_selection(pages)))
+        data = await _read_pdf(source)
+        if not data:
+            raise HTTPException(status_code=422, detail="Empty PDF")
+        async with parse_slots:
+            report = await run_in_threadpool(run_ocr_review, data, role, selected)
+        # Preserve the canonical protocol used by the local file CLI.
+        return Response(content=encode_report(report), media_type="application/json")
+    except InvalidDocument as exc:
+        raise HTTPException(status_code=422, detail="Invalid OCR page selection") from exc
+    except OcrReviewError as exc:
+        raise HTTPException(status_code=503, detail="Local OCR did not produce a valid report") from exc
+    finally:
+        await source.close()
