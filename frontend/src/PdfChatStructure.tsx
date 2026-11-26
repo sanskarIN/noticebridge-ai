@@ -108,7 +108,7 @@ function OutlineBrowser({ outline, onInspect }: { outline: Outline; onInspect: (
       })}
     </div>
     <label className="chat-overview-filter">Outline source
-      <select value={filter.scope} onChange={event => update({ scope: event.target.value as Scope })}>
+      <select aria-label="Outline source" value={filter.scope} onChange={event => update({ scope: event.target.value as Scope })}>
         <option value="both">Both PDFs</option>
         <option value="original">Original PDF</option>
         <option value="revised">Revised PDF</option>
