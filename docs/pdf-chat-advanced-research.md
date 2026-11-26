@@ -566,3 +566,33 @@ comparisons, local model exchanges or saved question plans. They are
 not automatically recomputed or persisted on replay. Separate pages may
 describe unrelated conditions, so no cross-page factual synthesis is
 performed. A generated two-page PDF exercises the user-visible contract.
+
+## Private deterministic chat evidence reports
+
+Question plans deliberately omit answers. A separate explicit-consent
+evidence report can now export exact deterministic search citations,
+printed fields, matched counts, context groups, unresolved source roles,
+resolved questions, and per-source extraction coverage. It embeds the
+canonical source-fingerprint-bound question plan; it does not embed PDFs.
+The browser recomputes all deterministic answers before export and refuses
+to write a report if the current conversation differs from replay.
+
+Verification reads at most 4 MiB, decodes strict UTF-8 and treats the
+imported report as untrusted. Only the embedded canonical question plan
+is consumed for replay against the attached exact PDF bytes and current
+index. The entire report must match a newly serialized deterministic
+snapshot byte-for-byte, including role, physical page, ordinal, quoted
+text, counts, abstentions and extraction-coverage markers. Unexpected
+fields, duplicate members, altered quotes and stale extraction results
+are rejected. Verification reports counts and never imports saved
+answers or changes the conversation.
+
+The report includes private question text and quotations; export requires
+explicit consent and does not use a network service. It is not a signature,
+proof of publisher identity, independently verified PDF transcription,
+or guarantee of factual accuracy. A matching report is reproducible only
+under the current deterministic search and extraction behavior. It excludes
+layout hints, table candidates, concise field summaries, cross-page review
+leads and experimental model results. Those exclusions are stated in the UI.
+Regression tests cover changed pins, altered evidence, mismatched coverage,
+canonical encoding, stale state, file bounds and explicit browser consent.

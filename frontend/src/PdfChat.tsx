@@ -3,6 +3,8 @@ import { buildIndex, MAX_QUESTION, pageCoverage, type Answer, type Corpus, type 
 import { comparePrintedValues, groupPrintedValues, nearbyPassages, type ChatScope } from './pdfChatInsights';
 import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
 import PdfChatSessionPanel from './PdfChatSessionPanel';
+import PdfChatEvidenceReport from './PdfChatEvidenceReport';
+import type { ChatCorpora } from './pdfChatEvidenceReport';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
@@ -105,9 +107,10 @@ export default function PdfChat() {
   const ready = (role: Role) => slots[role].kind === 'ready';
   const attached = (['original', 'revised'] as const).filter(ready);
   const files: AttachedFiles = {};
+  const corpora: ChatCorpora = {};
   for (const role of attached) {
     const slot = slots[role];
-    if (slot.kind === 'ready') files[role] = slot.file;
+    if (slot.kind === 'ready') { files[role] = slot.file; corpora[role] = slot.corpus; }
   }
   const indexing = demoLoading || Object.values(slots).some(slot => slot.kind === 'loading');
   const canAsk = !indexing && (scope === 'auto' ? attached.length > 0 : scope === 'both' ? ready('original') && ready('revised') : ready(scope));
@@ -306,6 +309,9 @@ export default function PdfChat() {
           files={files} index={index} turns={turns} onRestore={restored => {
             clearConversation(); setTurns(restored); setQuestion('');
           }} />}
+        {!indexing && attached.length > 0 && <PdfChatEvidenceReport
+          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
+          files={files} corpora={corpora} index={index} turns={turns} />}
         <form className="chat-form" onSubmit={ask}>
           <label>Search scope
             <select value={scope} onChange={event => setScope(event.target.value as ChatScope)}>

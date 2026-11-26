@@ -635,3 +635,33 @@ test('cross-page leads require explicit exploration and preserve the strict abst
   const scoped = await ask(page, 'Rural residence certificate on page 1?');
   await expect(scoped.getByRole('region', { name: 'Cross-page evidence exploration' })).toHaveCount(0);
 });
+
+test('private chat evidence export requires consent and verifies without importing answers', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  await ask(page, 'Application fee?');
+  await page.getByText('Export or verify a private evidence report', { exact: true }).click();
+  const button = page.getByRole('button', { name: 'Export evidence report JSON' });
+  await expect(button).toBeDisabled();
+  await page.getByLabel('I understand this export includes source quotations.').check();
+  const waiting = page.waitForEvent('download');
+  await button.click();
+  const download = await waiting;
+  const data = await readFile((await download.path())!);
+  const raw = JSON.parse(data.toString('utf8'));
+  expect(raw.turns[0].answers[0].citations[0].text).toBe('Application fee: Rs. 500');
+  expect(raw.authority_verified).toBe(false);
+  await page.getByLabel('Verify saved evidence report').setInputFiles({
+    name: 'report.json', mimeType: 'application/json', buffer: data,
+  });
+  await expect(page.getByText('Exact deterministic replay matched.')).toBeVisible();
+  await expect(page.locator('.chat-turn')).toHaveCount(1);
+  raw.turns[0].answers[0].citations[0].text = 'Application fee: free';
+  await page.getByLabel('Verify saved evidence report').setInputFiles({
+    name: 'tampered.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(raw, null, 2) + '\n'),
+  });
+  await expect(page.getByText(/Evidence or extraction coverage differs/)).toBeVisible();
+  await expect(page.locator('.chat-turn')).toHaveCount(1);
+  await expect(page.locator('.chat-turn').last().locator('blockquote')).toHaveText('Application fee: Rs. 500');
+});
