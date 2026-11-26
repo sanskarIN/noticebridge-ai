@@ -1218,3 +1218,83 @@ test('direct local OCR requires consent and independently validates the returned
   await review.getByRole('button', { name: 'Inspect original OCR page 1' }).click();
   await expect(page.getByRole('region', { name: 'Source page inspection' }).getByText(/Unverified OCR transcription/)).toBeVisible();
 });
+
+test('private workspace exports with consent and restores turns and notes together after confirmation', async ({ page }) => {
+  const bytes = pdf(['Application fee: INR 500']);
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'fictional.pdf', mimeType: 'application/pdf', buffer: bytes,
+  });
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  const turn = await ask(page, 'Application fee?');
+  await turn.getByRole('button', { name: 'Inspect source [1]', exact: true }).click();
+  await page.getByRole('button', { name: 'Save source to evidence review' }).click();
+  await page.getByText('Evidence review workspace (1)', { exact: true }).click();
+  const entry = page.getByRole('article', { name: 'Review entry original:1:1' });
+  await entry.getByLabel('Your note for original:1:1').fill('Confirm fee manually');
+  await page.getByText('Save or restore complete private workspace', { exact: true }).click();
+  const button = page.getByRole('button', { name: 'Export complete private workspace' });
+  await expect(button).toBeDisabled();
+  await page.getByLabel('I approve exporting my private questions and evidence-review notes together.').check();
+  const download = page.waitForEvent('download');
+  await button.click();
+  const data = await readFile((await (await download).path())!);
+  expect(data.toString()).not.toContain('Application fee: INR 500');
+  expect(JSON.parse(data.toString()).sources.original).toBe(createHash('sha256').update(bytes).digest('hex'));
+  await page.getByRole('button', { name: 'Clear conversation', exact: true }).click();
+  await page.getByRole('button', { name: 'Clear review workspace' }).click();
+  await page.getByRole('button', { name: 'Confirm clear review' }).click();
+  await page.getByLabel('Restore complete private workspace').setInputFiles({
+    name: 'workspace.json', mimeType: 'application/json', buffer: data,
+  });
+  const confirmation = page.getByRole('region', { name: 'Complete workspace restore confirmation' });
+  await expect(confirmation).toBeVisible();
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  await expect(page.getByText('Evidence review workspace (0)', { exact: true })).toBeVisible();
+  await confirmation.getByRole('button', { name: 'Apply complete workspace' }).click();
+  await expect(page.locator('.chat-turn')).toHaveCount(1);
+  await expect(page.locator('.chat-turn blockquote')).toHaveText('Application fee: INR 500');
+  await expect(entry.getByLabel('Your note for original:1:1')).toHaveValue('Confirm fee manually');
+});
+
+test('section outline compares only explicitly selected counterpart and retains native inspection', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Section 1: Payment', 'Application fee: INR 500', 'Keep receipt']);
+  await attach(page, 'Updated / second PDF', ['Section 1: Payment', 'Application fee: INR 350', 'Keep receipt']);
+  await expect(page.getByText('3 extracted passages available.')).toHaveCount(2);
+  await page.getByText('Inspect candidate section outline and literal alignment', { exact: true }).click();
+  await page.getByLabel('Outline source', { exact: true }).selectOption('original');
+  await page.getByText('Choose a physical counterpart', { exact: true }).click();
+  await page.getByRole('button', { name: 'Compare with revised page 1, fragment 1' }).click();
+  const alignment = page.getByRole('region', { name: 'Exact section alignment' });
+  await expect(alignment.getByText('2 paired exact-wording fragments · 1 unpaired original · 1 unpaired revised.')).toBeVisible();
+  await alignment.getByLabel('Show unpaired fragments only').check();
+  await expect(alignment.getByText('Application fee: INR 500', { exact: true })).toBeVisible();
+  await expect(alignment.getByText('Application fee: INR 350', { exact: true })).toBeVisible();
+  await expect(alignment.getByText('Keep receipt', { exact: true })).toHaveCount(0);
+  await alignment.getByRole('button', { name: 'Inspect revised page 1, fragment 2' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).locator('blockquote'))
+    .toHaveText('Application fee: INR 350');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});
+
+test('native evaluation export contains actual indexed fragments and physical coverage only after consent', async ({ page }) => {
+  const bytes = pdf(['Application fee: INR 500', 'Eligibility: Class 12']);
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'fictional.pdf', mimeType: 'application/pdf', buffer: bytes,
+  });
+  await expect(page.getByText('2 extracted passages available.')).toBeVisible();
+  await page.getByText('Research: export private native index', { exact: true }).click();
+  const button = page.getByRole('button', { name: 'Export native evaluation corpus' });
+  await expect(button).toBeDisabled();
+  await page.getByLabel('I approve exporting the full private native index for offline evaluation.').check();
+  const download = page.waitForEvent('download');
+  await button.click();
+  const value = JSON.parse((await readFile((await (await download).path())!)).toString());
+  expect(value.authority_verified).toBe(false);
+  expect(value.sources[0].sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+  expect(value.sources[0].processed_pages).toBe(1);
+  expect(value.sources[0].passages.map((row: {text: string}) => row.text))
+    .toEqual(['Application fee: INR 500', 'Eligibility: Class 12']);
+});
