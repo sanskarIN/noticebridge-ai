@@ -122,7 +122,9 @@ async def chat_ocr(
     """Explicitly enabled loopback-only OCR; the ASGI guard runs before parsing."""
     try:
         if consent is not True or role not in ("original", "revised"):
-            raise HTTPException(status_code=422, detail="Explicit local OCR consent and role required")
+            raise HTTPException(
+                status_code=422, detail="Explicit local OCR consent and role required",
+            )
         try:
             selected = validate_selection(list(parse_ocr_selection(pages)))
         except (InvalidDocument, OcrReviewError) as exc:
@@ -135,7 +137,9 @@ async def chat_ocr(
         # Preserve the canonical protocol used by the local file CLI.
         return Response(content=encode_report(report), media_type="application/json")
     except OcrReviewError as exc:
-        raise HTTPException(status_code=503, detail="Local OCR did not produce a valid report") from exc
+        raise HTTPException(
+            status_code=503, detail="Local OCR did not produce a valid report",
+        ) from exc
     finally:
         await source.close()
 

@@ -182,7 +182,8 @@ class CompareBodyLimit:
             return
         try:
             await self._buffer_and_dispatch(
-                scope, receive, send, declared_length=declared_length, max_body=max_body, label=label,
+                scope, receive, send, declared_length=declared_length,
+                max_body=max_body, label=label,
             )
         finally:
             with self._active_lock:
