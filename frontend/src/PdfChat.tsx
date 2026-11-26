@@ -325,6 +325,9 @@ export default function PdfChat() {
             onChange={event => setIncludeContext(event.target.checked)} /> Search nearby lines when no single line matches</label>
           <label className="chat-checkbox"><input type="checkbox" checked={reuse} disabled={!turns.length || turns.at(-1)?.answers.length !== 1}
             onChange={event => setReuse(event.target.checked)} /> Include previous question as search context</label>
+          {reuse && <p className="chat-muted">For source or page changes, try “What about the revised notice?”
+            or “On page 2?”. The previous question’s subject and qualifiers are retained.
+            The selected search scope still takes precedence over automatic source wording.</p>}
           <div className="chat-toolbar">
             <span className="chat-muted">{question.length}/{MAX_QUESTION} · {turns.length}/{MAX_TURNS} turns</span>
             <button type="submit" className="primary-button" disabled={!canAsk || !question.trim() || turns.length >= MAX_TURNS}>Ask PDF</button>

@@ -111,3 +111,19 @@ test('bounds both export and import', () => {
   expect(() => serializeQuestionPlan(pins, Array(MAX_CHAT_TURNS + 1).fill(steps[0]))).toThrow('size');
   expect(() => parseQuestionPlan(' '.repeat(MAX_SESSION_BYTES + 1), pins)).toThrow('size');
 });
+
+test('route-only follow-ups are recomputed identically after question-plan export', () => {
+  const routing: QuestionStep[] = [
+    { input: 'Application fee in original notice on page 1?', scope: 'auto', includeContext: false, reuse: false },
+    { input: 'What about the revised notice?', scope: 'auto', includeContext: false, reuse: true },
+    { input: 'On page 2?', scope: 'auto', includeContext: false, reuse: true },
+    { input: 'On page 1?', scope: 'auto', includeContext: false, reuse: true },
+  ];
+  const turns = replayQuestions(index, routing, ['original', 'revised']);
+  const restored = replayQuestions(index, parseQuestionPlan(serializeQuestionPlan(pins, routing), pins),
+    ['original', 'revised']);
+  expect(restored).toEqual(turns);
+  expect(restored.map(turn => turn.answers[0].citations.map(p => p.text))).toEqual([
+    ['Application fee: Rs. 500'], ['Application fee: Rs. 350'], [], ['Application fee: Rs. 350'],
+  ]);
+});

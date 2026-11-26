@@ -519,3 +519,24 @@ The new regression asserts that the nine separately placed cells remain
 nine fragments and form one aligned candidate. The fix requires browser
 CI confirmation; synthetic whitespace handling does not validate general
 PDF table reconstruction.
+
+## Explicit routing follow-ups
+
+With previous-question reuse enabled, a closed vocabulary of source-only
+and physical-page-only follow-ups now replaces the requested routing
+dimension rather than appending conversational filler to the search
+subject. For example, "What about the revised notice?" after
+"Application fee for General category in original notice on page 1?"
+keeps the category, field and page, while changing the source. A later
+"On page 2?" preserves the source. The resulting query is displayed as
+search context and remains bounded by the shared question limit.
+
+Questions containing substantive additional words continue through the
+existing explicit concatenation path. The resolver does not infer
+pronouns, remove material qualifiers, override a manually selected
+scope, broaden a missing source, or turn a multiple-question turn into
+a single referent. Malformed page selectors are rejected. Repeated
+route-only follow-ups do not accumulate filler. Portable question plans
+still store only user questions and settings, not answers; on replay
+they use the current deterministic resolver, so results can differ
+from older implementation revisions.

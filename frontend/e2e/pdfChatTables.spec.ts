@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { buildIndex, type Corpus, type Passage, type Role } from '../src/pdfChatCore';
-import { answerScopedQuestions } from '../src/pdfChatInsights';
+import { answerScopedQuestions, resolveChatQuestion } from '../src/pdfChatInsights';
 import { answerCategoryTable, buildCategoryTables, tableCellQuestion, tableQuestion } from '../src/pdfChatTables';
 
 type Cell = { text: string; x: number; y: number; width?: number };
@@ -132,4 +132,19 @@ test('guidance is disabled rather than throwing for routing-like printed labels'
   const odd = corpus(fixture.map(cell => cell.text === 'Reserved' ? { ...cell, text: 'Reserved on page 2' } : cell));
   const table = buildCategoryTables(odd).tables[0];
   expect(tableCellQuestion(table, 1, 1)).toBeNull();
+});
+
+test('source-only conversational follow-up preserves exact category-table intent', () => {
+  const original = corpus(fixture);
+  const revised = corpus(fixture.map(cell => cell.text === 'Rs. 500' ?
+    { ...cell, text: 'Rs. 350' } : cell), 'revised', 2);
+  const question = resolveChatQuestion('What about the revised notice on page 2?',
+    'Application fee for General category in original notice on page 1?', true);
+  const idx = buildIndex([...original.passages, ...revised.passages]);
+  const answer = answerScopedQuestions(idx, question, 'auto', ['original', 'revised'])[0];
+  const result = answerCategoryTable([...buildCategoryTables(original).tables,
+    ...buildCategoryTables(revised).tables], answer);
+  expect(result?.matches.map(match => [match.role, match.page, match.value.text]))
+    .toEqual([['revised', 2, 'Rs. 350']]);
+  expect(result?.category).toBe('general');
 });

@@ -37,10 +37,55 @@ export function resolveChatQuestion(input: string, previous: string | null, reus
     throw new Error('A follow-up must be one question.');
   }
   const prior = previous.replace(/[?;]+$/g, '').trim();
+  const routed = resolveRoutingFollowup(input, prior);
+  if (routed !== null) return routed;
   // A new explicit version request supersedes a prior version phrase.
   const context = requestedScope(input) ? stripScopePhrases(prior) : prior;
   const page = parsePageFilter(input).page;
   return resolveQuestion(input, page === undefined ? context : parsePageFilter(context).content, true);
+}
+
+/** Remove explicit version routing, including a directly attached
+ * preposition/article. Keep the subject, category and other qualifiers.
+ */
+function withoutSourceRoute(question: string): string {
+  return question
+    .replace(/\b(?:(?:in|from|of|on)\s+)?(?:the\s+)?(?:original|previous|earlier|first|updated|revised|second)\s+(?:pdf|notice|document|version)\b/gi, ' ')
+    .replace(/\b(?:(?:in|from|of|on)\s+)?both\s+(?:pdfs?|notices?|documents?|versions?)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+const routeText: Record<Scope, string> = {
+  original: 'in the original notice',
+  revised: 'in the revised notice',
+  both: 'in both PDFs',
+};
+
+/** Only a closed vocabulary of source/page-only follow-ups gets rewritten.
+ * Free-form new content remains on the existing explicit concatenation
+ * path; no model guesses a referent or removes a substantive qualifier.
+ */
+function resolveRoutingFollowup(input: string, prior: string): string | null {
+  const nextScope = requestedScope(input);
+  const next = parsePageFilter(withoutSourceRoute(input));
+  if (!nextScope && next.page === undefined) return null;
+  const residual = next.content.replace(/[?;]+$/g, '').trim().toLowerCase();
+  if (!/^(?:|and|what about|how about|same question|repeat|repeat the question|what about the|how about the)$/.test(residual)) return null;
+
+  const priorScope = requestedScope(prior);
+  const priorRoute = parsePageFilter(withoutSourceRoute(prior));
+  const subject = priorRoute.content.replace(/[?;]+$/g, '').trim();
+  if (!subject || !/[\p{L}\p{N}]/u.test(subject)) {
+    throw new Error('Ask a specific question before changing its source or page.');
+  }
+  const scope = nextScope ?? priorScope;
+  const page = next.page ?? priorRoute.page;
+  const resolved = [subject, scope ? routeText[scope] : '', page === undefined ? '' : 'on page ' + page]
+    .filter(Boolean).join(' ') + '?';
+  // Use the shared question bounds and prevent accidental multi-question
+  // plans. Routing never carries assistant-generated answer text.
+  if (planQuestions(resolved).length !== 1) throw new Error('Choose one question to repeat.');
+  return resolved;
 }
 
 export type ChatScope = Scope | 'auto';

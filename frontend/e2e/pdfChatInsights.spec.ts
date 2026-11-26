@@ -203,3 +203,41 @@ for (const value of ['0', '81', '-1', '2.5', '1-3', '2 to 3', '2 and 3', '2 on p
 test('plural page constraints are rejected rather than silently broadened', () => {
   expect(() => parsePageFilter('Fee on pages 1-3')).toThrow();
 });
+
+test('route-only follow-ups preserve subject and replace source and page exactly', () => {
+  const first = resolveChatQuestion('What about the revised notice?',
+    'Application fee for Reserved category in the original notice on page 3?', true);
+  expect(first).toBe('Application fee for Reserved category in the revised notice on page 3?');
+  const second = resolveChatQuestion('How about on page 2?', first, true);
+  expect(second).toBe('Application fee for Reserved category in the revised notice on page 2?');
+  const third = resolveChatQuestion('Both PDFs on page 1?', second, true);
+  expect(third).toBe('Application fee for Reserved category in both PDFs on page 1?');
+});
+
+test('repeated routing does not grow prior question length or accumulate words', () => {
+  let question = 'Application fee on page 1?';
+  for (let i = 0; i < 24; i++) {
+    question = resolveChatQuestion(i % 2 ? 'What about the original notice?' :
+      'What about the revised notice?', question, true);
+  }
+  expect(question).toBe('Application fee in the original notice on page 1?');
+  expect(answerScopedQuestions(index, question, 'auto', ['original', 'revised'])[0].citations)
+    .toEqual([rows[2]]);
+});
+
+test('routing-only follow-up retains material qualifiers rather than turning them into a bare field', () => {
+  const resolved = resolveChatQuestion('On page 1?', 'Application fee for rural applicants in revised notice?', true);
+  expect(resolved).toBe('Application fee for rural applicants in the revised notice on page 1?');
+  expect(answerScopedQuestions(index, resolved, 'auto', ['original', 'revised'])[0].kind).toBe('insufficient');
+});
+
+test('substantive follow-up words stay in the query, even with source routing', () => {
+  const resolved = resolveChatQuestion('What about refund in the revised notice?', 'Application fee?', true);
+  expect(resolved).toContain('refund');
+  expect(answerScopedQuestions(index, resolved, 'auto', ['original', 'revised'])[0].kind).toBe('insufficient');
+});
+
+test('routing follow-up rejects malformed page selectors and missing subjects', () => {
+  expect(() => resolveChatQuestion('On pages 2-3?', 'Application fee?', true)).toThrow();
+  expect(() => resolveChatQuestion('On page 2?', 'On page 1?', true)).toThrow();
+});
