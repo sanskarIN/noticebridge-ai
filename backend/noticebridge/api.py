@@ -10,8 +10,13 @@ from fastapi.responses import Response
 from starlette.concurrency import run_in_threadpool
 
 from .body_limit import FRONTEND_ORIGINS, CompareBodyLimit
+from .chat_embeddings import EmbeddingError, validate_model
 from .chat_ocr_cli import run_ocr_review
 from .chat_ocr_protocol import OcrReviewError, encode_report, validate_selection
+from .chat_pipeline import MAX_REQUEST_BYTES as MAX_PIPELINE_REQUEST_BYTES
+from .chat_pipeline import encode as encode_pipeline
+from .chat_pipeline import parse_request as parse_pipeline_request
+from .chat_pipeline import run_pipeline
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument, parse_ocr_selection
 from .isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 from .models import ComparisonReport
@@ -22,6 +27,9 @@ app = FastAPI(
 # Bound simultaneous disposable workers per API process. Public deployments
 # still require authentication, rate limiting, and operating-system sandboxing.
 parse_slots = asyncio.Semaphore(4)
+# Reject concurrent inference instead of queuing an unbounded model workload.
+model_slots = asyncio.Semaphore(1)
+MAX_PIPELINE_RESPONSE_BYTES = 100 * 1024
 
 
 @app.middleware("http")
@@ -155,3 +163,47 @@ async def chat_ocr(
         raise HTTPException(status_code=503, detail="Local OCR did not produce a valid report") from exc
     finally:
         await source.close()
+
+
+@app.post("/api/chat/pipeline")
+async def chat_pipeline(
+    request_file: Annotated[UploadFile, File()],
+    embedding_model: Annotated[str, Form()],
+    embedding_digest: Annotated[str, Form()],
+    answer_model: Annotated[str, Form()],
+    answer_digest: Annotated[str, Form()],
+    consent: Annotated[bool, Form()] = False,
+) -> Response:
+    """Opt-in local-only pipeline; no uploaded PDF is parsed by this route."""
+    try:
+        if consent is not True:
+            raise HTTPException(status_code=422, detail="Explicit local AI consent required")
+        if not request_file.filename or not request_file.filename.casefold().endswith(".json"):
+            raise HTTPException(status_code=415, detail="Only pipeline JSON requests are supported")
+        data = await request_file.read(MAX_PIPELINE_REQUEST_BYTES + 1)
+        if len(data) > MAX_PIPELINE_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="Pipeline request exceeds its size limit")
+        try:
+            validate_model(embedding_model, embedding_digest)
+            validate_model(answer_model, answer_digest)
+            request = parse_pipeline_request(data)
+        except EmbeddingError as exc:
+            raise HTTPException(status_code=422, detail="Invalid local AI request") from exc
+        # No await separates the locked check and a successful acquisition;
+        # on this event loop an available slot is acquired immediately.
+        if model_slots.locked():
+            raise HTTPException(status_code=503, detail="Local AI is already processing a request")
+        async with model_slots:
+            try:
+                result = await run_pipeline(
+                    request, embedding_model=embedding_model, embedding_digest=embedding_digest,
+                    answer_model=answer_model, answer_digest=answer_digest, consent=True,
+                )
+                encoded = encode_pipeline(result)
+                if len(encoded) > MAX_PIPELINE_RESPONSE_BYTES:
+                    raise EmbeddingError("Pipeline response exceeds its size limit.")
+            except EmbeddingError as exc:
+                raise HTTPException(status_code=503, detail="Local AI pipeline failed") from exc
+        return Response(content=encoded, media_type="application/json")
+    finally:
+        await request_file.close()
