@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { answerQuestion, buildIndex, type Passage } from '../src/pdfChatCore';
 import { preparePipeline, pipelineSelection, reviewPipeline, MAX_PIPELINE_RESULT_BYTES } from '../src/pdfChatPipeline';
 
@@ -67,4 +68,46 @@ test('canonical outer result rejects duplicate keys and oversized data', async (
 test('new question cannot replay prior result', async () => {
   const next = preparePipeline(index, answerQuestion(index, 'Eligibility?', 'original'), 'full');
   await expect(reviewPipeline(encode(raw), next, sha(next.text))).rejects.toThrow();
+});
+
+test('Python pipeline emits an independently verifiable Unicode result', async () => {
+  // Execute the actual Python request parser, candidate selection,
+  // UTF-16 span validator, result serializer and mocked local HTTP pipeline.
+  // No installed model or network service is required for this protocol test.
+  const program = [
+    'import asyncio, json, sys, httpx',
+    'from noticebridge.chat_pipeline import parse_request, run_pipeline, encode',
+    'request = parse_request(sys.stdin.buffer.read())',
+    'class Stream(httpx.AsyncByteStream):',
+    '    def __init__(self, payload): self.payload = payload',
+    '    async def __aiter__(self): yield json.dumps(self.payload).encode()',
+    'def reply(payload): return httpx.Response(200, stream=Stream(payload))',
+    'def handler(req):',
+    '    assert req.url.host == "127.0.0.1"',
+    '    if req.url.path == "/api/tags":',
+    '        return reply({"models": [{"name": "embedding:latest", "digest": "a"*64},',
+    '                                 {"name": "answer:latest", "digest": "b"*64}]})',
+    '    payload = json.loads(req.content)',
+    '    if req.url.path == "/api/embed":',
+    '        return reply({"model": "embedding:latest", "embeddings": [[1, 0] for _ in payload["input"]]})',
+    '    assert req.url.path == "/api/generate"',
+    '    candidates = json.loads(payload["prompt"])["candidates"]',
+    '    assert [row["id"] for row in candidates][:2] == list(request.baseline)',
+    '    return reply({"model": "answer:latest", "done": True, "done_reason": "stop",',
+    '                  "response": json.dumps({"status": "extract",',
+    '                    "quotes": [{"id": "original:1:1", "quote": "INR 500"}]})})',
+    'result = asyncio.run(run_pipeline(request, embedding_model="embedding:latest",',
+    '    embedding_digest="a"*64, answer_model="answer:latest", answer_digest="b"*64,',
+    '    consent=True, _transport=httpx.MockTransport(handler)))',
+    'sys.stdout.buffer.write(encode(result))',
+  ].join('\n');
+  const bytes = execFileSync(process.env.PYTHON || 'python', ['-c', program], {
+    input: request.text, maxBuffer: MAX_PIPELINE_RESULT_BYTES, timeout: 20000,
+  }).toString('utf8');
+  const result = await reviewPipeline(bytes, request, digest);
+  expect(result.extractive.proposal.spans[0].text).toBe('INR 500');
+  expect(result.extractive.proposal.spans[0].start).toBe(start);
+  expect(result.extractive.proposal.spans[0].source).toBe(rows[0]);
+  expect(bytes).not.toContain('INR 500');
+  expect(result.selectionCount).toBe(3);
 });

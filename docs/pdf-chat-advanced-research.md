@@ -863,3 +863,9 @@ still an optional local file workflow, not a hosted model service or
 validated factual entailment engine. Mocked transport, nested binding,
 scope, malformed data, timeout, consent and UI regressions accompany
 the implementation; real-model accuracy remains an independent gate.
+
+A cross-language regression invokes the real Python pipeline using mocked
+loopback transport and feeds the resulting bytes to the TypeScript browser
+validator. This checks both nested hashes and non-BMP Unicode offsets with
+one shared protocol, not model accuracy. Pipeline requests also require
+canonical JSON to avoid ambiguous representations.

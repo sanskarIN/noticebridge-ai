@@ -60,6 +60,13 @@ def parse_request(raw: bytes) -> PipelineRequest:
         counts[role] += 1
         if counts[role] > MAX_BASELINE_PER_ROLE:
             raise EmbeddingError("Per-source baseline budget exceeded.")
+    canonical = encode({
+        "format": FORMAT, "version": 1, "question": embedding.question,
+        "passages": [{"id": row.id, "text": row.text} for row in embedding.passages],
+        "baseline": baseline,
+    })
+    if raw != canonical:
+        raise EmbeddingError("Noncanonical pipeline request.")
     return PipelineRequest(embedding, tuple(baseline), hashlib.sha256(raw).hexdigest())
 
 
