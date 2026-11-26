@@ -16,7 +16,8 @@ export type Comparison =
 
 const FEE_FIELDS = new Set<FieldId>(['application_fee', 'exam_fee', 'registration_fee']);
 const DATE_FIELDS = new Set<FieldId>(['application_deadline', 'registration_deadline',
-  'application_start', 'exam_date', 'interview_date']);
+  'application_start', 'exam_date', 'interview_date', 'registration_start', 'payment_deadline',
+  'correction_start', 'correction_deadline', 'admit_card_date', 'result_date', 'verification_date']);
 const CURRENCIES: Record<string, Currency> = {
   '₹': 'INR', 'rs': 'RS', 'rs.': 'RS', 'inr': 'INR', 'usd': 'USD',
   'eur': 'EUR', '€': 'EUR', 'gbp': 'GBP', '£': 'GBP',

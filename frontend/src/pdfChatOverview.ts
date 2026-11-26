@@ -44,6 +44,66 @@ export const fieldDefinitions = [
     query: 'Reporting time' },
   { id: 'contact_email', label: 'Contact email', aliases: ['contact email', 'contact e-mail', 'helpdesk email'],
     query: 'Contact email' },
+  { id: 'registration_start', label: 'Registration opening date', aliases: [
+    'registration opening date', 'registration start date', 'registration commencement date',
+  ], query: 'Registration opening date' },
+  { id: 'payment_deadline', label: 'Payment deadline', aliases: [
+    'payment deadline', 'fee payment deadline', 'payment last date', 'last date for fee payment', 'last date to pay fee', 'payment due date',
+  ], query: 'Payment deadline' },
+  { id: 'correction_start', label: 'Correction window opening date', aliases: [
+    'correction window opening date', 'correction window start date', 'application correction start date',
+  ], query: 'Correction window opening date' },
+  { id: 'correction_deadline', label: 'Correction window deadline', aliases: [
+    'correction window deadline', 'correction window closing date', 'application correction deadline', 'last date for correction',
+  ], query: 'Correction window deadline' },
+  { id: 'admit_card_date', label: 'Admit card release date', aliases: [
+    'admit card release date', 'admit card issue date', 'date of admit card release', 'hall ticket release date',
+  ], query: 'Admit card release date' },
+  { id: 'result_date', label: 'Result publication date', aliases: [
+    'result publication date', 'result declaration date', 'result announcement date', 'date of result declaration',
+  ], query: 'Result publication date' },
+  { id: 'verification_date', label: 'Document verification date', aliases: [
+    'document verification date', 'date of document verification',
+  ], query: 'Document verification date' },
+  { id: 'verification_time', label: 'Document verification time', aliases: [
+    'document verification time', 'document verification timing', 'time of document verification',
+  ], query: 'Document verification time' },
+  { id: 'verification_venue', label: 'Document verification venue', aliases: [
+    'document verification venue', 'venue of document verification', 'document verification location',
+  ], query: 'Document verification venue' },
+  { id: 'exam_venue', label: 'Examination venue', aliases: [
+    'examination venue', 'exam venue', 'venue of examination', 'examination location', 'exam location',
+  ], query: 'Examination venue' },
+  { id: 'reporting_venue', label: 'Reporting venue', aliases: [
+    'reporting venue', 'reporting location', 'venue for reporting',
+  ], query: 'Reporting venue' },
+  { id: 'application_method', label: 'Application method', aliases: [
+    'application method', 'mode of application', 'application submission mode', 'application submission method',
+  ], query: 'Application method' },
+  { id: 'application_portal', label: 'Application portal', aliases: [
+    'application portal', 'online application portal', 'application website', 'online application website',
+  ], query: 'Application portal' },
+  { id: 'payment_method', label: 'Payment method', aliases: [
+    'payment method', 'mode of payment', 'fee payment method', 'fee payment mode',
+  ], query: 'Payment method' },
+  { id: 'contact_phone', label: 'Contact phone', aliases: [
+    'contact phone', 'contact phone number', 'contact number', 'helpdesk phone', 'helpdesk number', 'helpline number',
+  ], query: 'Contact phone' },
+  { id: 'age_limit', label: 'Age limit', aliases: [
+    'age limit', 'age limits', 'age requirement',
+  ], query: 'Age limit' },
+  { id: 'minimum_age', label: 'Minimum age', aliases: [
+    'minimum age', 'lower age limit', 'minimum age requirement',
+  ], query: 'Minimum age' },
+  { id: 'maximum_age', label: 'Maximum age', aliases: [
+    'maximum age', 'upper age limit', 'maximum age requirement',
+  ], query: 'Maximum age' },
+  { id: 'selection_process', label: 'Selection process', aliases: [
+    'selection process', 'selection procedure', 'mode of selection',
+  ], query: 'Selection process' },
+  { id: 'vacancy_count', label: 'Number of vacancies', aliases: [
+    'number of vacancies', 'total vacancies', 'vacancy count',
+  ], query: 'Number of vacancies' },
 ] as const;
 export type FieldId = typeof fieldDefinitions[number]['id'];
 export type FieldDefinition = typeof fieldDefinitions[number];
