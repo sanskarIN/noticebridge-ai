@@ -482,3 +482,27 @@ fragments have valid geometry: same-baseline cells, far-separated columns,
 reversed order and large vertical gaps cannot form a contextual window.
 Missing geometry retains the existing bounded ordinal-only fallback;
 neither route proves that neighboring text is semantically connected.
+
+## Review context for concise printed-field answers
+
+A bare field question still reports all distinct recognized printed values
+in the selected scope. It now also scans all indexed non-value passages
+for full normalized query-term coverage, not just the displayed lexical
+top four, and preserves cited context fragments. A passage might contain
+an exception even when several exact field labels outrank it.
+
+For each recognized value occurrence, the immediately preceding and
+following indexed fragments can be proposed for inspection only if both
+have native geometry and pass the same-reading-flow guard. Page and role
+boundaries, missing ordinals, absent geometry, and separate columns
+prevent a nearby-text association. Other recognized field labels are not
+added solely because of proximity. Matching text takes precedence over
+nearby text; physical source identities are deduplicated. Counts reflect
+all candidates within the indexed scope, while display is limited to six
+source-linked review passages per role, ordered by reason then source
+position. The UI reports omitted counts.
+
+Neither lexical overlap nor geometric proximity proves a qualification,
+contradiction, or semantic relationship. These are review candidates,
+not inferred exceptions. The printed values remain unchanged, with
+independent source links and extraction-coverage warnings.

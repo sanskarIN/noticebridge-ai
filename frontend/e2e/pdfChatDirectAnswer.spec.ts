@@ -89,3 +89,72 @@ test('generic application timing is not summarized as a closing date', () => {
   expect(result?.field.id).toBe('application_start');
   expect(result?.sides[0].values[0].value).toBe('1 December 2026');
 });
+
+test('review candidates include qualifying matches beyond the top four retrieval results', () => {
+  const values = Array.from({ length: 8 }, (_, i) =>
+    row('Application fee: Rs. ' + (500 + i), i + 1));
+  const condition = row('Application fee may be waived for eligible applicants after verification.', 9);
+  const idx = buildIndex([...values, condition]);
+  const answer = answerQuestion(idx, 'Application fee', 'original');
+  expect(answer.citations).not.toContain(condition);
+  const side = directFieldAnswer(idx, answer)?.sides[0];
+  expect(side?.otherMatchingPassages).toBe(1);
+  expect(side?.reviewPassages).toEqual([{ source: condition, reason: 'query_match' }]);
+});
+
+test('nearby context requires geometry and immediate same-page same-role adjacency', () => {
+  const positioned = (text: string, ordinal: number, y: number, x0 = 20,
+    role: Passage['role'] = 'original', page = 1): Passage =>
+    ({ ...row(text, ordinal, role, page), position: { x0, x1: x0 + 100, y, height: 10 } });
+  const value = positioned('Application fee: Rs. 500', 3, 100);
+  const preceding = positioned('Subject to the following conditions.', 2, 112);
+  const following = positioned('Exemptions apply to eligible groups.', 4, 88);
+  const otherColumn = positioned('Unrelated column content', 5, 76, 300);
+  const anotherValue = positioned('Application fee: Rs. 600', 6, 64);
+  const noGeometry = row('Text with unknown layout', 7);
+  const otherRole = positioned('Other source context', 4, 88, 20, 'revised');
+  const otherPage = positioned('Other page context', 4, 88, 20, 'original', 2);
+  const idx = buildIndex([otherPage, following, value, preceding, otherColumn,
+    anotherValue, noGeometry, otherRole]);
+  const side = directFieldAnswer(idx, answerQuestion(idx, 'Application fee', 'original'))?.sides[0];
+  expect(side?.nearbyPassages).toBe(2);
+  expect(side?.reviewPassages).toEqual([
+    { source: preceding, reason: 'nearby_line' },
+    { source: following, reason: 'nearby_line' },
+  ]);
+});
+
+test('query matches take precedence over nearby text and are deduplicated', () => {
+  const value = { ...fee, ordinal: 1, position: { x0: 20, x1: 100, y: 100, height: 10 } };
+  const condition = { ...row('Application fee is waived for eligible applicants.', 2),
+    position: { x0: 20, x1: 120, y: 88, height: 10 } };
+  const idx = buildIndex([value, condition, condition]);
+  const side = directFieldAnswer(idx, answerQuestion(idx, 'Application fee', 'original'))?.sides[0];
+  expect(side?.otherMatchingPassages).toBe(1);
+  expect(side?.nearbyPassages).toBe(0);
+  expect(side?.reviewPassages).toEqual([{ source: condition, reason: 'query_match' }]);
+});
+
+test('all review counts remain accurate with a bounded display and scoped physical page', () => {
+  const matches = Array.from({ length: 10 }, (_, i) =>
+    row('Application fee condition number ' + (i + 1), i + 2));
+  const elsewhere = row('Application fee condition on another page', 1, 'original', 2);
+  const otherRole = row('Application fee condition in another source', 1, 'revised');
+  const idx = buildIndex([{ ...fee, ordinal: 1 }, ...matches.reverse(), elsewhere, otherRole]);
+  const answer = answerScopedQuestions(idx, 'Application fee in original notice on page 1?',
+    'auto', ['original', 'revised'])[0];
+  const side = directFieldAnswer(idx, answer)?.sides[0];
+  expect(side?.otherMatchingPassages).toBe(10);
+  expect(side?.reviewPassages).toHaveLength(6);
+  expect(side?.reviewPassages.map(p => p.source.ordinal)).toEqual([2, 3, 4, 5, 6, 7]);
+});
+
+test('a missing extraction ordinal prevents nearby context from bridging a gap', () => {
+  const value = { ...fee, ordinal: 1, position: { x0: 20, x1: 100, y: 100, height: 10 } };
+  const omittedGap = { ...row('Possible exception', 3),
+    position: { x0: 20, x1: 100, y: 80, height: 10 } };
+  const idx = buildIndex([value, omittedGap]);
+  const side = directFieldAnswer(idx, answerQuestion(idx, 'Application fee', 'original'))?.sides[0];
+  expect(side?.nearbyPassages).toBe(0);
+  expect(side?.reviewPassages).toEqual([]);
+});

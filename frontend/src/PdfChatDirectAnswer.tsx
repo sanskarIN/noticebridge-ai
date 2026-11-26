@@ -38,8 +38,22 @@ export default function PdfChatDirectAnswer({ index, answer, onInspect }: {
       {side.distinctValues > side.values.length && <p className="chat-note">
         {side.distinctValues - side.values.length} additional distinct printed values not displayed.
         Inspect the full source before drawing a conclusion.</p>}
-      {side.otherMatchingPassages > 0 && <p className="chat-muted">
-        Other matching passages are shown below; they may contain relevant conditions.</p>}
+      {side.reviewPassages.length > 0 && <div className="chat-note">
+        <p><strong>Additional text to review</strong> — {side.otherMatchingPassages} matching
+          and {side.nearbyPassages} nearby passage(s). These may contain conditions or
+          exceptions; their relationship to the printed value is not verified.</p>
+        {side.reviewPassages.map(candidate => <div className="chat-direct-value"
+          key={directSourceKey(candidate.source)}>
+          <p className="chat-muted">{candidate.reason === 'query_match' ? 'Matching text' : 'Nearby text'}</p>
+          <p>“{candidate.source.text}”</p>
+          <button type="button" className="chat-button" onClick={() => onInspect(candidate.source)}>
+            Read {side.role} page {candidate.source.page}, fragment {candidate.source.ordinal}
+          </button>
+        </div>)}
+        {side.otherMatchingPassages + side.nearbyPassages > side.reviewPassages.length &&
+          <p className="chat-muted">{side.otherMatchingPassages + side.nearbyPassages - side.reviewPassages.length}
+            {' '}additional review passages not displayed. Inspect the full source.</p>}
+      </div>}
     </div>)}
     <p className="chat-muted">This is a deterministic summary of recognized labels in indexed text,
       not a complete or independently verified answer. It does not establish equivalent values,
