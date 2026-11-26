@@ -943,3 +943,24 @@ eligibility. Coverage warnings, bounded highlights, pagination and
 direct source inspection support manual review. Tests include negation,
 Unicode offsets, role/page isolation, cue overlap, exact counterparts,
 literal filters and browser discovery.
+
+## Opt-in direct loopback OCR
+
+The local development UI can now run selected-page OCR without a manual
+JSON exchange. The backend endpoint is disabled by default and must be
+explicitly enabled with NOTICEBRIDGE_ENABLE_LOCAL_CHAT_OCR=1. It rejects
+non-loopback peers, unexpected Host and browser Origin values, missing
+approval headers and excessive actual upload bytes before multipart
+parsing. It shares the existing concurrency-limited disposable-worker
+infrastructure and the canonical OCR report protocol. The browser
+only exposes the workflow at exact supported loopback origins; hosted
+and static showcase builds retain the file workflow.
+
+A separate user consent permits transfer of the complete selected PDF
+to the trusted local backend. The browser verifies the source SHA-256,
+physical page count, role, exact selected pages, bounded JSON stream
+and native/OCR separation. No remote endpoint, redirects or credentials
+are used. Discarding a result aborts the browser request; the bounded
+backend worker may still finish. Never expose the enabled endpoint
+through a public reverse proxy. Tests exercise the local boundary,
+upload caps, consent, invalid results, response bounds and browser review.

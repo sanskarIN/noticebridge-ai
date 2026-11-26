@@ -1181,3 +1181,40 @@ test('broad requirement question exposes scoped inspection separately from stric
   await expect(region.getByText(/Applicants must submit a certificate/)).toHaveCount(0);
   await expect(turn.locator('blockquote')).toHaveCount(0);
 });
+
+test('direct local OCR requires consent and independently validates the returned source report', async ({ page }) => {
+  const bytes = pdf([]);
+  let calls = 0;
+  await page.route('**/api/chat/ocr', async route => {
+    calls++;
+    const request = route.request();
+    expect(request.headers()['x-noticebridge-local-ocr']).toBe('1');
+    const report = {
+      format: 'noticebridge-chat-ocr-review', version: 1,
+      source_sha256: createHash('sha256').update(bytes).digest('hex'),
+      role: 'original', page_count: 1,
+      pages: [{ page: 1, status: 'ok', lines: [{ ordinal: 1, text: 'Application fee: INR 500' }] }],
+    };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(report, null, 2) + '\n' });
+  });
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'blank.pdf', mimeType: 'application/pdf', buffer: bytes,
+  });
+  await expect(page.getByText('0 extracted passages available.')).toBeVisible();
+  const answer = await ask(page, 'Application fee?');
+  await page.getByText('Experimental scanned PDF review (local OCR)', { exact: true }).click();
+  const local = page.getByRole('region', { name: 'Direct loopback OCR' });
+  await local.getByLabel('Direct OCR physical pages').fill('1');
+  const run = local.getByRole('button', { name: 'Run selected-page local OCR' });
+  await expect(run).toBeDisabled();
+  expect(calls).toBe(0);
+  await local.getByLabel('I approve sending the selected PDF to my trusted local OCR backend.').check();
+  await run.click();
+  const review = page.getByRole('region', { name: 'OCR review matches' });
+  await expect(review.getByText('“Application fee: INR 500”')).toBeVisible();
+  expect(calls).toBe(1);
+  await expect(answer.locator('blockquote')).toHaveCount(0);
+  await review.getByRole('button', { name: 'Inspect original OCR page 1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).getByText(/Unverified OCR transcription/)).toBeVisible();
+});
