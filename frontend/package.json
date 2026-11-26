@@ -9,7 +9,8 @@
     "build:showcase": "tsc --noEmit && vite build --mode showcase --outDir dist-showcase",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "test:showcase": "playwright test --config playwright.showcase.config.ts"
+    "test:showcase": "playwright test --config playwright.showcase.config.ts",
+    "evaluate:retrieval": "vite build --ssr evaluation/run.ts --outDir .evaluation-build && node .evaluation-build/run.js"
   },
   "dependencies": {
     "react": "^19.0.0",
