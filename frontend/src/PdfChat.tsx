@@ -4,6 +4,7 @@ import { comparePrintedValues, groupPrintedValues, nearbyPassages, parseSearchQu
 import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
 import PdfChatStructure from './PdfChatStructure';
 import PdfChatCorpusExport from './PdfChatCorpusExport';
+import PdfChatWorkspace from './PdfChatWorkspace';
 import PdfChatSessionPanel from './PdfChatSessionPanel';
 import PdfChatEvidenceReport from './PdfChatEvidenceReport';
 import PdfChatOcrReview from './PdfChatOcrReview';
@@ -398,6 +399,12 @@ export default function PdfChat() {
           key={'session:' + generation.current.original + ':' + generation.current.revised}
           files={files} index={index} turns={turns} onRestore={restored => {
             clearConversation(); setTurns(restored); setQuestion('');
+          }} />}
+        {!indexing && attached.length > 0 && <PdfChatWorkspace
+          key={'private-workspace:' + generation.current.original + ':' + generation.current.revised}
+          files={files} index={index} turns={turns} entries={reviewEntries}
+          onRestore={workspace => {
+            clearConversation(); setTurns(workspace.turns); setReviewEntries(workspace.entries); setQuestion('');
           }} />}
         {!indexing && attached.length > 0 && <PdfChatEvidenceReport
           key={'report:' + generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
