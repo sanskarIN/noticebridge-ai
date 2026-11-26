@@ -35,9 +35,13 @@ async function attach(page: Page, role: 'Original / first PDF' | 'Updated / seco
   });
 }
 async function ask(page: Page, question: string) {
+  const history = page.locator('.chat-turn');
+  const count = await history.count();
   await page.getByLabel('Your question').fill(question);
   await page.getByRole('button', { name: 'Ask PDF' }).click();
-  return page.locator('.chat-turn').last();
+  await expect(history).toHaveCount(count + 1);
+  await expect(history.last().locator('.chat-user')).toContainText(question);
+  return history.last();
 }
 test('navigation opens PDF chat', async ({ page }) => {
   await page.goto('/');
@@ -84,9 +88,9 @@ test('follow-up reuses explicit prior question and selected source scope', async
   await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
   await page.getByLabel('Your question').fill('Application fee');
   await expect(page.getByRole('button', { name: 'Ask PDF' })).toBeEnabled();
-  await page.getByLabel('Search scope').selectOption('original');
+  await page.getByLabel('Search scope', { exact: true }).selectOption('original');
   await ask(page, 'Application fee');
-  await page.getByLabel('Search scope').selectOption('revised');
+  await page.getByLabel('Search scope', { exact: true }).selectOption('revised');
   await page.getByLabel('Include previous question as search context').check();
   const followup = await ask(page, 'What about the updated notice?');
   await expect(followup.locator('blockquote')).toHaveText('Application fee: Rs. 350');
@@ -192,7 +196,7 @@ test('automatic scope answers separate versions and does not substitute a missin
   await page.goto('/?view=chat');
   await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
   await expect(page.getByText(/extracted passages available/)).toBeVisible();
-  await page.getByLabel('Search scope').selectOption('auto');
+  await page.getByLabel('Search scope', { exact: true }).selectOption('auto');
   const missing = await ask(page, 'Application fee in updated notice?');
   await expect(missing.getByText(/Requested source not attached/)).toBeVisible();
   await expect(missing.locator('blockquote')).toHaveCount(0);
@@ -276,7 +280,7 @@ test('overview exposes recognized printed fields, aliases and page citations bef
   await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
   await deadline.getByRole('button', { name: 'Ask about application deadline' }).click();
   await expect(page.getByLabel('Your question')).toHaveValue('Application deadline');
-  await expect(page.getByLabel('Search scope')).toHaveValue('auto');
+  await expect(page.getByLabel('Search scope', { exact: true })).toHaveValue('auto');
   await page.getByRole('button', { name: 'Ask PDF' }).click();
   await expect(page.locator('.chat-turn').last().locator('blockquote')).toHaveText([
     'Last date to apply: 19 December 2026', 'Application closing date: 13 December 2026',
@@ -479,7 +483,7 @@ test('same-question replay with a different scope invalidates old model exchange
   await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
   await attach(page, 'Updated / second PDF', ['Application fee: Rs. 350']);
   await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
-  await page.getByLabel('Search scope').selectOption('original');
+  await page.getByLabel('Search scope', { exact: true }).selectOption('original');
   await ask(page, 'Application fee');
   const plan = JSON.parse((await exportQuestions(page)).toString());
   plan.questions[0].scope = 'revised';
@@ -559,12 +563,12 @@ test('table values are source-scoped and never silently choose one version', asy
     name: 'second.pdf', mimeType: 'application/pdf', buffer: categoryTablePdf(false, true),
   });
   await expect(page.getByText('1 aligned category table candidates.')).toHaveCount(2);
-  await page.getByLabel('Search scope').selectOption('both');
+  await page.getByLabel('Search scope', { exact: true }).selectOption('both');
   const answer = await ask(page, 'Application fee for General');
   const table = answer.getByRole('region', { name: 'Aligned table evidence candidates' });
   await expect(table.getByText('Rs. 500', { exact: true })).toBeVisible();
   await expect(table.getByText('Rs. 350', { exact: true })).toBeVisible();
-  await page.getByLabel('Search scope').selectOption('revised');
+  await page.getByLabel('Search scope', { exact: true }).selectOption('revised');
   const selected = await ask(page, 'Application fee for General');
   const scoped = selected.getByRole('region', { name: 'Aligned table evidence candidates' });
   await expect(scoped.getByText('Rs. 350', { exact: true })).toBeVisible();
@@ -584,7 +588,7 @@ test('table explorer offers source-scoped guided questions without submitting au
   await expect(table.getByRole('rowheader', { name: /Reserved/ })).toBeVisible();
   await table.getByRole('button', { name: 'Ask Application fee for Reserved' }).click();
   await expect(page.getByLabel('Your question')).toHaveValue('Application fee for Reserved on page 1?');
-  await expect(page.getByLabel('Search scope')).toHaveValue('revised');
+  await expect(page.getByLabel('Search scope', { exact: true })).toHaveValue('revised');
   await expect(page.locator('.chat-turn')).toHaveCount(0);
   await page.getByRole('button', { name: 'Ask PDF' }).click();
   await expect(page.locator('.chat-turn').last().getByRole('region', { name: 'Aligned table evidence candidates' }).getByText('Rs. 250', { exact: true })).toBeVisible();
@@ -762,7 +766,7 @@ test('manual evidence explorer finds exact phrases and explicit references witho
   await page.getByRole('button', { name: 'Search indexed evidence' }).click();
   await expect(results.getByText(/2 matching indexed fragments/)).toBeVisible();
   await expect(page.locator('.chat-turn')).toHaveCount(0);
-  await page.getByLabel('Evidence search scope').selectOption('revised');
+  await page.getByLabel('Evidence source filter').selectOption('revised');
   await page.getByRole('button', { name: 'Search indexed evidence' }).click();
   await expect(results.getByText(/0 matching indexed fragments/)).toBeVisible();
 });
@@ -780,4 +784,52 @@ test('question evidence explorer exposes all strict matches without changing bas
   await expect(answer.locator('blockquote')).toHaveCount(4);
   await region.getByRole('button', { name: 'Previous results' }).click();
   await expect(region.locator('.chat-citation')).toHaveCount(12);
+});
+
+test('coverage navigator opens an empty PDF page without needing a chat citation', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'blank.pdf', mimeType: 'application/pdf', buffer: pdf([]),
+  });
+  await expect(page.getByText('0 extracted passages available.')).toBeVisible();
+  await page.getByText('Inspect PDF page coverage', { exact: true }).click();
+  const button = page.getByRole('button', { name: 'Inspect original physical page 1: No indexed text' });
+  await expect(button).toBeVisible();
+  await button.click();
+  const inspector = page.getByRole('region', { name: 'Source page inspection' });
+  await expect(inspector.getByText(/No particular source fragment is selected/)).toBeVisible();
+  await expect(inspector.getByText('Source page shown for manual inspection.')).toBeVisible();
+  await expect(inspector.getByRole('button', { name: 'Previous PDF page' })).toBeDisabled();
+  await expect(inspector.getByRole('button', { name: 'Next PDF page' })).toBeDisabled();
+  await expect(inspector.locator('blockquote')).toHaveCount(0);
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});
+test('manual page navigation removes the previous quote and preserves the actual question answer', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'two-pages.pdf', mimeType: 'application/pdf', buffer: twoPageEvidencePdf(),
+  });
+  await expect(page.getByText('2 extracted passages available.')).toBeVisible();
+  const answer = await ask(page, 'Rural applicants?');
+  await answer.getByRole('button', { name: 'Inspect source [1]' }).click();
+  const inspector = page.getByRole('region', { name: 'Source page inspection' });
+  await expect(inspector.locator('blockquote')).toHaveText('Applicants from rural districts');
+  await inspector.getByRole('button', { name: 'Next PDF page' }).click();
+  await expect(inspector.getByRole('heading', { name: /page 2/ })).toBeVisible();
+  await expect(inspector.locator('blockquote')).toHaveCount(0);
+  await expect(answer.locator('blockquote')).toHaveText('Applicants from rural districts');
+  await inspector.getByRole('button', { name: 'Previous PDF page' }).click();
+  await expect(inspector.getByRole('heading', { name: /page 1/ })).toBeVisible();
+  await expect(inspector.locator('blockquote')).toHaveCount(0);
+});
+test('manual evidence source filter and question scope remain independent', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500']);
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  await page.getByText('Explore indexed PDF evidence', { exact: true }).click();
+  await page.getByLabel('Evidence source filter').selectOption('revised');
+  await expect(page.getByLabel('Search scope', { exact: true })).toHaveValue('original');
+  await expect(page.getByLabel('Search scope')).toHaveCount(1);
+  const result = await ask(page, 'Application fee');
+  await expect(result.locator('blockquote')).toHaveText('Application fee: Rs. 500');
 });

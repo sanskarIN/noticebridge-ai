@@ -741,3 +741,19 @@ behavior. Independently annotated notice families, a held-out set, real
 model experiments and manually checked qualifiers remain necessary.
 Full strict retrieval is an exploration mode, not a replacement answer
 engine; more citations do not establish better factual accuracy.
+
+## Release-quality UI and page coverage navigation
+
+The evidence explorer uses a distinct source-filter label from the chat
+composer. The composer precedes expandable experimental model and report
+panels; submitting a question scrolls the bounded conversation log
+rather than the entire outer page. Browser test helpers verify that a
+new turn really appeared, not merely that a click returned.
+
+Direct physical-page navigation is now available for each attached PDF,
+including pages with no indexed text, partially indexed pages and
+unprocessed pages. It uses existing extraction coverage classifications,
+never infers completeness from fragment counts, and remains local.
+Manual page changes clear any selected quote and native-neighbor context;
+the previous answer is left unchanged. Regression tests cover blank
+pages, page bounds, role isolation, coverage and independent filters.

@@ -5,6 +5,7 @@ import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from '
 import PdfChatSessionPanel from './PdfChatSessionPanel';
 import PdfChatEvidenceReport from './PdfChatEvidenceReport';
 import PdfChatOcrReview from './PdfChatOcrReview';
+import PdfChatPageNavigator from './PdfChatPageNavigator';
 import type { ChatCorpora } from './pdfChatEvidenceReport';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
@@ -86,14 +87,15 @@ export default function PdfChat() {
   const [reuse, setReuse] = useState(false);
   const [includeContext, setIncludeContext] = useState(true);
   const [error, setError] = useState('');
-  const [preview, setPreview] = useState<Passage | null>(null);
-  const [previewIsOcr, setPreviewIsOcr] = useState(false);
+  const [preview, setPreview] = useState<{
+    role: Role; page: number; source?: Passage; kind: 'native' | 'ocr' | 'page';
+  } | null>(null);
   const controllers = useRef<Partial<Record<Role, AbortController>>>({});
   const generation = useRef({ original: 0, revised: 0 });
   const demoGeneration = useRef(0);
   const [demoLoading, setDemoLoading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const latestRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
   useEffect(() => () => {
     for (const controller of Object.values(controllers.current)) controller?.abort();
     generation.current.original++;
@@ -190,14 +192,31 @@ export default function PdfChat() {
       setReuse(false);
       setPreview(null);
       setError('');
-      inputRef.current?.focus();
+      inputRef.current?.focus({ preventScroll: true });
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Unable to search the selected PDFs.');
     }
   }
-  useEffect(() => { if (turns.length) latestRef.current?.scrollIntoView({ block: 'nearest' }); }, [turns.length]);
-  function inspectNative(source: Passage) { setPreviewIsOcr(false); setPreview(source); }
-  function inspectOcr(source: Passage) { setPreviewIsOcr(true); setPreview(source); }
+
+  // Keep the composer and the outer page stable while updating history.
+  // scrollIntoView on a nested element also scrolls outer ancestors.
+  useEffect(() => {
+    if (turns.length && historyRef.current) {
+      historyRef.current.scrollTop = historyRef.current.scrollHeight;
+    }
+  }, [turns.length, conversationEpoch]);
+  function inspectNative(source: Passage) {
+    setPreview({ role: source.role, page: source.page, source, kind: 'native' });
+  }
+  function inspectOcr(source: Passage) {
+    setPreview({ role: source.role, page: source.page, source, kind: 'ocr' });
+  }
+  function inspectPage(role: Role, page: number) {
+    const slot = slots[role];
+    if (slot.kind !== 'ready' || !Number.isSafeInteger(page) ||
+        page < 1 || page > slot.corpus.pageCount) return;
+    setPreview({ role, page, kind: 'page' });
+  }
   const previewSlot = preview ? slots[preview.role] : null;
   return <div className="app-shell pdf-chat">
     <header className="topbar">
@@ -240,7 +259,11 @@ export default function PdfChat() {
             </div>;
           })}
         </div>
-        <p className="chat-muted">Maximum 10 MiB and 80 pages per PDF; native embedded text only. No OCR or external AI service is used here.</p>
+        <p className="chat-muted">Maximum 10 MiB and 80 pages per PDF. The primary index uses native embedded text.
+          Optional OCR review uses a separate local file workflow.</p>
+        {!indexing && attached.length > 0 && <PdfChatPageNavigator
+          key={generation.current.original + ':' + generation.current.revised}
+          corpora={corpora} onInspect={inspectPage} />}
       </section>
       {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={inspectNative}
         onAsk={value => { setQuestion(value); setReuse(false); setScope('auto'); inputRef.current?.focus(); }} />}
@@ -255,7 +278,7 @@ export default function PdfChat() {
         <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
           <button type="button" className="chat-button" disabled={!turns.length} onClick={clearConversation}>Clear conversation</button>
         </div>
-        <div className="chat-history" role="log" aria-label="Document chat history" aria-live="polite">
+        <div ref={historyRef} className="chat-history" role="log" aria-label="Document chat history" aria-live="polite">
           {!turns.length && <p className="chat-muted">Your questions and matching document passages will appear here.</p>}
           {turns.map(({ input, resolved, answers }, i) => <article className="chat-turn" key={conversationEpoch + ':' + i}>
             <p className="chat-user"><strong>You</strong> {input}</p>
@@ -308,24 +331,7 @@ export default function PdfChat() {
               <PdfChatQuestionEvidence index={index} answer={answer} corpora={corpora} onInspect={inspectNative} />
             </div>)}
           </article>)}
-          <div ref={latestRef} />
         </div>
-        {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel
-          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
-          index={index} answer={turns.at(-1)!.answers[0]} onInspect={inspectNative} />}
-        {!indexing && attached.length > 0 && <PdfChatSessionPanel
-          key={generation.current.original + ':' + generation.current.revised}
-          files={files} index={index} turns={turns} onRestore={restored => {
-            clearConversation(); setTurns(restored); setQuestion('');
-          }} />}
-        {!indexing && attached.length > 0 && <PdfChatEvidenceReport
-          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
-          files={files} corpora={corpora} index={index} turns={turns} />}
-        {!indexing && attached.length > 0 && <PdfChatOcrReview
-          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch}
-          files={files} corpora={corpora}
-          answer={turns.at(-1)?.answers.length === 1 ? turns.at(-1)!.answers[0] : null}
-          onInspect={inspectOcr} />}
         <form className="chat-form" onSubmit={ask}>
           <label>Search scope
             <select value={scope} onChange={event => setScope(event.target.value as ChatScope)}>
@@ -358,18 +364,43 @@ export default function PdfChat() {
           {turns.length >= MAX_TURNS && <p className="chat-note">Conversation limit reached. Clear the conversation to continue.</p>}
           {error && <p role="alert" className="chat-error">{error}</p>}
         </form>
+        {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel
+          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
+          index={index} answer={turns.at(-1)!.answers[0]} onInspect={inspectNative} />}
+        {!indexing && attached.length > 0 && <PdfChatSessionPanel
+          key={generation.current.original + ':' + generation.current.revised}
+          files={files} index={index} turns={turns} onRestore={restored => {
+            clearConversation(); setTurns(restored); setQuestion('');
+          }} />}
+        {!indexing && attached.length > 0 && <PdfChatEvidenceReport
+          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
+          files={files} corpora={corpora} index={index} turns={turns} />}
+        {!indexing && attached.length > 0 && <PdfChatOcrReview
+          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch}
+          files={files} corpora={corpora}
+          answer={turns.at(-1)?.answers.length === 1 ? turns.at(-1)!.answers[0] : null}
+          onInspect={inspectOcr} />}
       </section>
       {preview && previewSlot?.kind === 'ready' && <section className="chat-panel" aria-label="Source page inspection">
         <div className="chat-toolbar"><h2>{names[preview.role]} · page {preview.page}</h2>
           <button type="button" className="chat-button" onClick={() => setPreview(null)}>Close source page</button></div>
-        {previewIsOcr && <p className="chat-note">Unverified OCR transcription. Compare this text
+        {preview.kind === 'ocr' && <p className="chat-note">Unverified OCR transcription. Compare this text
           with the rendered PDF page; it is not an indexed native-text fragment.</p>}
-        <blockquote>{preview.text}</blockquote>
-        {!previewIsOcr && <details className="chat-nearby"><summary>Nearby extracted passages (same PDF page)</summary>
+        {preview.source && <blockquote>{preview.source.text}</blockquote>}
+        {preview.kind === 'native' && preview.source && <details className="chat-nearby"><summary>Nearby extracted passages (same PDF page)</summary>
           <p className="chat-muted">Extraction order may differ from visual reading order. These fragments are not additional answer claims.</p>
-          {nearbyPassages(index, preview).map(passage => <p key={passage.ordinal}
-            className={passage.ordinal === preview.ordinal ? 'chat-selected-fragment' : undefined}>{passage.text}</p>)}
+          {nearbyPassages(index, preview.source).map(passage => <p key={passage.ordinal}
+            className={passage.ordinal === preview.source?.ordinal ? 'chat-selected-fragment' : undefined}>{passage.text}</p>)}
         </details>}
+        <div className="chat-toolbar" aria-label="Source page navigation">
+          <button type="button" className="chat-button" disabled={preview.page <= 1}
+            onClick={() => inspectPage(preview.role, preview.page - 1)}>Previous PDF page</button>
+          <span className="chat-muted">Physical page {preview.page} of {previewSlot.corpus.pageCount}</span>
+          <button type="button" className="chat-button" disabled={preview.page >= previewSlot.corpus.pageCount}
+            onClick={() => inspectPage(preview.role, preview.page + 1)}>Next PDF page</button>
+        </div>
+        {preview.kind === 'page' && <p className="chat-muted">Manual page selection.
+          No particular source fragment is selected.</p>}
         <p className="chat-note">This page is shown for manual inspection. The chat index does not establish verified highlight geometry.</p>
         <Suspense fallback={<p role="status">Preparing local PDF viewer…</p>}>
           <PdfEvidencePreview file={previewSlot.file} pageNumber={preview.page} inspectionOnly />

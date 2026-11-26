@@ -98,3 +98,10 @@
 .chat-table-scroll th{background:#101e30}
 .chat-table-scroll th .chat-button{display:block;margin-top:7px}
 .chat-table-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+
+.chat-form input[type="text"],.chat-form select{background:#071325;color:#e8edf7;border:1px solid #50627d;border-radius:8px;padding:10px;min-width:0;max-width:100%;font:inherit}
+.chat-history{overflow-anchor:none}
+.chat-page-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:8px;margin:12px 0}
+.chat-page-button{text-align:left;display:grid;gap:4px;overflow-wrap:anywhere}
+.chat-page-button span,.chat-page-button small{color:#b2c1d6;font-size:12px}
+.chat-session pre,.chat-embedding-panel pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:13px}

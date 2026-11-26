@@ -154,7 +154,7 @@ export default function PdfChatEvidenceExplorer({ index, corpora, onInspect }: {
           placeholder={mode === 'literal' ? 'application fee' : 'Clause 4.2(a)'}
           onChange={event => { setQuery(event.target.value); reset(); }} />
       </label>
-      <label>Evidence search scope
+      <label>Evidence source filter
         <select value={scope} onChange={event => { setScope(event.target.value as Scope); reset(); }}>
           <option value="both">Both PDFs</option>
           <option value="original">Original / first PDF</option>
