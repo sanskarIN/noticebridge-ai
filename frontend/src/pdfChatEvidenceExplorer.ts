@@ -23,7 +23,7 @@ export type ExplorerResult = {
 export type SearchOptions = { scope: Scope; page?: number };
 
 const KINDS = 'clause|section|paragraph|rule|article|annexure|schedule';
-const REFERENCE_PATTERN = /\b(clause|section|paragraph|rule|article|annexure|schedule)[ \t]+([0-9]{1,4}(?:\.[0-9]{1,4}){0,5}[A-Za-z]?(?:\([A-Za-z0-9]{1,5}\)){0,4}|[A-Za-z]{1,4}(?:-[0-9]{1,4})?)(?![\p{L}\p{N}_.(-])/giu;
+const REFERENCE_PATTERN = /\b(clause|section|paragraph|rule|article|annexure|schedule)[ \t]+([0-9]{1,4}(?:\.[0-9]{1,4}){0,5}[A-Za-z]?(?:\([A-Za-z0-9]{1,5}\)){0,4}|[A-Za-z]{1,4}(?:-[0-9]{1,4})?)(?![\p{L}\p{N}_(-]|\.[\p{L}\p{N}_.(-])/giu;
 const ID_PATTERN = /^(?:[0-9]{1,4}(?:\.[0-9]{1,4}){0,5}[A-Za-z]?(?:\([A-Za-z0-9]{1,5}\)){0,4}|[A-Za-z]{1,4}(?:-[0-9]{1,4})?)$/;
 const numericKind = new Set<ReferenceKind>(['clause', 'section', 'paragraph', 'rule', 'article']);
 
@@ -90,7 +90,7 @@ function validReference(ref: Reference): boolean {
     ID_PATTERN.test(ref.identifier) &&
     (!numericKind.has(ref.kind) || /^[0-9]/.test(ref.identifier));
 }
-function referencesIn(text: string): { reference: Reference; range: TextRange }[] {
+export function referencesIn(text: string): { reference: Reference; range: TextRange }[] {
   const found: { reference: Reference; range: TextRange }[] = [];
   for (const match of text.matchAll(REFERENCE_PATTERN)) {
     const reference = { kind: match[1].toLowerCase() as ReferenceKind,

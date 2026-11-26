@@ -6,6 +6,7 @@ import PdfChatSessionPanel from './PdfChatSessionPanel';
 import PdfChatEvidenceReport from './PdfChatEvidenceReport';
 import PdfChatOcrReview from './PdfChatOcrReview';
 import PdfChatPageNavigator from './PdfChatPageNavigator';
+import PdfChatReferenceReview from './PdfChatReferenceReview';
 import type { ChatCorpora } from './pdfChatEvidenceReport';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
@@ -392,6 +393,9 @@ export default function PdfChat() {
           {nearbyPassages(index, preview.source).map(passage => <p key={passage.ordinal}
             className={passage.ordinal === preview.source?.ordinal ? 'chat-selected-fragment' : undefined}>{passage.text}</p>)}
         </details>}
+        {preview.kind === 'native' && preview.source && <PdfChatReferenceReview
+          key={preview.role + ':' + preview.page + ':' + preview.source.ordinal}
+          source={preview.source} index={index} onInspect={inspectNative} />}
         <div className="chat-toolbar" aria-label="Source page navigation">
           <button type="button" className="chat-button" disabled={preview.page <= 1}
             onClick={() => inspectPage(preview.role, preview.page - 1)}>Previous PDF page</button>

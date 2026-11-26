@@ -821,3 +821,17 @@ exercises the full-export rejection, explicit 512-fragment shortlist,
 visible exclusion counts, dense-result import and mode-change invalidation.
 A 12,000-fragment index regression covers the maximum existing index size.
 Neither test measures installed-model quality or representative PDF accuracy.
+
+## Source-inspection cross-reference navigation
+
+Native citation inspection now offers one-hop lookup of explicit printed
+clause, section and other supported references. Sentence-final periods
+are recognized as punctuation rather than identifier suffixes; malformed
+hierarchical identifiers are not shortened. The lookup validates the
+starting fragment against the local index, excludes itself, never searches
+the other PDF, and distinguishes fragments beginning with a reference
+from other mentions. Neither is a verified definition. Up to six unique
+references are surfaced per fragment, with omitted-count disclosure and
+eight results per page. Users can follow another reference only by
+explicitly inspecting another fragment. No model, recursive expansion,
+automatic scope widening of the answer or imported OCR is involved.

@@ -972,3 +972,25 @@ test('large real PDF supports explicit shortlist, reports exclusions and invalid
   await expect(input).toBeDisabled();
   await expect(turn.locator('blockquote')).toHaveText(baseline);
 });
+
+test('source inspector follows explicit references without importing them into chat answer', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', [
+    'Eligibility: See Clause 4.2.',
+    'Clause 4.2: Residence certificate required.',
+    'Clause 4.20: Other condition.',
+  ]);
+  await expect(page.getByText('3 extracted passages available.')).toBeVisible();
+  const answer = await ask(page, 'Eligibility?');
+  await answer.getByRole('button', { name: 'Inspect source [1]' }).click();
+  const region = page.getByRole('region', { name: 'Follow printed source references' });
+  await region.getByRole('button', { name: 'Find other mentions of Clause 4.2' }).click();
+  await expect(region.getByText(/1 other indexed fragments/)).toBeVisible();
+  await expect(region.getByText(/Residence certificate required/)).toBeVisible();
+  await expect(region.getByText(/Other condition/)).toHaveCount(0);
+  await region.getByRole('button', { name: 'Inspect reference on page 1, fragment 2' }).click();
+  const inspector = page.getByRole('region', { name: 'Source page inspection' });
+  await expect(inspector.locator('blockquote')).toHaveText('Clause 4.2: Residence certificate required.');
+  await expect(answer.locator('blockquote')).toHaveText('Eligibility: See Clause 4.2.');
+  await expect(region.getByText(/1 other indexed fragments/)).toHaveCount(0);
+});
