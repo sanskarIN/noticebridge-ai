@@ -761,3 +761,13 @@ pages, page bounds, role isolation, coverage and independent filters.
 The page inventory is bounded to the first 80 physical pages per PDF,
 including for much longer documents. A separate validated direct page
 jump permits manual inspection beyond this list and the indexing limit.
+
+### Workspace identity regression
+
+The model exchange and evidence-report panels previously shared the
+same React sibling key, allowing undefined reconciliation behavior.
+All separately keyed workspace panels now use distinct purpose-specific
+prefixes as well as source and conversation generations. The search-scope
+select also has an explicit accessible name and an associated label.
+Regression coverage checks for duplicate panels, stale imported ranking
+state and exact accessible control identification after a new turn.

@@ -833,3 +833,38 @@ test('manual evidence source filter and question scope remain independent', asyn
   const result = await ask(page, 'Application fee');
   await expect(result.locator('blockquote')).toHaveText('Application fee: Rs. 500');
 });
+
+test('workspace panel keys remain distinct after adding a second chat turn', async ({ page }) => {
+  const keyWarnings: string[] = [];
+  page.on('console', message => {
+    if (/same key|unique.*key|duplicate key/i.test(message.text())) keyWarnings.push(message.text());
+  });
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500', 'Eligibility: Class 12']);
+  await expect(page.getByText('2 extracted passages available.')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Search scope', exact: true })).toHaveCount(1);
+  await ask(page, 'Application fee');
+  await page.getByText('Experimental semantic retrieval (local file workflow)', { exact: true }).click();
+  await page.getByLabel('I understand that the exported request contains document text.').check();
+  const waiting = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export semantic retrieval request' }).click();
+  const data = await readFile((await (await waiting).path())!);
+  const result = {
+    format: 'noticebridge-chat-embedding-result', version: 1,
+    request_sha256: createHash('sha256').update(data).digest('hex'),
+    model: 'fixture:latest', model_digest: 'a'.repeat(64), dimension: 2, candidate_count: 2,
+    ranks: { original: ['original:1:1', 'original:1:2'] }, authority_verified: false,
+  };
+  await page.getByLabel('Import local candidate ranking').setInputFiles({
+    name: 'ranking.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(result, null, 2) + '\n'),
+  });
+  await expect(page.getByRole('region', { name: 'Experimental candidate review' })).toBeVisible();
+  await ask(page, 'Eligibility');
+  await expect(page.getByRole('region', { name: 'Experimental candidate review' })).toHaveCount(0);
+  await expect(page.getByText('Experimental semantic retrieval (local file workflow)', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('Export or verify a private evidence report', { exact: true })).toHaveCount(1);
+  await page.getByText('Experimental semantic retrieval (local file workflow)', { exact: true }).click();
+  await expect(page.getByLabel('Import local candidate ranking')).toBeDisabled();
+  expect(keyWarnings).toEqual([]);
+});

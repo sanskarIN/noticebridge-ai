@@ -262,17 +262,17 @@ export default function PdfChat() {
         <p className="chat-muted">Maximum 10 MiB per PDF; the first 80 physical pages can be indexed. The primary index uses native embedded text.
           Optional OCR review uses a separate local file workflow.</p>
         {!indexing && attached.length > 0 && <PdfChatPageNavigator
-          key={generation.current.original + ':' + generation.current.revised}
+          key={'page-navigator:' + generation.current.original + ':' + generation.current.revised}
           corpora={corpora} onInspect={inspectPage} />}
       </section>
       {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={inspectNative}
         onAsk={value => { setQuestion(value); setReuse(false); setScope('auto'); inputRef.current?.focus(); }} />}
-      {!indexing && <PdfChatTableExplorer key={generation.current.original + ':' + generation.current.revised}
+      {!indexing && <PdfChatTableExplorer key={'tables:' + generation.current.original + ':' + generation.current.revised}
         indexes={tableIndexes} onInspect={inspectNative} onAsk={(value, role) => {
           setQuestion(value); setReuse(false); setScope(role); inputRef.current?.focus();
         }} />}
       {!indexing && attached.length > 0 && <PdfChatEvidenceExplorer
-        key={generation.current.original + ':' + generation.current.revised}
+        key={'explorer:' + generation.current.original + ':' + generation.current.revised}
         index={index} corpora={corpora} onInspect={inspectNative} />}
       <section className="chat-panel" aria-labelledby="chat-title">
         <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
@@ -333,14 +333,14 @@ export default function PdfChat() {
           </article>)}
         </div>
         <form className="chat-form" onSubmit={ask}>
-          <label>Search scope
-            <select value={scope} onChange={event => setScope(event.target.value as ChatScope)}>
+          <label htmlFor="chat-search-scope">Search scope</label>
+          <select id="chat-search-scope" aria-label="Search scope" value={scope}
+            onChange={event => setScope(event.target.value as ChatScope)}>
               <option value="auto">Auto (explicit source wording)</option>
               <option value="original">Original / first PDF</option>
               <option value="revised">Updated / second PDF</option>
               <option value="both">Both PDFs</option>
-            </select>
-          </label>
+          </select>
           <p className="chat-muted">Auto scope recognizes phrases such as “original notice”, “updated notice” and “both PDFs”. If a requested source is missing, it will not substitute another PDF.</p>
           <div className="chat-examples">{examples.map(example =>
             <button type="button" key={example} className="chat-button" onClick={() => {
@@ -365,18 +365,18 @@ export default function PdfChat() {
           {error && <p role="alert" className="chat-error">{error}</p>}
         </form>
         {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel
-          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
+          key={'models:' + generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
           index={index} answer={turns.at(-1)!.answers[0]} onInspect={inspectNative} />}
         {!indexing && attached.length > 0 && <PdfChatSessionPanel
-          key={generation.current.original + ':' + generation.current.revised}
+          key={'session:' + generation.current.original + ':' + generation.current.revised}
           files={files} index={index} turns={turns} onRestore={restored => {
             clearConversation(); setTurns(restored); setQuestion('');
           }} />}
         {!indexing && attached.length > 0 && <PdfChatEvidenceReport
-          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
+          key={'report:' + generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
           files={files} corpora={corpora} index={index} turns={turns} />}
         {!indexing && attached.length > 0 && <PdfChatOcrReview
-          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch}
+          key={'ocr:' + generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch}
           files={files} corpora={corpora}
           answer={turns.at(-1)?.answers.length === 1 ? turns.at(-1)!.answers[0] : null}
           onInspect={inspectOcr} />}
