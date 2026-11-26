@@ -642,3 +642,13 @@ selected cross-page leads cannot survive into a different replay.
 A browser regression uses a simulated OCR report, checks the fingerprint,
 verifies the native answer still abstains, opens the correct PDF page,
 rejects a changed fingerprint, and discards data when replacing a source.
+
+A real image-only PDF regression additionally runs the complete isolated
+CLI and actual English OCR when Tesseract and its English pack are
+installed. It checks a printed date, selected-page isolation, exact
+source fingerprint and quote-free terminal output; Windows without
+Tesseract skips only that installed-runtime case. A separate browser
+protocol test passes a Python-encoded report with currency, accented and
+supplementary Unicode text through the TypeScript parser. These tests
+must pass in CI before claiming runtime interoperability; one fictional
+scan is not evidence of representative real-world OCR accuracy.

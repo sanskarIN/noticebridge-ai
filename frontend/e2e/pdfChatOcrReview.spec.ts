@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import { answerScopedQuestions } from '../src/pdfChatInsights';
 import { buildIndex } from '../src/pdfChatCore';
@@ -50,4 +51,24 @@ test('limited selected page preserves available lines without claiming full cove
   const result = parseOcrReview(encode({ ...raw, pages: [{ ...raw.pages[0], status: 'limited' }] }), pins, counts);
   expect(result.pages[0].status).toBe('limited');
   expect(result.pages[0].lines).toHaveLength(1);
+});
+
+test('Python report encoding round-trips through the strict browser parser', () => {
+  // This is a wire interoperability test, not a live OCR accuracy claim.
+  // Python is installed in the browser CI job for the live API tests.
+  const data = execFileSync(process.env.PYTHON || 'python', ['-c', [
+    'from noticebridge.chat_ocr_protocol import encode_report',
+    'import json, sys',
+    'sys.stdout.buffer.write(encode_report(json.load(sys.stdin)))',
+  ].join('\n')], {
+    input: JSON.stringify({ ...raw, pages: [{ ...raw.pages[0], lines: [
+      { ordinal: 1, text: 'Fee: ₹500 — “fictional”' },
+      { ordinal: 3, text: 'Proof: café and 😀' },
+    ] }] }),
+    maxBuffer: MAX_OCR_REVIEW_BYTES,
+  }).toString('utf8');
+  const parsed = parseOcrReview(data, pins, counts);
+  expect(parsed.pages[0].lines.map(line => line.text)).toEqual([
+    'Fee: ₹500 — “fictional”', 'Proof: café and 😀',
+  ]);
 });

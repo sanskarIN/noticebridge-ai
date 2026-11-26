@@ -1,5 +1,7 @@
 import hashlib
 import json
+import shutil
+import subprocess
 
 import pymupdf as fitz
 import pytest
@@ -81,3 +83,52 @@ def test_cli_requires_consent_and_refuses_overwrite(tmp_path, monkeypatch):
     before = output.read_bytes()
     assert chat_ocr_cli.main(args + ["--allow-local-processing"]) == 2
     assert output.read_bytes() == before
+
+def scanned_pdf():
+    with fitz.open() as source, fitz.open() as scanned:
+        page = source.new_page(width=610, height=170)
+        page.insert_text((25, 85), "Application deadline: 15 December 2026", fontsize=21)
+        image = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        first = scanned.new_page(width=610, height=170)
+        first.insert_image(first.rect, stream=image.tobytes("png"))
+        second = scanned.new_page()
+        second.insert_text((25, 50), "Unselected page")
+        return scanned.tobytes()
+
+
+def test_actual_isolated_ocr_on_image_only_pdf_when_installed(tmp_path, capsys):
+    if shutil.which("tesseract") is None:
+        pytest.skip("Tesseract CLI not installed")
+    languages = subprocess.run(
+        ["tesseract", "--list-langs"], capture_output=True, text=True, check=True, timeout=15,
+    ).stdout
+    if "eng" not in languages.splitlines():
+        pytest.skip("English OCR data not installed")
+    source = scanned_pdf()
+    with fitz.open(stream=source, filetype="pdf") as document:
+        assert not document[0].get_text().strip()
+    input_path = tmp_path / "scan.pdf"
+    output_path = tmp_path / "ocr.json"
+    input_path.write_bytes(source)
+    assert chat_ocr_cli.main([
+        str(input_path), "--role", "original", "--pages", "1",
+        "--output", str(output_path), "--allow-local-processing",
+    ]) == 0
+    raw = json.loads(output_path.read_bytes())
+    assert raw["source_sha256"] == hashlib.sha256(source).hexdigest()
+    assert raw["page_count"] == 2
+    assert len(raw["pages"]) == 1
+    assert raw["pages"][0]["page"] == 1
+    assert raw["pages"][0]["status"] == "ok"
+    text = " ".join(line["text"] for line in raw["pages"][0]["lines"])
+    assert "deadline" in text.lower()
+    assert "15 December 2026" in text
+    assert "Unselected" not in text
+    captured = capsys.readouterr()
+    assert "deadline" not in captured.out.lower()
+    assert captured.err == ""
+
+
+def test_actual_worker_rejects_invalid_pdf_without_source_diagnostics():
+    with pytest.raises(OcrReviewError, match="Local OCR worker failed"):
+        chat_ocr_cli.run_ocr_review(b"%PDF-1.4\ninvalid private source", "original", [1])
