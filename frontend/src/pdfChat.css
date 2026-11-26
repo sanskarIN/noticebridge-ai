@@ -105,3 +105,6 @@
 .chat-page-button{text-align:left;display:grid;gap:4px;overflow-wrap:anywhere}
 .chat-page-button span,.chat-page-button small{color:#b2c1d6;font-size:12px}
 .chat-session pre,.chat-embedding-panel pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:13px}
+
+.chat-review-entry{display:grid;gap:10px;overflow-wrap:anywhere}
+.chat-review-entry textarea{background:#071325;color:#e8edf7;border:1px solid #50627d;border-radius:8px;padding:10px;max-width:100%;min-width:0;resize:vertical;font:inherit}

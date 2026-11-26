@@ -7,6 +7,9 @@ import PdfChatEvidenceReport from './PdfChatEvidenceReport';
 import PdfChatOcrReview from './PdfChatOcrReview';
 import PdfChatPageNavigator from './PdfChatPageNavigator';
 import PdfChatReferenceReview from './PdfChatReferenceReview';
+import PdfChatReviewWorkspace from './PdfChatReviewWorkspace';
+import { MAX_REVIEW_ITEMS, pinEvidence, type ReviewEntry } from './pdfChatReviewWorkspace';
+import { passageId } from './pdfChatResearch';
 import type { ChatCorpora } from './pdfChatEvidenceReport';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
@@ -84,6 +87,7 @@ export default function PdfChat() {
   const [scope, setScope] = useState<ChatScope>('original');
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [reviewEntries, setReviewEntries] = useState<ReviewEntry[]>([]);
   const [conversationEpoch, setConversationEpoch] = useState(0);
   const [reuse, setReuse] = useState(false);
   const [includeContext, setIncludeContext] = useState(true);
@@ -135,6 +139,7 @@ export default function PdfChat() {
     controllers.current[role]?.abort();
     generation.current[role]++;
     update(role, { kind: 'empty' });
+    setReviewEntries([]);
     clearConversation();
     setQuestion('');
   }
@@ -387,12 +392,25 @@ export default function PdfChat() {
           answer={turns.at(-1)?.answers.length === 1 ? turns.at(-1)!.answers[0] : null}
           onInspect={inspectOcr} />}
       </section>
+      {!indexing && attached.length > 0 && <PdfChatReviewWorkspace
+        key={'review-workspace:' + generation.current.original + ':' + generation.current.revised}
+        entries={reviewEntries} files={files} index={index} onChange={setReviewEntries} onInspect={inspectNative} />}
       {preview && previewSlot?.kind === 'ready' && <section className="chat-panel" aria-label="Source page inspection">
         <div className="chat-toolbar"><h2>{names[preview.role]} · page {preview.page}</h2>
           <button type="button" className="chat-button" onClick={() => setPreview(null)}>Close source page</button></div>
         {preview.kind === 'ocr' && <p className="chat-note">Unverified OCR transcription. Compare this text
           with the rendered PDF page; it is not an indexed native-text fragment.</p>}
         {preview.source && <blockquote>{preview.source.text}</blockquote>}
+        {preview.kind === 'native' && preview.source && <div className="chat-toolbar">
+          <button type="button" className="chat-button"
+            disabled={reviewEntries.length >= MAX_REVIEW_ITEMS ||
+              reviewEntries.some(entry => passageId(entry.source) === passageId(preview.source!))}
+            onClick={() => setReviewEntries(old => pinEvidence(index, old, preview.source!))}>
+            {reviewEntries.some(entry => passageId(entry.source) === passageId(preview.source!))
+              ? 'Saved in evidence review' : 'Save source to evidence review'}
+          </button>
+          <span className="chat-muted">{reviewEntries.length}/{MAX_REVIEW_ITEMS} saved native fragments</span>
+        </div>}
         {preview.kind === 'native' && preview.source && <details className="chat-nearby"><summary>Nearby extracted passages (same PDF page)</summary>
           <p className="chat-muted">Extraction order may differ from visual reading order. These fragments are not additional answer claims.</p>
           {nearbyPassages(index, preview.source).map(passage => <p key={passage.ordinal}
