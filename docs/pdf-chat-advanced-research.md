@@ -652,3 +652,37 @@ protocol test passes a Python-encoded report with currency, accented and
 supplementary Unicode text through the TypeScript parser. These tests
 must pass in CI before claiming runtime interoperability; one fictional
 scan is not evidence of representative real-world OCR accuracy.
+
+## Constrained local AI extractive answer proposals
+
+The next model experiment accepts the same bounded complete-passage
+request as selection, with all baseline fragments preserved. The local
+model proposes exact unique substrings and candidate IDs, or abstains.
+The backend validates literal equality without normalization, rejects
+ambiguous repeated substrings, overlapping quotes and excess per-role
+spans, and computes UTF-16 offsets itself. The result contains only
+source IDs, offsets and request/model binding metadata, not model prose
+or source quotations. Run with an explicitly approved installed local
+model and exact digest:
+
+```bash
+python -m noticebridge.chat_extractive_cli noticebridge-extractive-request.json --output proposal.json --model MODEL:TAG --digest EXACT_64_HEX_DIGEST --allow-local-processing
+```
+
+The existing loopback-only transport checks the model inventory before
+and after generation, rejects malformed/truncated responses and enforces
+a total deadline. The browser independently validates bounded canonical
+JSON, request hash, exact source IDs and UTF-16 boundaries, using its
+existing extractive proposal validator. It also checks quote uniqueness,
+per-role caps and canonical nested fields. The interface displays the
+proposed substring highlighted inside the complete local fragment,
+flags omitted baseline fragments and roles, and links to manual page
+inspection. It never modifies the strict answer, reports or OCR review.
+
+A valid extractive proposal is not a verified factual answer: literal
+quotations can omit exceptions, negate context or select an irrelevant
+fact. A model can produce plausible but misleading quotes, and unsigned
+result files cannot attest model identity. No free-form generative
+explanation or real-model accuracy claim is enabled. Tests exercise
+UTF-16 interoperability, invalid quotations, abstention, source scope,
+mocked model calls, request binding and browser review behavior.

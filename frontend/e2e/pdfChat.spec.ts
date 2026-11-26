@@ -703,3 +703,42 @@ test('OCR review is fingerprint-bound, separate from native answers and source i
   await expect(page.getByText('1 extracted passages available.')).toBeVisible();
   await expect(page.getByRole('region', { name: 'OCR review matches' })).toHaveCount(0);
 });
+
+test('extractive model proposal highlights exact source substring without changing the baseline answer', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: Rs. 500 unless exempt.']);
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  const answer = await ask(page, 'Application fee?');
+  await page.getByText('Experimental local AI extractive answer (local file workflow)', { exact: true }).click();
+  const button = page.getByRole('button', { name: 'Export extractive proposal request' });
+  await expect(button).toBeDisabled();
+  await page.getByLabel('I approve exporting candidate text for local extractive proposals.').check();
+  const waiting = page.waitForEvent('download');
+  await button.click();
+  const data = await readFile((await (await waiting).path())!);
+  const request = JSON.parse(data.toString('utf8'));
+  const start = request.passages[0].text.indexOf('Rs. 500');
+  const result = {
+    format: 'noticebridge-chat-extractive-result', version: 1,
+    request_sha256: createHash('sha256').update(data).digest('hex'),
+    model: 'fixture:latest', model_digest: 'a'.repeat(64),
+    proposal: { status: 'extract', spans: [{ id: request.passages[0].id, start, end: start + 7 }] },
+    authority_verified: false,
+  };
+  const input = page.getByLabel('Import local extractive proposal');
+  await input.setInputFiles({ name: 'proposal.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(result, null, 2) + '\n') });
+  const review = page.getByRole('region', { name: 'Extractive proposal review' });
+  await expect(review.locator('mark')).toHaveText('Rs. 500');
+  await expect(review.locator('blockquote')).toHaveText('Application fee: Rs. 500 unless exempt.');
+  await expect(answer.locator('blockquote')).toHaveText('Application fee: Rs. 500 unless exempt.');
+  await review.getByRole('button', { name: 'Inspect extractive source page 1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  result.proposal.spans[0].end = 999;
+  await input.setInputFiles({ name: 'bad.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(result, null, 2) + '\n') });
+  await expect(page.getByText(/Extractive result rejected/)).toBeVisible();
+  await expect(review).toHaveCount(0);
+  await ask(page, 'Eligibility?');
+  await expect(review).toHaveCount(0);
+});

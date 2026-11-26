@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from noticebridge import chat_embedding_cli, chat_selection_cli
+from noticebridge import chat_embedding_cli, chat_extractive_cli, chat_selection_cli
 from noticebridge.chat_embeddings import EmbeddingError
 
 MODEL = "fixture:latest"
@@ -13,6 +13,7 @@ DIGEST = "a" * 64
 CASES = [
     (chat_embedding_cli, "retrieve_local", "noticebridge-chat-embedding-request"),
     (chat_selection_cli, "select_local", "noticebridge-chat-selection-request"),
+    (chat_extractive_cli, "extract_local", "noticebridge-chat-selection-request"),
 ]
 
 

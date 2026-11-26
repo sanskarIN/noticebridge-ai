@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { Answer, Passage, SearchIndex } from './pdfChatCore';
 import PdfChatSelectionPanel from './PdfChatSelectionPanel';
+import PdfChatExtractivePanel from './PdfChatExtractivePanel';
 import { MAX_RANK_FILE, prepareExperiment, requestHash, reviewRanking, type Experiment, type CandidateReview } from './pdfChatEmbeddingBridge';
 
 function download(text: string) {
@@ -94,6 +95,12 @@ export default function PdfChatEmbeddingPanel({ index, answer, onInspect }: {
   <details className="chat-session chat-embedding-panel">
     <summary>Experimental local AI selection (local file workflow)</summary>
     <PdfChatSelectionPanel key={review ? JSON.stringify(review.candidates.map(row => [row.passage.role, row.passage.page, row.passage.ordinal])) : 'baseline'}
+      index={index} answer={answer} candidates={review} onInspect={onInspect} />
+  </details>
+  <details className="chat-session chat-embedding-panel">
+    <summary>Experimental local AI extractive answer (local file workflow)</summary>
+    <PdfChatExtractivePanel key={review ? JSON.stringify(review.candidates.map(row =>
+      [row.passage.role, row.passage.page, row.passage.ordinal])) : 'baseline'}
       index={index} answer={answer} candidates={review} onInspect={onInspect} />
   </details>
   </>;
