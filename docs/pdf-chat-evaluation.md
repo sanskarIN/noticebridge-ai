@@ -178,3 +178,26 @@ negative abstention, separately from changes in aggregate rates. Undefined
 denominators remain null. These are descriptive paired results, not
 statistical significance or proof of factual correctness. The output
 pins both report byte hashes and never overwrites an existing file.
+
+## Private evidence review packets
+
+The optional review packet is different from the quote-free notebook:
+it explicitly includes the selected native excerpts and personal notes,
+their text hashes, PDF fingerprints and extraction coverage. Export
+requires separate consent. The printable HTML is a static reading copy
+with escaped text and a restrictive content security policy. The
+canonical JSON can be checked against the attached PDFs without
+restoring or altering the editable review workspace.
+
+For independent offline consistency checking, export the exact native
+corpus snapshot as well and run:
+
+```bash
+npm run verify:packet -- --packet packet.json --snapshot snapshot.json --html reading-copy.html
+```
+
+The verifier reconstructs every identity, quote, hash, coverage status
+and annotation count from the local extraction. A matching packet does
+not authenticate the source document or certify personal notes. Keep
+both the excerpt packet and the complete corpus private. The verifier
+never overwrites an existing reading copy or prints source text.

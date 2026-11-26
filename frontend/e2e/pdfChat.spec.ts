@@ -1365,3 +1365,34 @@ test('literal comparison requires two explicitly selected fragments and keeps ex
   await expect(page.getByRole('region', { name: 'Source page inspection' }).locator('blockquote')).toHaveText('Application fee: INR 350');
   await expect(page.locator('.chat-turn')).toHaveCount(0);
 });
+
+test('private review packet explicitly exports excerpts and verifies without modifying review notes', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  const answer = await ask(page, 'Application fee?');
+  await answer.getByRole('button', { name: 'Inspect source [1]', exact: true }).click();
+  await page.getByRole('button', { name: 'Save source to evidence review' }).click();
+  await page.getByText('Export or verify private evidence review packet', { exact: true }).click();
+  const prepare = page.getByRole('button', { name: 'Prepare private evidence packet' });
+  await expect(prepare).toBeDisabled();
+  await page.getByLabel('I approve exporting selected private source excerpts and personal notes.').check();
+  await prepare.click();
+  const waiting = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download verifiable evidence packet' }).click();
+  const data = await readFile((await (await waiting).path())!);
+  expect(JSON.parse(data.toString()).entries[0].native_text).toBe('Application fee: INR 500');
+  await page.getByLabel('Verify evidence packet against attached PDFs').setInputFiles({
+    name: 'packet.json', mimeType: 'application/json', buffer: data,
+  });
+  const result = page.getByRole('region', { name: 'Evidence packet consistency result' });
+  await expect(result).toBeVisible();
+  await expect(page.getByText('Evidence review workspace (1)', { exact: true })).toBeVisible();
+  const bad = Buffer.from(data.toString().replace('INR 500', 'INR 900'));
+  await page.getByLabel('Verify evidence packet against attached PDFs').setInputFiles({
+    name: 'bad.json', mimeType: 'application/json', buffer: bad,
+  });
+  await expect(page.getByText(/Packet rejected/)).toBeVisible();
+  await expect(result).toHaveCount(0);
+  await expect(answer.locator('blockquote')).toHaveText('Application fee: INR 500');
+});
