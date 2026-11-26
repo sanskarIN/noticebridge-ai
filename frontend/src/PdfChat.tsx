@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent,
 import { buildIndex, MAX_QUESTION, pageCoverage, type Answer, type Corpus, type Passage, type Role } from './pdfChatCore';
 import { comparePrintedValues, groupPrintedValues, nearbyPassages, parseSearchQuestion, type ChatScope } from './pdfChatInsights';
 import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
+import PdfChatCorpusExport from './PdfChatCorpusExport';
 import PdfChatSessionPanel from './PdfChatSessionPanel';
 import PdfChatEvidenceReport from './PdfChatEvidenceReport';
 import PdfChatOcrReview from './PdfChatOcrReview';
@@ -274,6 +275,9 @@ export default function PdfChat() {
           key={'page-navigator:' + generation.current.original + ':' + generation.current.revised}
           corpora={corpora} onInspect={inspectPage} />}
       </section>
+      {!indexing && attached.length > 0 && <PdfChatCorpusExport
+        key={'corpus-export:' + generation.current.original + ':' + generation.current.revised}
+        files={files} corpora={corpora} />}
       {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={inspectNative}
         onAsk={value => { setQuestion(value); setReuse(false); setScope('auto'); inputRef.current?.focus(); }} />}
       {!indexing && <PdfChatTableExplorer key={'tables:' + generation.current.original + ':' + generation.current.revised}
