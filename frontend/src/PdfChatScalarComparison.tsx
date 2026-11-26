@@ -13,10 +13,10 @@ const reasons: Record<ScalarFailure, string> = {
   different_currency: 'Currency labels differ or are not equivalent. No currency conversion is assumed.',
 };
 
-export default function PdfChatScalarComparison({ result, onInspect }: {
-  result: DirectAnswer; onInspect: (source: Passage) => void;
+export default function PdfChatScalarComparison({ result, onInspect, initiallyOpen = false }: {
+  result: DirectAnswer; onInspect: (source: Passage) => void; initiallyOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   if (result.sides.length !== 2 || !scalarFieldKind(result.field.id)) return null;
   const comparison = comparePrintedScalars(result);
   return <section className="chat-context-results" aria-label="Printed scalar comparison">

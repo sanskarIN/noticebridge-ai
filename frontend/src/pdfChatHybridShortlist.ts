@@ -3,7 +3,7 @@
  */
 import { knownQuestionField, queryTerms, rankedMatches, type Answer, type IndexedPassage,
   type Passage, type Role, type SearchIndex } from './pdfChatCore';
-import { parsePageFilter, stripScopePhrases } from './pdfChatInsights';
+import { parseSearchQuestion } from './pdfChatInsights';
 import { allowedPassages, passageId } from './pdfChatResearch';
 
 export const MAX_SHORTLIST = 512;
@@ -53,7 +53,7 @@ function partialScore(index: SearchIndex, row: IndexedPassage, words: string[]) 
 export function buildHybridShortlist(index: SearchIndex, answer: Answer, budget = MAX_SHORTLIST): Shortlist {
   if (!Number.isSafeInteger(budget) || budget < MIN_SHORTLIST || budget > MAX_SHORTLIST) invalid();
   const roles = answer.scope === 'both' ? ROLES : [answer.scope];
-  const { content, page } = parsePageFilter(stripScopePhrases(answer.question));
+  const { content, page } = parseSearchQuestion(answer.question);
   if (page !== answer.pageFilter) invalid();
   const allowed = allowedPassages(index.rows.map(row => row.passage), roles, page);
   if (!allowed.size) invalid();

@@ -1,6 +1,6 @@
 /** Deterministic, scope-bound field answers; never a claim of verified authority. */
 import { knownQuestionField, queryTerms, sameTextFlow, type Answer, type Passage, type Role, type SearchIndex } from './pdfChatCore';
-import { parsePageFilter, stripScopePhrases } from './pdfChatInsights';
+import { parseSearchQuestion } from './pdfChatInsights';
 import { fieldDefinitions, type FieldDefinition, type ExtractedField } from './pdfChatOverview';
 
 export const MAX_DIRECT_VALUES = 4;
@@ -32,7 +32,7 @@ export type DirectAnswer = {
  * qualifiers just to make a convenient field answer.
  */
 export function directFieldAnswer(index: SearchIndex, answer: Answer): DirectAnswer | null {
-  const { content, page } = parsePageFilter(stripScopePhrases(answer.question));
+  const { content, page } = parseSearchQuestion(answer.question);
   if (page !== answer.pageFilter) return null;
   const words = queryTerms(content);
   const id = knownQuestionField(words);

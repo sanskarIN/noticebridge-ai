@@ -1,7 +1,7 @@
 /** Native evidence navigation. Search hits are not verified answers. */
 import { MAX_PASSAGES, MAX_QUESTION, knownQuestionField, queryTerms, rankedMatches,
   type Answer, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
-import { parsePageFilter, stripScopePhrases } from './pdfChatInsights';
+import { parseSearchQuestion } from './pdfChatInsights';
 
 export const EXPLORER_PAGE_SIZE = 12;
 export const MAX_LITERAL_CHARS = 160;
@@ -132,7 +132,7 @@ export function searchReference(index: SearchIndex, options: SearchOptions, ref:
 /** Reproduce all strict ranked matches per source. Contextual windows
  * are deliberately not promoted to strict matches. */
 export function searchAllQuestionMatches(index: SearchIndex, answer: Answer): ExplorerResult {
-  const { content, page } = parsePageFilter(stripScopePhrases(answer.question));
+  const { content, page } = parseSearchQuestion(answer.question);
   if (page !== answer.pageFilter) throw new Error('Question scope mismatch.');
   validateOptions({ scope: answer.scope, page });
   const terms = queryTerms(content);

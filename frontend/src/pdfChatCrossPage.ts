@@ -1,7 +1,7 @@
 /** Cross-page inspection leads. Never add these to the strict answer,
  * printed fields, model candidate protocol or saved question plan. */
 import { queryTerms, type Answer, type Passage, type Role, type SearchIndex } from './pdfChatCore';
-import { stripScopePhrases } from './pdfChatInsights';
+import { parseSearchQuestion } from './pdfChatInsights';
 
 export const MAX_CROSS_PAGE_CANDIDATES = 128;
 const MAX_QUERY_TERMS = 16;
@@ -33,7 +33,7 @@ function eligibleTerms(answer: Answer): string[] {
   // Never widen an explicit physical page request. A scoped search that
   // found no result cannot authorize looking outside the requested page.
   if (answer.pageFilter !== undefined) return [];
-  const words = queryTerms(stripScopePhrases(answer.question));
+  const words = queryTerms(parseSearchQuestion(answer.question).content);
   return words.length >= 2 && words.length <= MAX_QUERY_TERMS ? words : [];
 }
 

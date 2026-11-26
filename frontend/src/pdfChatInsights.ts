@@ -1,5 +1,6 @@
 import { answerQuestion, resolveQuestion, MAX_QUESTION, type Answer, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
 import { extractKnownField } from './pdfChatOverview';
+import { scalarComparisonIntent, type ScalarIntent } from './pdfChatScalarIntent';
 
 export const MAX_SUBQUESTIONS = 4;
 
@@ -138,14 +139,23 @@ export function parsePageFilter(question: string): { content: string; page?: num
   return { content, page };
 }
 
+/** Keep original wording for display/replay. Only a fully recognized
+ * comparison becomes a known-field retrieval query. */
+export function parseSearchQuestion(question: string): { content: string; page?: number; comparison?: ScalarIntent } {
+  const raw = parsePageFilter(question);
+  const comparison = scalarComparisonIntent(raw.content);
+  if (comparison) return { content: comparison.field.query, page: raw.page, comparison };
+  return parsePageFilter(stripScopePhrases(question));
+}
+
 export function answerScopedQuestions(
   index: SearchIndex, question: string, selection: ChatScope, attached: Role[], includeContext = false,
 ): Answer[] {
   return planQuestions(question).map(part => {
-    const scope = effectiveScope(part, selection, attached);
+    const { content, page, comparison } = parseSearchQuestion(part);
+    const scope = selection === 'auto' && comparison ? 'both' : effectiveScope(part, selection, attached);
     // The existing ranker already abstains for an unavailable role. Do
     // not replace a requested but absent source with the other document.
-    const { content, page } = parsePageFilter(stripScopePhrases(part));
     // Keep original corpus term statistics; restrict candidates, not ranking
     // normalization. Physical page references are not printed page labels.
     const selected = page === undefined ? index : {

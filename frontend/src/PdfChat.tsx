@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { buildIndex, MAX_QUESTION, pageCoverage, type Answer, type Corpus, type Passage, type Role } from './pdfChatCore';
-import { comparePrintedValues, groupPrintedValues, nearbyPassages, type ChatScope } from './pdfChatInsights';
+import { comparePrintedValues, groupPrintedValues, nearbyPassages, parseSearchQuestion, type ChatScope } from './pdfChatInsights';
 import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
 import PdfChatSessionPanel from './PdfChatSessionPanel';
 import PdfChatEvidenceReport from './PdfChatEvidenceReport';
@@ -292,6 +292,11 @@ export default function PdfChat() {
               </p>
               {answer.missingRoles.some(role => !attached.includes(role)) && <p className="chat-note">
                 Requested source not attached: {answer.missingRoles.filter(role => !attached.includes(role)).map(role => names[role]).join(', ')}.
+              </p>}
+              {parseSearchQuestion(answer.question).comparison && <p className="chat-note">
+                Recognized printed-value comparison: {parseSearchQuestion(answer.question).comparison!.field.label}.
+                {answer.scope !== 'both' ? ' Select both PDFs or Auto to compare the two sources.' :
+                  ' Calculations use only supported literal values; no conclusion about authority or applicability is inferred.'}
               </p>}
               <SearchCoverage answer={answer} slots={slots} />
               <PdfChatDirectAnswer index={index} answer={answer} onInspect={inspectNative} />
