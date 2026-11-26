@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { Answer, Passage, SearchIndex } from './pdfChatCore';
 import PdfChatSelectionPanel from './PdfChatSelectionPanel';
 import PdfChatExtractivePanel from './PdfChatExtractivePanel';
+import PdfChatPipeline from './PdfChatPipeline';
 import { MAX_RANK_FILE, prepareExperiment, requestHash, reviewRanking, type Experiment, type CandidateReview } from './pdfChatEmbeddingBridge';
 
 function download(text: string) {
@@ -129,5 +130,6 @@ export default function PdfChatEmbeddingPanel({ index, answer, onInspect }: {
       [row.passage.role, row.passage.page, row.passage.ordinal])) : 'baseline'}
       index={index} answer={answer} candidates={review} onInspect={onInspect} />
   </details>
+  <PdfChatPipeline index={index} answer={answer} onInspect={onInspect} />
   </>;
 }
