@@ -86,6 +86,7 @@ export default function PdfChat() {
   const [includeContext, setIncludeContext] = useState(true);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<Passage | null>(null);
+  const [previewIsOcr, setPreviewIsOcr] = useState(false);
   const controllers = useRef<Partial<Record<Role, AbortController>>>({});
   const generation = useRef({ original: 0, revised: 0 });
   const demoGeneration = useRef(0);
@@ -194,6 +195,8 @@ export default function PdfChat() {
     }
   }
   useEffect(() => { if (turns.length) latestRef.current?.scrollIntoView({ block: 'nearest' }); }, [turns.length]);
+  function inspectNative(source: Passage) { setPreviewIsOcr(false); setPreview(source); }
+  function inspectOcr(source: Passage) { setPreviewIsOcr(true); setPreview(source); }
   const previewSlot = preview ? slots[preview.role] : null;
   return <div className="app-shell pdf-chat">
     <header className="topbar">
@@ -238,10 +241,10 @@ export default function PdfChat() {
         </div>
         <p className="chat-muted">Maximum 10 MiB and 80 pages per PDF; native embedded text only. No OCR or external AI service is used here.</p>
       </section>
-      {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={setPreview}
+      {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={inspectNative}
         onAsk={value => { setQuestion(value); setReuse(false); setScope('auto'); inputRef.current?.focus(); }} />}
       {!indexing && <PdfChatTableExplorer key={generation.current.original + ':' + generation.current.revised}
-        indexes={tableIndexes} onInspect={setPreview} onAsk={(value, role) => {
+        indexes={tableIndexes} onInspect={inspectNative} onAsk={(value, role) => {
           setQuestion(value); setReuse(false); setScope(role); inputRef.current?.focus();
         }} />}
       <section className="chat-panel" aria-labelledby="chat-title">
@@ -250,7 +253,7 @@ export default function PdfChat() {
         </div>
         <div className="chat-history" role="log" aria-label="Document chat history" aria-live="polite">
           {!turns.length && <p className="chat-muted">Your questions and matching document passages will appear here.</p>}
-          {turns.map(({ input, resolved, answers }, i) => <article className="chat-turn" key={i}>
+          {turns.map(({ input, resolved, answers }, i) => <article className="chat-turn" key={conversationEpoch + ':' + i}>
             <p className="chat-user"><strong>You</strong> {input}</p>
             {resolved !== input && <p className="chat-muted">Search context: {resolved}</p>}
             {answers.map((answer, part) => <div className="chat-answer" key={part}>
@@ -263,8 +266,8 @@ export default function PdfChat() {
                 Requested source not attached: {answer.missingRoles.filter(role => !attached.includes(role)).map(role => names[role]).join(', ')}.
               </p>}
               <SearchCoverage answer={answer} slots={slots} />
-              <PdfChatDirectAnswer index={index} answer={answer} onInspect={setPreview} />
-              <PdfChatTableAnswer indexes={tableIndexes} answer={answer} onInspect={setPreview} />
+              <PdfChatDirectAnswer index={index} answer={answer} onInspect={inspectNative} />
+              <PdfChatTableAnswer indexes={tableIndexes} answer={answer} onInspect={inspectNative} />
               {answer.kind === 'insufficient' && <p>No sufficiently matching passage was found. This does not establish that the answer is absent. Try more specific wording or inspect the PDF.</p>}
               {answer.missingRoles.length > 0 && answer.kind === 'passages' && <p className="chat-note">
                 No sufficiently matching passage in {answer.missingRoles.map(role => names[role]).join(', ')}.
@@ -292,19 +295,19 @@ export default function PdfChat() {
                 <p className="chat-muted">[{j + 1}] {names[citation.role]} · PDF page {citation.page}</p>
                 {answer.contextGroups.some(group => group.citations.includes(j + 1)) && <p className="chat-muted">Context fragment, not a standalone answer</p>}
                 <blockquote>{citation.text}</blockquote>
-                <button type="button" className="chat-button" onClick={() => setPreview(citation)}>
+                <button type="button" className="chat-button" onClick={() => inspectNative(citation)}>
                   Inspect source [{j + 1}]
                 </button>
               </div>)}
               {answer.citations.length > 0 && <p className="chat-muted">Quoted extracted text only. Review nearby context, images and the official publication before acting.</p>}
-              <PdfChatCrossPage index={index} answer={answer} onInspect={setPreview} />
+              <PdfChatCrossPage index={index} answer={answer} onInspect={inspectNative} />
             </div>)}
           </article>)}
           <div ref={latestRef} />
         </div>
         {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel
           key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
-          index={index} answer={turns.at(-1)!.answers[0]} onInspect={setPreview} />}
+          index={index} answer={turns.at(-1)!.answers[0]} onInspect={inspectNative} />}
         {!indexing && attached.length > 0 && <PdfChatSessionPanel
           key={generation.current.original + ':' + generation.current.revised}
           files={files} index={index} turns={turns} onRestore={restored => {
@@ -317,7 +320,7 @@ export default function PdfChat() {
           key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch}
           files={files} corpora={corpora}
           answer={turns.at(-1)?.answers.length === 1 ? turns.at(-1)!.answers[0] : null}
-          onInspect={setPreview} />}
+          onInspect={inspectOcr} />}
         <form className="chat-form" onSubmit={ask}>
           <label>Search scope
             <select value={scope} onChange={event => setScope(event.target.value as ChatScope)}>
@@ -354,12 +357,14 @@ export default function PdfChat() {
       {preview && previewSlot?.kind === 'ready' && <section className="chat-panel" aria-label="Source page inspection">
         <div className="chat-toolbar"><h2>{names[preview.role]} · page {preview.page}</h2>
           <button type="button" className="chat-button" onClick={() => setPreview(null)}>Close source page</button></div>
+        {previewIsOcr && <p className="chat-note">Unverified OCR transcription. Compare this text
+          with the rendered PDF page; it is not an indexed native-text fragment.</p>}
         <blockquote>{preview.text}</blockquote>
-        <details className="chat-nearby"><summary>Nearby extracted passages (same PDF page)</summary>
+        {!previewIsOcr && <details className="chat-nearby"><summary>Nearby extracted passages (same PDF page)</summary>
           <p className="chat-muted">Extraction order may differ from visual reading order. These fragments are not additional answer claims.</p>
           {nearbyPassages(index, preview).map(passage => <p key={passage.ordinal}
             className={passage.ordinal === preview.ordinal ? 'chat-selected-fragment' : undefined}>{passage.text}</p>)}
-        </details>
+        </details>}
         <p className="chat-note">This page is shown for manual inspection. The chat index does not establish verified highlight geometry.</p>
         <Suspense fallback={<p role="status">Preparing local PDF viewer…</p>}>
           <PdfEvidencePreview file={previewSlot.file} pageNumber={preview.page} inspectionOnly />

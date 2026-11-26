@@ -633,3 +633,12 @@ the contents were produced by OCR or that transcription is correct.
 The implementation tests simulated OCR extraction and protocol validation;
 installed Tesseract inference and representative scanned-document accuracy
 require separate verification before this experimental feature is promoted.
+
+OCR page inspection explicitly identifies machine transcription and
+suppresses native ordinal-based nearby-fragment highlighting: OCR and
+native extraction ordinals do not share a namespace. Conversation
+replacement also remounts per-turn exploratory panels so previously
+selected cross-page leads cannot survive into a different replay.
+A browser regression uses a simulated OCR report, checks the fingerprint,
+verifies the native answer still abstains, opens the correct PDF page,
+rejects a changed fingerprint, and discards data when replacing a source.

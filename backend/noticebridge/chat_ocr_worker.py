@@ -7,8 +7,8 @@ import sys
 
 from .chat_ocr_protocol import (
     FORMAT,
-    MAX_LINES,
     MAX_LINE_CHARS,
+    MAX_LINES,
     MAX_TEXT_CHARS,
     OcrReviewError,
     encode_report,

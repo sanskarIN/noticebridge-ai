@@ -665,3 +665,41 @@ test('private chat evidence export requires consent and verifies without importi
   await expect(page.locator('.chat-turn')).toHaveCount(1);
   await expect(page.locator('.chat-turn').last().locator('blockquote')).toHaveText('Application fee: Rs. 500');
 });
+
+test('OCR review is fingerprint-bound, separate from native answers and source inspection context', async ({ page }) => {
+  const source = pdf(['Fictional image-only content marker']);
+  const ocr = {
+    format: 'noticebridge-chat-ocr-review', version: 1,
+    source_sha256: createHash('sha256').update(source).digest('hex'),
+    role: 'original', page_count: 1,
+    pages: [{ page: 1, status: 'ok', lines: [{ ordinal: 1, text: 'Application fee: Rs. 500' }] }],
+  };
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'fictional.pdf', mimeType: 'application/pdf', buffer: source,
+  });
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  const answer = await ask(page, 'Application fee?');
+  await expect(answer.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
+  await page.getByText('Experimental scanned PDF review (local OCR)', { exact: true }).click();
+  const importFile = page.getByLabel('Import local OCR review report');
+  await importFile.setInputFiles({
+    name: 'ocr.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(ocr, null, 2) + '\n'),
+  });
+  const region = page.getByRole('region', { name: 'OCR review matches' });
+  await expect(region.getByText('“Application fee: Rs. 500”')).toBeVisible();
+  await expect(answer.locator('blockquote')).toHaveCount(0);
+  await region.getByRole('button', { name: 'Inspect original OCR page 1' }).click();
+  const inspection = page.getByRole('region', { name: 'Source page inspection' });
+  await expect(inspection.getByText(/Unverified OCR transcription/)).toBeVisible();
+  await expect(inspection.getByText('Nearby extracted passages (same PDF page)')).toHaveCount(0);
+  await importFile.setInputFiles({
+    name: 'bad.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ ...ocr, source_sha256: '0'.repeat(64) }, null, 2) + '\n'),
+  });
+  await expect(page.getByText(/OCR report is invalid or belongs/)).toBeVisible();
+  await expect(region.getByText('“Application fee: Rs. 500”')).toBeVisible();
+  await attach(page, 'Original / first PDF', ['Different PDF']);
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'OCR review matches' })).toHaveCount(0);
+});

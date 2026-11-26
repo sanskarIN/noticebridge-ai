@@ -14,9 +14,10 @@ from .chat_ocr_protocol import (
     OcrReviewError,
     encode_report,
     validate_report,
+    validate_selection,
 )
 from .compare_cli import CliError, _destination, _input_pdf, _publish_report
-from .extract import InvalidDocument, parse_ocr_selection
+from .extract import MAX_UPLOAD_BYTES, InvalidDocument, parse_ocr_selection
 from .isolation import (
     OCR_TIMEOUT_SECONDS,
     ProcessingFailed,
@@ -28,6 +29,9 @@ from .isolation import (
 
 
 def run_ocr_review(source: bytes, role: str, pages: list[int]) -> dict:
+    pages = validate_selection(pages)
+    if not source or len(source) > MAX_UPLOAD_BYTES or role not in ("original", "revised"):
+        raise OcrReviewError("Invalid OCR source")
     payload = json.dumps({
         "source": base64.b64encode(source).decode("ascii"), "role": role, "pages": pages,
     }).encode("ascii")
