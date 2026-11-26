@@ -757,3 +757,7 @@ never infers completeness from fragment counts, and remains local.
 Manual page changes clear any selected quote and native-neighbor context;
 the previous answer is left unchanged. Regression tests cover blank
 pages, page bounds, role isolation, coverage and independent filters.
+
+The page inventory is bounded to the first 80 physical pages per PDF,
+including for much longer documents. A separate validated direct page
+jump permits manual inspection beyond this list and the indexing limit.

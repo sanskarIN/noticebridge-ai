@@ -259,7 +259,7 @@ export default function PdfChat() {
             </div>;
           })}
         </div>
-        <p className="chat-muted">Maximum 10 MiB and 80 pages per PDF. The primary index uses native embedded text.
+        <p className="chat-muted">Maximum 10 MiB per PDF; the first 80 physical pages can be indexed. The primary index uses native embedded text.
           Optional OCR review uses a separate local file workflow.</p>
         {!indexing && attached.length > 0 && <PdfChatPageNavigator
           key={generation.current.original + ':' + generation.current.revised}
