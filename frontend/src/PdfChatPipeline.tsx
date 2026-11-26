@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { Answer, Passage, SearchIndex } from './pdfChatCore';
+import { isLocalChatOrigin } from './pdfChatLocalTransport';
+import { requestLocalPipeline, validLocalPipelineConfig, type LocalPipelineConfig } from './pdfChatLocalPipeline';
 import { requestHash } from './pdfChatEmbeddingBridge';
 import { MAX_PIPELINE_RESULT_BYTES, preparePipeline, reviewPipeline,
   type PipelineRequest, type PipelineReview } from './pdfChatPipeline';
@@ -13,9 +15,44 @@ export default function PdfChatPipeline({ index, answer, onInspect }: {
   const [review, setReview] = useState<PipelineReview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [localConsent, setLocalConsent] = useState(false);
+  const [config, setConfig] = useState<LocalPipelineConfig>({
+    embeddingModel: '', embeddingDigest: '', answerModel: '', answerDigest: '',
+  });
+  const [localSummary, setLocalSummary] = useState<string | null>(null);
+  const [localRunning, setLocalRunning] = useState(false);
+  const controller = useRef<AbortController | null>(null);
   const epoch = useRef(0);
-  useEffect(() => () => { epoch.current++; }, []);
-  function reset() { epoch.current++; setPending(null); setReview(null); setError(''); }
+  const loopback = isLocalChatOrigin(globalThis.location?.origin ?? '');
+  useEffect(() => () => { epoch.current++; controller.current?.abort(); }, []);
+  function reset() {
+    epoch.current++; setPending(null); setReview(null); setError(''); setLocalSummary(null);
+  }
+  async function runLocal() {
+    if (!loopback || !localConsent || busy || !validLocalPipelineConfig(config)) return;
+    reset();
+    const token = epoch.current;
+    const abort = new AbortController();
+    controller.current = abort;
+    setBusy(true); setLocalRunning(true);
+    try {
+      const request = preparePipeline(index, answer, mode);
+      const summary = request.embedding.allowed.size + ' scoped fragments sent to the local backend.' +
+        (request.embedding.shortlistCoverage?.map(side => ' ' + side.role + ': ' +
+          (side.eligible - side.selected) + ' excluded.').join('') ?? '');
+      const result = await requestLocalPipeline(request, config, abort.signal, localConsent);
+      if (token === epoch.current) { setReview(result); setLocalSummary(summary); }
+    } catch {
+      if (token === epoch.current) setError('Local AI request rejected or unavailable. Check the opt-in backend, model tags and digests.');
+    } finally {
+      if (token === epoch.current) { setBusy(false); setLocalRunning(false); controller.current = null; }
+    }
+  }
+  function cancelLocal() {
+    epoch.current++; controller.current?.abort(); controller.current = null;
+    setBusy(false); setLocalRunning(false); setReview(null); setLocalSummary(null);
+    setError('Local result discarded. The backend may still be finishing its bounded request.');
+  }
   async function prepare() {
     if (!consent || busy) return;
     reset();
@@ -54,8 +91,8 @@ export default function PdfChatPipeline({ index, answer, onInspect }: {
   }
   return <details className="chat-session chat-embedding-panel">
     <summary>Experimental combined local AI workflow</summary>
-    <p className="chat-note">One private file exchange runs semantic ranking followed by
-      exact extractive proposals. No browser connection to a model service is made.
+    <p className="chat-note">One private file exchange, or an explicitly approved loopback request,
+      runs semantic ranking followed by exact extractive proposals. No direct browser connection to a model service is made.
       Use only a trusted local-only installed runtime. This is not verified question answering.</p>
     <label className="chat-overview-filter">Combined workflow candidate mode
       <select value={mode} disabled={busy} onChange={event => {
@@ -79,6 +116,35 @@ export default function PdfChatPipeline({ index, answer, onInspect }: {
     {pending && <p className="chat-muted">{pending.request.embedding.allowed.size} indexed fragments exported.
       {pending.request.embedding.shortlistCoverage?.map(side => ' ' + side.role + ': ' +
         (side.eligible - side.selected) + ' excluded.').join('')}</p>}
+    {loopback && <section aria-label="Direct local AI workflow">
+      <h4>Direct local backend (optional)</h4>
+      <p className="chat-note">Requires NOTICEBRIDGE_ENABLE_LOCAL_CHAT_AI=1 on the trusted loopback backend.
+        Scoped private question and fragment text will be sent to that backend, which invokes the
+        installed local model runtime. The browser cannot attest how the runtime processes data.
+        Configuration is kept only in this mounted panel.</p>
+      {([
+        ['embeddingModel', 'Local embedding model tag', 96],
+        ['embeddingDigest', 'Local embedding model digest', 64],
+        ['answerModel', 'Local answer model tag', 96],
+        ['answerDigest', 'Local answer model digest', 64],
+      ] as const).map(([key, label, maximum]) => <label className="chat-overview-filter" key={key}>
+        {label}<input value={config[key]} maxLength={maximum} autoComplete="off" spellCheck={false}
+          disabled={busy} onChange={event => { reset(); setConfig(previous => ({
+            ...previous, [key]: event.target.value,
+          })); }} />
+      </label>)}
+      <label className="chat-embedding-consent"><input type="checkbox" checked={localConsent}
+        disabled={busy} onChange={event => { reset(); setLocalConsent(event.target.checked); }} />
+        I approve sending scoped private text to the loopback AI backend.</label>
+      <div className="chat-toolbar">
+        <button type="button" className="chat-button"
+          disabled={busy || !localConsent || !validLocalPipelineConfig(config)}
+          onClick={() => void runLocal()}>Run direct local AI workflow</button>
+        {localRunning && <button type="button" className="chat-button"
+          onClick={cancelLocal}>Discard local AI request</button>}
+      </div>
+      {localSummary && <p className="chat-muted">{localSummary}</p>}
+    </section>}
     {busy && <p role="status">Checking combined workflow…</p>}
     {error && <p className="chat-error" role="alert">{error}</p>}
     {review && <section aria-label="Combined workflow review">

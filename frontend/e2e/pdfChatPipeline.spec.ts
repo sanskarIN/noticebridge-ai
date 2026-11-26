@@ -111,3 +111,55 @@ test('Python pipeline emits an independently verifiable Unicode result', async (
   expect(bytes).not.toContain('INR 500');
   expect(result.selectionCount).toBe(3);
 });
+
+test('direct pipeline uses exact multipart binding and selected metadata', async () => {
+  const { requestLocalPipeline } = await import('../src/pdfChatLocalPipeline');
+  const config = { embeddingModel: 'embedding:latest', embeddingDigest: 'a'.repeat(64),
+    answerModel: 'answer:latest', answerDigest: 'b'.repeat(64) };
+  const controller = new AbortController();
+  const result = await requestLocalPipeline(request, config, controller.signal, true,
+    async (service, body, signal) => {
+      expect(service).toBe('pipeline');
+      expect(signal).toBe(controller.signal);
+      expect(await (body.get('request_file') as Blob).text()).toBe(request.text);
+      expect(body.get('embedding_model')).toBe(config.embeddingModel);
+      expect(body.get('embedding_digest')).toBe(config.embeddingDigest);
+      expect(body.get('answer_model')).toBe(config.answerModel);
+      expect(body.get('answer_digest')).toBe(config.answerDigest);
+      expect(body.get('consent')).toBe('true');
+      return encode(raw);
+    });
+  expect(result.extractive.proposal.spans[0].text).toBe('INR 500');
+});
+test('direct pipeline refuses missing consent, malformed model metadata and aborted request before transport', async () => {
+  const { requestLocalPipeline } = await import('../src/pdfChatLocalPipeline');
+  const config = { embeddingModel: 'embedding:latest', embeddingDigest: 'a'.repeat(64),
+    answerModel: 'answer:latest', answerDigest: 'b'.repeat(64) };
+  const never = async () => { throw new Error('unexpected transport'); };
+  const signal = new AbortController().signal;
+  await expect(requestLocalPipeline(request, config, signal, false, never)).rejects.toThrow('Invalid');
+  for (const change of [{ answerModel: 'remote:cloud' }, { embeddingModel: 'https://host/model:tag' },
+    { answerDigest: 'invalid' }, { embeddingDigest: 'A'.repeat(64) }]) {
+    await expect(requestLocalPipeline(request, { ...config, ...change }, signal, true, never)).rejects.toThrow('Invalid');
+  }
+  const controller = new AbortController();
+  controller.abort();
+  await expect(requestLocalPipeline(request, config, controller.signal, true, never)).rejects.toThrow('abort');
+});
+test('direct pipeline rejects a valid but differently configured result', async () => {
+  const { requestLocalPipeline } = await import('../src/pdfChatLocalPipeline');
+  const config = { embeddingModel: 'embedding:latest', embeddingDigest: 'a'.repeat(64),
+    answerModel: 'answer:latest', answerDigest: 'b'.repeat(64) };
+  for (const output of [{ ...raw, ranking: { ...raw.ranking, model_digest: 'c'.repeat(64) } },
+    { ...raw, extractive: { ...raw.extractive, model: 'different:latest' } }]) {
+    await expect(requestLocalPipeline(request, config, new AbortController().signal, true,
+      async () => encode(output))).rejects.toThrow('selected model metadata');
+  }
+});
+test('direct pipeline discards response after cancellation', async () => {
+  const { requestLocalPipeline } = await import('../src/pdfChatLocalPipeline');
+  const controller = new AbortController();
+  await expect(requestLocalPipeline(request, { embeddingModel: 'embedding:latest',
+    embeddingDigest: 'a'.repeat(64), answerModel: 'answer:latest', answerDigest: 'b'.repeat(64) },
+  controller.signal, true, async () => { controller.abort(); return encode(raw); })).rejects.toThrow('abort');
+});

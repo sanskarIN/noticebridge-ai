@@ -5,6 +5,7 @@ const ORIGINS = new Set([
 ]);
 export function isLocalChatOrigin(origin: string): boolean { return ORIGINS.has(origin); }
 const ENDPOINTS = {
+  pipeline: { path: '/api/chat/pipeline', header: 'X-NoticeBridge-Local-AI', maxBytes: 100 * 1024 },
   ocr: { path: '/api/chat/ocr', header: 'X-NoticeBridge-Local-OCR', maxBytes: 2 * 1024 * 1024 },
 } as const;
 export type LocalChatService = keyof typeof ENDPOINTS;
