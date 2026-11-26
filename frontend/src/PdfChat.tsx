@@ -13,6 +13,7 @@ import PdfChatEvidenceReport from './PdfChatEvidenceReport';
 import PdfChatOcrReview from './PdfChatOcrReview';
 import PdfChatPageNavigator from './PdfChatPageNavigator';
 import PdfChatReferenceReview from './PdfChatReferenceReview';
+import PdfChatReviewPacket from './PdfChatReviewPacket';
 import PdfChatReviewWorkspace from './PdfChatReviewWorkspace';
 import PdfChatRequirements, { PdfChatRequirementAnswer } from './PdfChatRequirements';
 import { buildRequirementIndex } from './pdfChatRequirements';
@@ -430,6 +431,9 @@ export default function PdfChat() {
       {!indexing && attached.length > 0 && <PdfChatReviewWorkspace
         key={'review-workspace:' + generation.current.original + ':' + generation.current.revised}
         entries={reviewEntries} files={files} index={index} onChange={setReviewEntries} onInspect={inspectNative} />}
+      {!indexing && attached.length > 0 && <PdfChatReviewPacket
+        key={'review-packet:' + generation.current.original + ':' + generation.current.revised}
+        index={index} files={files} corpora={corpora} entries={reviewEntries} />}
       {preview && previewSlot?.kind === 'ready' && <section className="chat-panel" aria-label="Source page inspection">
         <div className="chat-toolbar"><h2>{names[preview.role]} · page {preview.page}</h2>
           <button type="button" className="chat-button" onClick={() => setPreview(null)}>Close source page</button></div>
