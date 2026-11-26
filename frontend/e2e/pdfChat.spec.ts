@@ -514,6 +514,16 @@ function categoryTablePdf(missing = false, changed = false): Buffer {
   return pdfStream(stream);
 }
 
+test('independently positioned category-table cells retain separate indexed fragments', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'separated-cells.pdf', mimeType: 'application/pdf', buffer: categoryTablePdf(),
+  });
+  // A PDF.js synthetic space must not conceal the wide inter-cell gap.
+  await expect(page.getByText('9 extracted passages available.')).toBeVisible();
+  await expect(page.getByText('1 aligned category table candidates.')).toBeVisible();
+});
+
 test('aligned PDF table supports category-specific questions and source inspection', async ({ page }) => {
   await page.goto('/?view=chat');
   await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({

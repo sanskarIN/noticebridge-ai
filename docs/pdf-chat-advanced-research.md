@@ -506,3 +506,16 @@ Neither lexical overlap nor geometric proximity proves a qualification,
 contradiction, or semantic relationship. These are review candidates,
 not inferred exceptions. The printed values remain unchanged, with
 independent source links and extraction-coverage warnings.
+
+### Native text whitespace boundary
+
+PDF.js may represent the horizontal distance between separately
+positioned text items as a whitespace-only item with a large width.
+Extraction must not replace the last nonblank geometry with that item.
+Wide or displaced whitespace now terminates a fragment; ordinary spaces
+remain separators and do not become layout anchors. This addresses a
+suspected cause of the generated-PDF category-table browser failures.
+The new regression asserts that the nine separately placed cells remain
+nine fragments and form one aligned candidate. The fix requires browser
+CI confirmation; synthetic whitespace handling does not validate general
+PDF table reconstruction.

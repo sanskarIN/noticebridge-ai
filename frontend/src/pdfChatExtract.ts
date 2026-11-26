@@ -80,6 +80,27 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
             if (!('str' in item)) continue;
             const [a, b, c, d, x, y] = item.transform;
             const height = Math.max(1, Math.abs(item.height));
+            // PDF.js can emit a synthetic whitespace TextItem spanning the
+            // whole gap between two independently positioned text cells.
+            // Never let that item replace the last nonblank geometry:
+            // doing so hides the gap from the next nonblank item.
+            if (!item.str.trim()) {
+              if (item.hasEOL) {
+                flush();
+              } else if (previous && (
+                ![x, y, item.width].every(Number.isFinite) ||
+                Math.abs(y - previous.y) > Math.max(height, previous.height) * 0.55 ||
+                x + Math.max(0, item.width) - (previous.x + previous.width) > previous.height * 4
+              )) {
+                flush();
+              } else if (item.str.length && line && !/\s$/.test(line) && !oversized) {
+                if (line.length >= MAX_PASSAGE_CHARS) {
+                  oversized = true;
+                  line = '';
+                } else line += ' ';
+              }
+              continue;
+            }
             // Split widely separated fragments, rows and reverse-direction
             // jumps. This reduces accidental column stitching; it does not
             // establish reliable table semantics or reading order.
