@@ -110,7 +110,7 @@ test('same-family versions may coexist in the same split, not in both splits', (
   expect(() => evaluateDataset(dataset, loadDataset(dataset, artifacts), 'holdout')).toThrow();
 });
 
-test('offline evaluation CLI builds, evaluates both splits and rejects unsafe inputs without overwriting output', (_, info) => {
+test('offline evaluation CLI builds, evaluates both splits and rejects unsafe inputs without overwriting output', ({}, info) => {
   test.setTimeout(120_000);
   const root = info.outputPath('retrieval-cli');
   const bundle = join(root, 'bundle');
