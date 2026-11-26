@@ -1040,3 +1040,20 @@ test('single combined local workflow validates both stages and clears result on 
   await ask(page, 'Eligibility?');
   await expect(input).toBeDisabled();
 });
+
+test('natural comparison question opens a grounded difference and respects scope', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await attach(page, 'Updated / second PDF', ['Application fee: INR 350']);
+  await expect(page.getByText('1 extracted passages available.')).toHaveCount(2);
+  await page.getByLabel('Search scope', { exact: true }).selectOption('auto');
+  const answer = await ask(page, 'How much did the application fee change?');
+  const region = answer.getByRole('region', { name: 'Printed scalar comparison' });
+  await expect(region.getByText('The revised printed amount is INR 150.00 lower than the original printed amount.')).toBeVisible();
+  await expect(answer.locator('blockquote')).toHaveText(['Application fee: INR 500', 'Application fee: INR 350']);
+  await page.getByLabel('Search scope', { exact: true }).selectOption('original');
+  const selected = await ask(page, 'Compare application fee in both PDFs?');
+  await expect(selected.getByText(/Select both PDFs or Auto/)).toBeVisible();
+  await expect(selected.locator('blockquote')).toHaveText('Application fee: INR 500');
+  await expect(selected.getByRole('region', { name: 'Printed scalar comparison' })).toHaveCount(0);
+});

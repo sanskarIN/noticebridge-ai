@@ -869,3 +869,19 @@ loopback transport and feeds the resulting bytes to the TypeScript browser
 validator. This checks both nested hashes and non-BMP Unicode offsets with
 one shared protocol, not model accuracy. Pipeline requests also require
 canonical JSON to avoid ambiguous representations.
+
+## Explicit natural-language comparison questions
+
+A closed grammar now recognizes exact comparison forms for existing
+fee and calendar-date field labels (compare, difference, how much
+changed, and explicit directional questions). The original question
+is preserved for replay and display; all strict retrieval and review
+paths use the same normalized field and physical-page filter. Auto
+requests both sources for this recognized intent, while an explicit
+single-source selection is never overridden. A missing role remains
+missing. The numeric explanation opens automatically for these
+questions and reports the actual direction, not a direction assumed
+by the question. Unsupported labels, category qualifiers, negation,
+extra conditions, and multi-field questions are not simplified.
+Regression tests cover recognized forms, unsupported forms, scope,
+page routing, ranking parity, wrong-direction premises and UI behavior.
