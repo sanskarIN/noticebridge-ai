@@ -716,3 +716,28 @@ offsets, exact reference boundaries, scope, pagination, source
 deduplication, strict ranking parity and user-visible workflows.
 The OCR runtime regression normalizes whitespace only in its test
 assertion; the exported machine transcription remains unchanged.
+
+## Annotation-driven retrieval evaluation infrastructure
+
+The offline TypeScript evaluation harness accepts scoped question cases,
+notice-family identifiers, overlapping analysis slices, and one or more
+complete acceptable evidence sets. It rejects duplicate or missing source
+identities, cross-scope annotations and malformed case labels. Alternative
+sufficient sets are evaluated independently: partial evidence taken from
+two different alternatives is not automatically a complete answer.
+
+The evaluator compares strict top-four retrieval, contextual retrieval and
+the full strict explorer with the same frozen fixtures. It reports raw
+denominators, citation precision, best-alternative recall, complete-set
+coverage, mean reciprocal rank, duplicate/unknown source IDs, role and
+physical-page leakage, and routing mismatches. Genuinely unanswerable,
+unindexed and ambiguous cases have separate abstention denominators;
+unjudged inaccessible or ambiguous outputs do not inflate precision.
+Undefined ratios are null, not silently one or zero. It reports family
+and slice metrics without printing questions or source quotations.
+
+The committed benchmark is synthetic and only establishes regression
+behavior. Independently annotated notice families, a held-out set, real
+model experiments and manually checked qualifiers remain necessary.
+Full strict retrieval is an exploration mode, not a replacement answer
+engine; more citations do not establish better factual accuracy.
