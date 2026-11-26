@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { Answer, Passage, Role, SearchIndex } from './pdfChatCore';
 import { directFieldAnswer, directSourceKey } from './pdfChatDirectAnswer';
+import PdfChatScalarComparison from './PdfChatScalarComparison';
 
 const names: Record<Role, string> = {
   original: 'The original / first PDF', revised: 'The updated / second PDF',
@@ -55,6 +56,7 @@ export default function PdfChatDirectAnswer({ index, answer, onInspect }: {
             {' '}additional review passages not displayed. Inspect the full source.</p>}
       </div>}
     </div>)}
+    <PdfChatScalarComparison result={result} onInspect={onInspect} />
     <p className="chat-muted">This is a deterministic summary of recognized labels in indexed text,
       not a complete or independently verified answer. It does not establish equivalent values,
       eligibility, an official amendment, or the absence of other requirements.</p>
