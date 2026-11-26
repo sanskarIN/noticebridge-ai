@@ -80,3 +80,30 @@ test('dense result can only reference candidates included in exact shortlist', (
   expect(reviewRanking(encode(result), experiment, digest).candidates.length).toBeGreaterThan(0);
   expect(() => reviewRanking(encode({ ...result, ranks: { original: [passageId(excluded.passage), ...ids.slice(1)] } }), experiment, digest)).toThrow();
 });
+
+test('maximum-sized index preserves both sources and all baseline citations', () => {
+  const idx = buildIndex([...rows('original', 6000), ...rows('revised', 6000)]);
+  const answer = answerQuestion(idx, 'Application fee?', 'both', true);
+  const result = buildHybridShortlist(idx, answer);
+  expect(result.entries).toHaveLength(512);
+  expect(result.coverage.map(side => side.eligible)).toEqual([6000, 6000]);
+  expect(result.coverage.map(side => side.selected)).toEqual([256, 256]);
+  const selected = new Set(result.entries.map(entry => passageId(entry.source)));
+  expect(answer.citations.every(source => selected.has(passageId(source)))).toBe(true);
+  expect(result.coverage.every(side => side.selectedPages > 0 && side.selectedPages <= 80)).toBe(true);
+});
+test('every eligible fragment remains available for small scopes', () => {
+  const idx = buildIndex([...rows('original', 8), ...rows('revised', 5)]);
+  const answer = answerQuestion(idx, 'Application fee?', 'both');
+  const result = buildHybridShortlist(idx, answer, 16);
+  expect(result.entries).toHaveLength(13);
+  expect(result.coverage.every(side => side.selected === side.eligible)).toBe(true);
+});
+test('requested missing source is explicitly reported without reallocating outside scope', () => {
+  const idx = buildIndex(rows('original', 60));
+  const answer = answerQuestion(idx, 'Application fee?', 'both');
+  const result = buildHybridShortlist(idx, answer, 16);
+  expect(result.coverage.map(side => [side.role, side.eligible, side.selected]))
+    .toEqual([['original', 60, 16], ['revised', 0, 0]]);
+  expect(answer.missingRoles).toEqual(['revised']);
+});

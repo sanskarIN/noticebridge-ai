@@ -815,3 +815,9 @@ untrusted and limited to exact local source identities. Mode changes
 invalidate the previous request and review. Tests cover large corpora,
 balanced budgets, page filters, scope leakage, deterministic ordering,
 baseline preservation, abstention and excluded-identity rejection.
+
+An end-to-end fictional 24-page PDF fixture with 552 native fragments
+exercises the full-export rejection, explicit 512-fragment shortlist,
+visible exclusion counts, dense-result import and mode-change invalidation.
+A 12,000-fragment index regression covers the maximum existing index size.
+Neither test measures installed-model quality or representative PDF accuracy.

@@ -895,3 +895,80 @@ test('printed scalar comparison withholds arithmetic for competing values', asyn
   await expect(region.getByText(/Comparison withheld.*competing printed values/)).toBeVisible();
   await expect(answer.locator('blockquote')).toHaveCount(3);
 });
+
+/** Real multipage native-text PDF, no external fixtures or copyrighted notices. */
+function manyPagePdf(pageCount: number, linesPerPage: number): Buffer {
+  const pageRefs = Array.from({ length: pageCount }, (_, i) => (4 + i * 2) + ' 0 R');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Count ' + pageCount + ' /Kids [' + pageRefs.join(' ') + '] >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  for (let p = 0; p < pageCount; p++) {
+    const stream = Array.from({ length: linesPerPage }, (_, i) => {
+      const ordinal = p * linesPerPage + i;
+      const label = ordinal % 17 === 0 ? 'Application fee: INR ' + (100 + ordinal) :
+        'Other printed notice fragment ' + ordinal;
+      return 'BT /F1 12 Tf 40 ' + (740 - i * 28) + ' Td (' + label + ') Tj ET\n';
+    }).join('');
+    objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ' +
+      (5 + p * 2) + ' 0 R >>');
+    objects.push('<< /Length ' + Buffer.byteLength(stream) + ' >>\nstream\n' + stream + 'endstream');
+  }
+  let body = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  for (const [i, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(body));
+    body += (i + 1) + ' 0 obj\n' + object + '\nendobj\n';
+  }
+  const xref = Buffer.byteLength(body);
+  body += 'xref\n0 ' + (objects.length + 1) + '\n0000000000 65535 f \n';
+  for (const offset of offsets) body += String(offset).padStart(10, '0') + ' 00000 n \n';
+  body += 'trailer\n<< /Size ' + (objects.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+  return Buffer.from(body);
+}
+
+test('large real PDF supports explicit shortlist, reports exclusions and invalidates prior requests', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'large-fictional.pdf', mimeType: 'application/pdf', buffer: manyPagePdf(24, 23),
+  });
+  await expect(page.getByText('552 extracted passages available.')).toBeVisible();
+  const turn = await ask(page, 'Application fee?');
+  const baseline = await turn.locator('blockquote').allTextContents();
+  expect(baseline).toHaveLength(4);
+  await page.getByText('Experimental semantic retrieval (local file workflow)', { exact: true }).click();
+  await page.getByLabel('I understand that the exported request contains document text.').check();
+  const exportButton = page.getByRole('button', { name: 'Export semantic retrieval request' });
+  await exportButton.click();
+  await expect(page.getByText(/Unable to export.*bounded hybrid shortlist/)).toBeVisible();
+  const mode = page.getByLabel('Semantic candidate mode');
+  await mode.selectOption('shortlist');
+  const waiting = page.waitForEvent('download');
+  await exportButton.click();
+  const data = await readFile((await (await waiting).path())!);
+  const request = JSON.parse(data.toString('utf8'));
+  expect(request.passages).toHaveLength(512);
+  expect(new Set(request.passages.map((row: { id: string }) => row.id)).size).toBe(512);
+  expect(baseline.every(text => request.passages.some((row: { text: string }) => row.text === text))).toBe(true);
+  const coverage = page.getByRole('region', { name: 'Hybrid shortlist coverage' });
+  await expect(coverage.getByText(/512 of 552 scoped indexed fragments exported/)).toBeVisible();
+  await expect(coverage.getByText(/40 excluded/)).toBeVisible();
+  const ranking = {
+    format: 'noticebridge-chat-embedding-result', version: 1,
+    request_sha256: createHash('sha256').update(data).digest('hex'),
+    model: 'fixture:latest', model_digest: 'a'.repeat(64), dimension: 2, candidate_count: 512,
+    ranks: { original: request.passages.slice(0, 8).map((row: { id: string }) => row.id) },
+    authority_verified: false,
+  };
+  const input = page.getByLabel('Import local candidate ranking');
+  await input.setInputFiles({ name: 'rank.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(ranking, null, 2) + '\n') });
+  await expect(page.getByRole('region', { name: 'Experimental candidate review' })).toBeVisible();
+  await expect(turn.locator('blockquote')).toHaveText(baseline);
+  await mode.selectOption('full');
+  await expect(coverage).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Experimental candidate review' })).toHaveCount(0);
+  await expect(input).toBeDisabled();
+  await expect(turn.locator('blockquote')).toHaveText(baseline);
+});
