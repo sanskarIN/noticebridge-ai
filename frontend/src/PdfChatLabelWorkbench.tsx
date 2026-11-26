@@ -5,7 +5,7 @@ import { fingerprintSources, type AttachedFiles } from './pdfChatSession';
 import type { ChatCorpora } from './pdfChatEvidenceReport';
 import { annotationCandidates, appendEvidenceSet, deleteDraftCase, exportLabelBundle, labelIsComplete,
   labelKinds, labelPage, makeDraftCase, readLabelDraft, removeEvidenceSet, saveDraftCase,
-  serializeLabelDraft, toggleEvidence, MAX_LABEL_CASES, MAX_LABEL_SETS,
+  serializeLabelDraft, setCaseKind, toggleEvidence, MAX_LABEL_CASES, MAX_LABEL_SETS,
   type DraftCase, type LabelBundle, type LabelDraft, type LabelKind, type LabelMetadata } from './pdfChatLabelWorkbench';
 
 const descriptions: Record<LabelKind, string> = {
@@ -33,6 +33,7 @@ function CaseEditor({ row, index, attached, onChange, onInspect }: {
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(1);
   const [error, setError] = useState('');
+  const [nextKind, setNextKind] = useState<LabelKind | null>(null);
   const candidates = useMemo(() => annotationCandidates(index, {
     scope: row.scope, page: row.page, keyword,
   }), [index, row.scope, row.page, keyword]);
@@ -49,10 +50,28 @@ function CaseEditor({ row, index, attached, onChange, onInspect }: {
     <p className="chat-note">Inspect the actual PDF, including qualifiers and omitted image text. Do not
       copy retrieval results as reference labels. Each alternative set must independently contain
       every fragment needed to support the answer.</p>
+    <label className="chat-overview-filter">Revise selected annotation category
+      <select aria-label="Revise selected annotation category" value={nextKind ?? row.kind}
+        onChange={event => setNextKind(event.target.value as LabelKind)}>
+        {labelKinds.map(value => <option value={value} key={value}>{descriptions[value]}</option>)}
+      </select>
+    </label>
+    {nextKind !== null && nextKind !== row.kind && <div className="chat-note">
+      <p>Changing the label category discards its current evidence alternatives. Review the PDF again before confirming.</p>
+      <button type="button" className="chat-button" onClick={() => {
+        try {
+          onChange(setCaseKind(row, nextKind)); setSet(0); setNextKind(null); setError('');
+        } catch { setError('Unable to change the category. Check the dataset metadata.'); }
+      }}>Confirm annotation category change</button>
+      <button type="button" className="chat-button" onClick={() => setNextKind(null)}>Keep annotation category</button>
+    </div>}
     {row.kind !== 'answerable' ? <p>No native evidence set is attached to this label category.</p> : <>
       <div className="chat-toolbar">
         <button className="chat-button" type="button" disabled={row.evidenceSets.length >= MAX_LABEL_SETS}
-          onClick={() => { onChange(appendEvidenceSet(row)); setSet(row.evidenceSets.length); }}>
+          onClick={() => {
+            try { onChange(appendEvidenceSet(row)); setSet(row.evidenceSets.length); setError(''); }
+            catch { setError('Unable to add an alternative. Check the dataset metadata and set budget.'); }
+          }}>
           Add alternative evidence set
         </button>
         {row.evidenceSets.map((ids, i) => <button className="chat-button" type="button" key={i}
@@ -62,7 +81,8 @@ function CaseEditor({ row, index, attached, onChange, onInspect }: {
       </div>
       {row.evidenceSets.length > 0 && <>
         <button type="button" className="chat-button" onClick={() => {
-          onChange(removeEvidenceSet(row, set)); setSet(Math.max(0, set - 1));
+          try { onChange(removeEvidenceSet(row, set)); setSet(Math.max(0, set - 1)); setError(''); }
+          catch { setError('Unable to remove the alternative. Check the dataset metadata.'); }
         }}>Remove selected evidence set</button>
         <p>Selected alternative: {chosen.length} source fragments.</p>
         {chosen.map(id => {
@@ -174,7 +194,7 @@ export default function PdfChatLabelWorkbench({ index, files, corpora, attached,
         </select>
       </label>
       <p className="chat-muted">Keep all revisions of one notice in the same family and split. Do not tune on holdout labels.</p>
-      <legend>New annotation</legend>
+      <h3>New annotation</h3>
       <label className="chat-overview-filter">Annotation case ID<input value={id} maxLength={64} onChange={event => setId(event.target.value)} /></label>
       <label className="chat-overview-filter">Annotation question<textarea rows={3} value={question}
         maxLength={400} onChange={event => setQuestion(event.target.value)} /></label>
@@ -210,7 +230,7 @@ export default function PdfChatLabelWorkbench({ index, files, corpora, attached,
       </div>)}
       {active && <CaseEditor key={active.id} row={active} index={index} attached={attached} onInspect={onInspect}
         onChange={row => change(saveDraftCase(draft, row, index, attached, active.id))} />}
-      <legend>Private label exchange</legend>
+      <h3>Private label exchange</h3>
       <label className="chat-embedding-consent"><input type="checkbox" checked={consent}
         onChange={event => { setConsent(event.target.checked); setBundle(null); }} />
         I approve exporting private questions, labels and native document text for evaluation.</label>

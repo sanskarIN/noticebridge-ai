@@ -1396,3 +1396,25 @@ test('private review packet explicitly exports excerpts and verifies without mod
   await expect(result).toHaveCount(0);
   await expect(answer.locator('blockquote')).toHaveText('Application fee: INR 500');
 });
+
+test('annotation category change requires confirmation before discarding evidence alternatives', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  await page.getByText('Research: independent evidence labeling', { exact: true }).click();
+  await page.getByLabel('Annotation case ID', { exact: true }).fill('fee');
+  await page.getByLabel('Annotation question', { exact: true }).fill('Application fee?');
+  await page.getByRole('button', { name: 'Add annotation case' }).click();
+  const editor = page.getByRole('region', { name: 'Manual annotation evidence' });
+  await editor.getByLabel('Include original:1:1 in alternative 1').check();
+  const kind = editor.getByLabel('Revise selected annotation category', { exact: true });
+  await kind.selectOption('ambiguous');
+  await editor.getByRole('button', { name: 'Keep annotation category' }).click();
+  await expect(editor.getByLabel('Include original:1:1 in alternative 1')).toBeChecked();
+  await kind.selectOption('ambiguous');
+  await editor.getByRole('button', { name: 'Confirm annotation category change' }).click();
+  await expect(editor.getByText('No native evidence set is attached to this label category.')).toBeVisible();
+  await kind.selectOption('answerable');
+  await editor.getByRole('button', { name: 'Confirm annotation category change' }).click();
+  await expect(editor.getByLabel('Include original:1:1 in alternative 1')).not.toBeChecked();
+});
