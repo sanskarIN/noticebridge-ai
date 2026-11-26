@@ -596,3 +596,40 @@ layout hints, table candidates, concise field summaries, cross-page review
 leads and experimental model results. Those exclusions are stated in the UI.
 Regression tests cover changed pins, altered evidence, mismatched coverage,
 canonical encoding, stale state, file bounds and explicit browser consent.
+
+## Experimental local OCR review bridge
+
+For scanned pages, the first OCR integration deliberately does not replace
+native chat indexing. It is a separate selected-page, English-only review
+channel. Install the local backend and English Tesseract language data,
+then run on a trusted computer:
+
+```bash
+python -m noticebridge.chat_ocr_cli source.pdf --role original --pages 1,3 --output ocr.json --allow-local-processing
+```
+
+The CLI accepts at most 10 MiB and 80 physical pages per PDF, 12 explicitly
+selected pages, 16 million rendered pixels per page, 6,000 retained lines
+and 800,000 UTF-16 code units. It runs a disposable worker with the existing
+restricted environment, wall-clock deadline, POSIX limits and Windows job
+assignment before input. This is not an OS sandbox. The worker does not
+return diagnostics containing source text. Its report is structurally
+validated, bound to the PDF SHA-256, and written atomically without
+overwriting existing files. No remote OCR or network model is used.
+
+The browser imports a canonical JSON report of at most 2 MiB, checks the
+source role, fingerprint, physical page count, exact schema, ordered page
+and line identities, text and count limits, and rejects ambiguous encoding.
+It searches only the latest single question's selected source and physical
+page in imported OCR lines. No OCR line is added to the strict native index,
+printed-field summaries, table candidates, cross-page leads, replay reports
+or model exchange. Every match is labeled machine transcription and links
+to manual inspection of its original PDF page. Selected page status is
+shown, including unavailable and limited pages; source replacement and
+conversation reset discard imported data.
+
+The report is unsigned; its fingerprint binds it to a PDF but does not prove
+the contents were produced by OCR or that transcription is correct.
+The implementation tests simulated OCR extraction and protocol validation;
+installed Tesseract inference and representative scanned-document accuracy
+require separate verification before this experimental feature is promoted.

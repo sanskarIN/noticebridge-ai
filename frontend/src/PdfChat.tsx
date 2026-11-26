@@ -4,6 +4,7 @@ import { comparePrintedValues, groupPrintedValues, nearbyPassages, type ChatScop
 import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
 import PdfChatSessionPanel from './PdfChatSessionPanel';
 import PdfChatEvidenceReport from './PdfChatEvidenceReport';
+import PdfChatOcrReview from './PdfChatOcrReview';
 import type { ChatCorpora } from './pdfChatEvidenceReport';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
@@ -312,6 +313,11 @@ export default function PdfChat() {
         {!indexing && attached.length > 0 && <PdfChatEvidenceReport
           key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
           files={files} corpora={corpora} index={index} turns={turns} />}
+        {!indexing && attached.length > 0 && <PdfChatOcrReview
+          key={generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch}
+          files={files} corpora={corpora}
+          answer={turns.at(-1)?.answers.length === 1 ? turns.at(-1)!.answers[0] : null}
+          onInspect={setPreview} />}
         <form className="chat-form" onSubmit={ask}>
           <label>Search scope
             <select value={scope} onChange={event => setScope(event.target.value as ChatScope)}>
