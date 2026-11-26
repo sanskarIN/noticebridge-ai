@@ -121,3 +121,22 @@ uploads the artifact.
 Synthetic unit and browser fixtures are regression checks, not an independent quality
 benchmark. Before claiming a real-notice retrieval performance number, run a frozen,
 independently reviewed holdout and publish its selection, labeling and coverage limitations.
+
+## Manual labeling workbench
+
+The research labeling panel provides a separate literal, source-ordered browser
+of the indexed PDF. Create single-question cases and assign a source scope,
+slice labels, and one of the four annotation categories. For answerable cases,
+choose every fragment required for one complete answer; add alternative sets
+only when each alternative is independently sufficient. The workbench never
+copies retrieval results into the reference labels.
+
+A private draft can contain incomplete cases and is pinned to the entire
+native corpus snapshot, including extraction coverage and geometry. Restore
+requires identical snapshot bytes and explicit replacement confirmation.
+Final export requires structurally complete labels, explicit consent and a
+human provenance declaration. Save the paired snapshot and labels file
+together; the latter contains the exact snapshot digest. The existing offline
+runner accepts the resulting manifest. The program cannot certify the
+independence or accuracy of human annotations. Keep real holdout labels
+separate from developers who tune retrieval.

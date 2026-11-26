@@ -1298,3 +1298,28 @@ test('native evaluation export contains actual indexed fragments and physical co
   expect(value.sources[0].passages.map((row: {text: string}) => row.text))
     .toEqual(['Application fee: INR 500', 'Eligibility: Class 12']);
 });
+
+test('independent label workbench creates an evidence set and exports compatible private evaluation files', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await expect(page.getByText('1 extracted passages available.')).toBeVisible();
+  await page.getByText('Research: independent evidence labeling', { exact: true }).click();
+  await page.getByLabel('Annotation case ID', { exact: true }).fill('fee');
+  await page.getByLabel('Annotation question', { exact: true }).fill('Application fee?');
+  await page.getByRole('button', { name: 'Add annotation case' }).click();
+  const editor = page.getByRole('region', { name: 'Manual annotation evidence' });
+  await editor.getByLabel('Include original:1:1 in alternative 1').check();
+  await expect(page.getByText('1/1 structurally complete labels; human correctness is not verified.')).toBeVisible();
+  const prepare = page.getByRole('button', { name: 'Prepare evaluation files' });
+  await expect(prepare).toBeDisabled();
+  await page.getByLabel('I approve exporting private questions, labels and native document text for evaluation.').check();
+  await page.getByLabel('I confirm the selected provenance and have checked the labeled evidence sets.').check();
+  await prepare.click();
+  const wait = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download evaluation labels' }).click();
+  const data = JSON.parse((await readFile((await (await wait).path())!)).toString());
+  expect(data.kind).toBe('synthetic');
+  expect(data.documents[0].cases[0].label.evidenceSets).toEqual([['original:1:1']]);
+  expect(JSON.stringify(data)).not.toContain('Application fee: INR 500');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});
