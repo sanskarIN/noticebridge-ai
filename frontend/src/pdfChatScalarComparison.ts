@@ -2,7 +2,7 @@
 import type { FieldId, ExtractedField } from './pdfChatOverview';
 import type { DirectAnswer } from './pdfChatDirectAnswer';
 
-export type Currency = 'INR' | 'USD' | 'EUR' | 'GBP';
+export type Currency = 'INR' | 'USD' | 'EUR' | 'GBP' | 'RS';
 export type Money = { currency: Currency; minor: bigint };
 export type CivilDate = { year: number; month: number; day: number; serial: number };
 export type ScalarFailure = 'single_source' | 'unsupported_field' | 'missing_value' |
@@ -18,7 +18,7 @@ const FEE_FIELDS = new Set<FieldId>(['application_fee', 'exam_fee', 'registratio
 const DATE_FIELDS = new Set<FieldId>(['application_deadline', 'registration_deadline',
   'application_start', 'exam_date', 'interview_date']);
 const CURRENCIES: Record<string, Currency> = {
-  '₹': 'INR', 'rs': 'INR', 'rs.': 'INR', 'inr': 'INR', 'usd': 'USD',
+  '₹': 'INR', 'rs': 'RS', 'rs.': 'RS', 'inr': 'INR', 'usd': 'USD',
   'eur': 'EUR', '€': 'EUR', 'gbp': 'GBP', '£': 'GBP',
 };
 const MONEY = /^(₹|Rs\.?|INR|USD|EUR|€|GBP|£)[ \t]*([0-9][0-9,]*)(?:\.([0-9]{1,2}))?$/i;
@@ -37,7 +37,7 @@ export function parsePrintedMoney(value: string): Money | null {
   if (!currency) return null;
   const plain = /^(?:0|[1-9][0-9]*)$/.test(integer);
   const western = /^[1-9][0-9]{0,2}(?:,[0-9]{3})+$/.test(integer);
-  const indian = currency === 'INR' && /^[1-9][0-9]?(?:,[0-9]{2})*,[0-9]{3}$/.test(integer);
+  const indian = (currency === 'INR' || currency === 'RS') && /^[1-9][0-9]?(?:,[0-9]{2})*,[0-9]{3}$/.test(integer);
   if (!plain && !western && !indian) return null;
   const digits = integer.replace(/,/g, '');
   if (digits.length > 18) return null;
@@ -108,14 +108,14 @@ export function comparePrintedScalars(result: DirectAnswer): Comparison {
 
 export function formatMoneyMagnitude(minor: bigint, currency: Currency): string {
   const magnitude = minor < 0n ? -minor : minor;
-  return currency + ' ' + (magnitude / 100n).toString() + '.' +
+  return (currency === 'RS' ? 'Rs.' : currency) + ' ' + (magnitude / 100n).toString() + '.' +
     (magnitude % 100n).toString().padStart(2, '0');
 }
 
 /** Finite deterministic prose templates, scoped to two literal values. */
 export function scalarExplanation(value: Extract<Comparison, { status: 'available' }>): string {
   if (value.kind === 'money') {
-    if (value.difference === 0n) return 'The two printed amounts have the same numeric value in ' + value.currency + '.';
+    if (value.difference === 0n) return 'The two printed amounts have the same numeric value in ' + (value.currency === 'RS' ? 'the printed Rs. notation' : value.currency) + '.';
     return 'The revised printed amount is ' + formatMoneyMagnitude(value.difference, value.currency) +
       (value.difference > 0n ? ' higher' : ' lower') + ' than the original printed amount.';
   }

@@ -5,8 +5,8 @@ import { comparePrintedScalars, formatMoneyMagnitude, parsePrintedDate,
   parsePrintedMoney, scalarExplanation } from '../src/pdfChatScalarComparison';
 
 for (const [value, currency, minor] of [
-  ['Rs. 500', 'INR', 50000n], ['₹ 1,23,456.78', 'INR', 12345678n],
-  ['INR 123,456.7', 'INR', 12345670n], ['rs 0.01', 'INR', 1n],
+  ['Rs. 500', 'RS', 50000n], ['₹ 1,23,456.78', 'INR', 12345678n],
+  ['INR 123,456.7', 'INR', 12345670n], ['rs 0.01', 'RS', 1n],
   ['USD 0', 'USD', 0n], ['€ 1,234.50', 'EUR', 123450n], ['GBP 42', 'GBP', 4200n],
   ['INR 999999999999999999.99', 'INR', 99999999999999999999n],
 ] as const) {
@@ -48,7 +48,7 @@ function compare(lines: Passage[], question = 'Application fee?', scope: 'both' 
   if (!result) throw new Error('Missing recognized field.');
   return comparePrintedScalars(result);
 }
-const fees = [line('Application fee: Rs. 500'), line('Application charges: ₹350.50', 'revised')];
+const fees = [line('Application fee: INR 500'), line('Application charges: ₹350.50', 'revised')];
 test('precise fee difference is grounded in both original printed values', () => {
   const result = compare(fees);
   expect(result).toMatchObject({ status: 'available', kind: 'money', currency: 'INR', difference: -14950n });
@@ -58,7 +58,7 @@ test('precise fee difference is grounded in both original printed values', () =>
   expect(scalarExplanation(result)).toBe('The revised printed amount is INR 149.50 lower than the original printed amount.');
 });
 test('equal numeric amounts retain different printed wording', () => {
-  const result = compare([line('Application fee: INR 1,000.00'), line('Application fee: Rs. 1000', 'revised')]);
+  const result = compare([line('Application fee: INR 1,000.00'), line('Application fee: INR 1000', 'revised')]);
   expect(result).toMatchObject({ status: 'available', difference: 0n });
   if (result.status === 'available') expect(scalarExplanation(result)).toContain('same numeric value');
 });
@@ -97,4 +97,13 @@ test('attached conditions and additional query text prevent arithmetic', () => {
     .toEqual({ status: 'unavailable', reason: 'unrecognized_value' });
   expect(compare([...fees, line('Application fee may be waived for eligible applicants', 'original', 2)]))
     .toEqual({ status: 'unavailable', reason: 'possible_conditions' });
+});
+
+test('unspecified rupee labels are not silently identified as INR', () => {
+  const a = line('Application fee: Rs. 500');
+  const b = line('Application fee: ₹350', 'revised');
+  expect(compare([a, b])).toEqual({ status: 'unavailable', reason: 'different_currency' });
+  const result = compare([a, line('Application fee: Rs. 350', 'revised')]);
+  expect(result).toMatchObject({ status: 'available', kind: 'money', currency: 'RS', difference: -15000n });
+  if (result.status === 'available') expect(scalarExplanation(result)).toContain('Rs. 150.00 lower');
 });

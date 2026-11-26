@@ -771,3 +771,26 @@ prefixes as well as source and conversation generations. The search-scope
 select also has an explicit accessible name and an associated label.
 Regression coverage checks for duplicate panels, stale imported ranking
 state and exact accessible control identification after a new turn.
+
+## Exact printed-value comparisons
+
+The concise printed-field answer offers an opt-in arithmetic comparison
+for two requested sources. It requires one recognized fee or calendar
+date per source and withholds arithmetic for competing values, missing
+sources, known additional query matches or nearby review text, and
+unsupported syntax. Money uses exact BigInt minor units, bounded Western
+or INR grouping, and at most two fractional digits. Bare dollar signs,
+mixed currency labels, exponents, ranges and attached conditions are
+rejected. An unspecified Rs. label is not equated with INR; two such
+labels support numeric comparison only, with an explicit uncertainty
+warning. No exchange-rate conversion is performed.
+
+Calendar dates accept ISO year-month-day or a day/full English month/year,
+with round-trip Gregorian validation. Differences count calendar days,
+not inclusive application periods or time zones. Deterministic sentence
+templates retain both printed values and direct source inspection links.
+The calculation does not verify authority, applicability, equivalent
+conditions, a valid amendment or complete PDF coverage. Tests include
+very large exact amounts, leap days, omitted competing values, ambiguity
+and browser interaction. The optional comparison is not persisted in
+the deterministic citation report.

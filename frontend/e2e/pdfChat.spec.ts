@@ -868,3 +868,30 @@ test('workspace panel keys remain distinct after adding a second chat turn', asy
   await expect(page.getByLabel('Import local candidate ranking')).toBeDisabled();
   expect(keyWarnings).toEqual([]);
 });
+
+test('printed scalar comparison uses exact source values and preserves the citations', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await attach(page, 'Updated / second PDF', ['Application fee: INR 350.50']);
+  await expect(page.getByText('1 extracted passages available.')).toHaveCount(2);
+  await page.getByLabel('Search scope', { exact: true }).selectOption('both');
+  const answer = await ask(page, 'Application fee?');
+  const region = answer.getByRole('region', { name: 'Printed scalar comparison' });
+  await region.getByRole('button', { name: 'Calculate printed difference' }).click();
+  await expect(region.getByText('The revised printed amount is INR 149.50 lower than the original printed amount.')).toBeVisible();
+  await expect(answer.locator('blockquote')).toHaveText(['Application fee: INR 500', 'Application fee: INR 350.50']);
+  await region.getByRole('button', { name: 'Inspect revised printed value on page 1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).locator('blockquote')).toHaveText('Application fee: INR 350.50');
+});
+test('printed scalar comparison withholds arithmetic for competing values', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500', 'Application fee: INR 700']);
+  await attach(page, 'Updated / second PDF', ['Application fee: INR 350']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  await page.getByLabel('Search scope', { exact: true }).selectOption('both');
+  const answer = await ask(page, 'Application fee?');
+  const region = answer.getByRole('region', { name: 'Printed scalar comparison' });
+  await region.getByRole('button', { name: 'Calculate printed difference' }).click();
+  await expect(region.getByText(/Comparison withheld.*competing printed values/)).toBeVisible();
+  await expect(answer.locator('blockquote')).toHaveCount(3);
+});

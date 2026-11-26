@@ -10,7 +10,7 @@ const reasons: Record<ScalarFailure, string> = {
   competing_values: 'At least one source contains competing printed values.',
   possible_conditions: 'Additional matching or nearby text may contain conditions. Inspect that text first.',
   unrecognized_value: 'A value is not a supported single explicit currency amount or unambiguous calendar date.',
-  different_currency: 'The currencies differ. No conversion or exchange rate is assumed.',
+  different_currency: 'Currency labels differ or are not equivalent. No currency conversion is assumed.',
 };
 
 export default function PdfChatScalarComparison({ result, onInspect }: {
@@ -38,6 +38,9 @@ export default function PdfChatScalarComparison({ result, onInspect }: {
             </button>
           </div>)}
         </div>
+        {comparison.kind === 'money' && comparison.currency === 'RS' && <p className="chat-note">
+          Both amounts use an unspecified Rs. label. This is a numeric comparison, not confirmation
+          that they represent the same national currency.</p>}
         <p className="chat-note">This compares only the literal values retrieved in the selected indexed
           scope. It does not establish fee liability, a deadline extension, equal applicant conditions,
           a valid amendment or complete PDF coverage. Review both full notices before acting.</p>
