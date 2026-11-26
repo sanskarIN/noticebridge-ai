@@ -1323,3 +1323,24 @@ test('independent label workbench creates an evidence set and exports compatible
   expect(JSON.stringify(data)).not.toContain('Application fee: INR 500');
   await expect(page.locator('.chat-turn')).toHaveCount(0);
 });
+
+test('notice timeline exposes chronological literal dates and signed comparison without claiming authority', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application deadline: 2026-12-20', 'Application opening date: 2026-12-01']);
+  await attach(page, 'Updated / second PDF', ['Application deadline: 2026-12-15', 'Application opening date: 2026-12-01']);
+  await expect(page.getByText('2 extracted passages available.')).toHaveCount(2);
+  await page.getByText('Explore printed notice timeline and date windows', { exact: true }).click();
+  const dates = page.getByRole('region', { name: 'Printed date timeline' });
+  await expect(dates.getByText('4 printed date occurrences match these filters.')).toBeVisible();
+  await dates.getByLabel('Timeline source').selectOption('original');
+  await expect(dates.getByText('2 printed date occurrences match these filters.')).toBeVisible();
+  await page.getByRole('button', { name: 'Compare printed dates', exact: true }).click();
+  const comparison = page.getByRole('region', { name: 'Timeline date comparison' });
+  await expect(comparison.getByText('Revised printed date is 5 calendar day(s) earlier.')).toBeVisible();
+  await comparison.getByRole('button', { name: 'Inspect date source revised:1:1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).locator('blockquote')).toHaveText('Application deadline: 2026-12-15');
+  await page.getByRole('button', { name: 'Inspect printed date windows' }).click();
+  const windows = page.getByRole('region', { name: 'Printed date window checks' });
+  await expect(windows.getByText('Printed closing date minus opening date: 14 calendar day(s).')).toBeVisible();
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});

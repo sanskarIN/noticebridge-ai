@@ -964,3 +964,18 @@ are used. Discarding a result aborts the browser request; the bounded
 backend worker may still finish. Never expose the enabled endpoint
 through a public reverse proxy. Tests exercise the local boundary,
 upload caps, consent, invalid results, response bounds and browser review.
+
+## Printed calendar timeline
+
+The timeline lists every recognized native printed date-field occurrence,
+including competing values and unsupported expressions, without choosing
+a current official deadline. It recognizes complete ISO and full English
+month dates, explicit ranges with two validated endpoints, and a bounded
+clock-text grammar. Unparsed dates retain their original wording and
+source links. Calendar ordering does not imply applicability or timezone
+conversion. A separate comparison requires one distinct single-date value
+on each side and no detected contextual review leads. The date-window
+inspection only subtracts an opening date from a closing date in the
+same source; it is not an inclusive application-period calculation.
+Coverage, missing labels, repeated occurrences and possible conditions
+remain visible. The explorer never modifies the deterministic answer.
