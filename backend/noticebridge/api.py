@@ -140,7 +140,10 @@ async def chat_ocr(
     try:
         if consent is not True or role not in ("original", "revised"):
             raise HTTPException(status_code=422, detail="Explicit local OCR consent and role required")
-        selected = validate_selection(list(parse_ocr_selection(pages)))
+        try:
+            selected = validate_selection(list(parse_ocr_selection(pages)))
+        except (InvalidDocument, OcrReviewError) as exc:
+            raise HTTPException(status_code=422, detail="Invalid OCR page selection") from exc
         data = await _read_pdf(source)
         if not data:
             raise HTTPException(status_code=422, detail="Empty PDF")
@@ -148,8 +151,6 @@ async def chat_ocr(
             report = await run_in_threadpool(run_ocr_review, data, role, selected)
         # Preserve the canonical protocol used by the local file CLI.
         return Response(content=encode_report(report), media_type="application/json")
-    except InvalidDocument as exc:
-        raise HTTPException(status_code=422, detail="Invalid OCR page selection") from exc
     except OcrReviewError as exc:
         raise HTTPException(status_code=503, detail="Local OCR did not produce a valid report") from exc
     finally:
