@@ -201,3 +201,30 @@ and annotation count from the local extraction. A matching packet does
 not authenticate the source document or certify personal notes. Keep
 both the excerpt packet and the complete corpus private. The verifier
 never overwrites an existing reading copy or prints source text.
+
+## Independent reviewer agreement
+
+Freeze the question set, case identities, document families, source scopes,
+physical-page restrictions, slice membership and source snapshot hashes before
+sending them to independent reviewers. Keep each reviewer's original manifest
+and snapshot files in separate private directories. Do not let the reviewers
+copy the current retrieval answer or see one another's labels before annotation.
+
+```bash
+npm run agree:retrieval -- --left reviewer-a/labels.json --right reviewer-b/labels.json --output agreement.json
+```
+
+The command checks both manifests against their pinned snapshots and pairs
+cases only when every question and source-routing detail matches exactly.
+It reports missing cases separately, never as negatives. The four-way
+category confusion matrix, raw agreement and Cohen's kappa describe
+category agreement; kappa is null when its denominator is undefined.
+For cases labeled answerable by both reviewers, exact alternative-set
+agreement, union Jaccard overlap and directional best-alternative coverage
+describe different aspects of evidence agreement. Identical unions can
+still disagree on which combinations of fragments constitute a sufficient
+answer. Disagreements need adjudication against the actual PDF; the tool
+does not choose a winner, create ground truth or certify reviewers.
+Reports include anonymous IDs and evidence identities, not question text
+or quotations, and pin both manifest hashes. Holdout labels should not
+be exposed to retrieval developers before final evaluation.
