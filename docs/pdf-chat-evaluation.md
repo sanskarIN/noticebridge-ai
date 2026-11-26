@@ -140,3 +140,21 @@ together; the latter contains the exact snapshot digest. The existing offline
 runner accepts the resulting manifest. The program cannot certify the
 independence or accuracy of human annotations. Keep real holdout labels
 separate from developers who tune retrieval.
+
+## Compose separate annotation sessions
+
+Give every individual manifest and snapshot a distinct simple lowercase filename
+in one trusted local directory. Use stable globally unique case and document IDs.
+Then compose without copying or modifying the snapshots:
+
+```bash
+npm run compose:retrieval -- --directory /path/to/study --id combined-study --output combined.json --inputs labels-a.json labels-b.json
+```
+
+Composition refuses conflicting document or case identities, duplicate snapshots,
+mixed label provenance, split leakage and shared PDF fingerprints assigned to
+different families. All source hashes and evidence IDs are checked before
+publishing the combined manifest. Existing files are never overwritten.
+The output lists documents in deterministic ID order, retaining all original
+questions, labels and splits. The console audit reports counts and anonymous
+identifiers only. Use the normal evaluation command with the combined manifest.
