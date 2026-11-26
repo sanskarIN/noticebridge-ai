@@ -17,6 +17,7 @@ export default function PdfChatEmbeddingPanel({ index, answer, onInspect }: {
 }) {
   const generation = useRef(0);
   const [approved, setApproved] = useState(false);
+  const [mode, setMode] = useState<'full' | 'shortlist'>('full');
   const [pending, setPending] = useState<{ experiment: Experiment; digest: string } | null>(null);
   const [review, setReview] = useState<CandidateReview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -28,13 +29,13 @@ export default function PdfChatEmbeddingPanel({ index, answer, onInspect }: {
     const token = ++generation.current;
     setBusy(true); setError(''); setPending(null); setReview(null);
     try {
-      const experiment = prepareExperiment(index, answer);
+      const experiment = prepareExperiment(index, answer, mode);
       const digest = await requestHash(experiment.text);
       if (generation.current !== token) return;
       download(experiment.text);
       setPending({ experiment, digest });
     } catch {
-      if (generation.current === token) setError('Unable to export. Use HTTPS or localhost and narrow the search to at most 512 passages.');
+      if (generation.current === token) setError('Unable to export. Use HTTPS or localhost, narrow the search, or choose the bounded hybrid shortlist.');
     } finally {
       if (generation.current === token) setBusy(false);
     }
@@ -64,6 +65,18 @@ export default function PdfChatEmbeddingPanel({ index, answer, onInspect }: {
     <p className="chat-note">Optional research experiment for the last single question. Export includes the
       question and complete indexed passages within its selected source/page scope. The file may contain
       private document text. Use only a trusted local-only model runtime; no browser model connection is made.</p>
+    <label className="chat-overview-filter">Semantic candidate mode
+      <select value={mode} disabled={busy} onChange={event => {
+        generation.current++; setMode(event.target.value as typeof mode);
+        setPending(null); setReview(null); setError('');
+      }}>
+        <option value="full">All scoped indexed fragments (maximum 512)</option>
+        <option value="shortlist">Bounded hybrid shortlist (maximum 512)</option>
+      </select>
+    </label>
+    {mode === 'shortlist' && <p className="chat-note">The shortlist reserves space for baseline
+      citations, strict and partial lexical matches, and page-diverse samples. It can exclude
+      relevant evidence. Dense ranking is limited to the exported candidates.</p>}
     <label className="chat-embedding-consent"><input type="checkbox" checked={approved}
       disabled={busy} onChange={event => {
         generation.current++; setApproved(event.target.checked); setPending(null); setReview(null); setError('');
@@ -77,6 +90,19 @@ export default function PdfChatEmbeddingPanel({ index, answer, onInspect }: {
     </div>
     {pending && <p className="chat-muted">Request prepared. Run the local embedding CLI documented in the
       repository, then import its result while this question remains selected.</p>}
+    {pending?.experiment.shortlistCoverage && <section aria-label="Hybrid shortlist coverage">
+      <h4>Exported candidate coverage</h4>
+      {pending.experiment.shortlistCoverage.map(side => <div key={side.role} className="chat-note">
+        <p>{side.role}: {side.selected} of {side.eligible} scoped indexed fragments exported;
+          {' '}{side.eligible - side.selected} excluded.</p>
+        <p>{side.selectedPages} of {side.eligiblePages} indexed pages represented.
+          {' '}{side.strictSelected} of {side.strict} strict matching fragments included.</p>
+        <p className="chat-muted">Baseline {side.reasons.baseline} · strict {side.reasons.strict}
+          {' '}· partial {side.reasons.partial} · page samples {side.reasons.page_sample}</p>
+      </div>)}
+      <p className="chat-muted">Counts describe indexed fragments only. The model cannot recover
+        excluded fragments and no relevance or complete coverage is guaranteed.</p>
+    </section>}
     {busy && <p role="status">Checking request or ranking…</p>}
     {error && <p role="alert" className="chat-error">{error}</p>}
     {review && <section aria-label="Experimental candidate review">

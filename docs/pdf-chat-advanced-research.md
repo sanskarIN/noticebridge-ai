@@ -794,3 +794,24 @@ conditions, a valid amendment or complete PDF coverage. Tests include
 very large exact amounts, leap days, omitted competing values, ambiguity
 and browser interaction. The optional comparison is not persisted in
 the deterministic citation report.
+
+## Bounded hybrid shortlist for large PDF scopes
+
+The full semantic request still refuses scopes exceeding 512 fragments.
+A separate explicit shortlist mode allows the existing local model
+exchange to operate on larger indexed corpora. It balances requested
+source roles, reallocates unused capacity, preserves every baseline
+citation, prioritizes strict lexical matches and then partial BM25
+matches, and reserves a quarter of remaining capacity for page-diverse
+samples. No candidate is promoted to an answer and no partial match
+changes the deterministic abstention policy.
+
+The browser shows selected and excluded fragment counts, selected and
+eligible indexed pages, strict-match coverage and selection reasons
+per role. The shortlist stays within the same source and physical page
+filters and uses the existing bounded model request wire contract.
+Dense ranking cannot recover excluded fragments. Its output remains
+untrusted and limited to exact local source identities. Mode changes
+invalidate the previous request and review. Tests cover large corpora,
+balanced budgets, page filters, scope leakage, deterministic ordering,
+baseline preservation, abstention and excluded-identity rejection.

@@ -1,6 +1,7 @@
 /** File-based semantic candidate exchange. No browser network model calls. */
 import type { Answer, Passage, Role, SearchIndex } from './pdfChatCore';
 import { allowedPassages, fuseRanks, passageId } from './pdfChatResearch';
+import { buildHybridShortlist, type ShortlistCoverage } from './pdfChatHybridShortlist';
 
 export const MAX_EXPERIMENT_PASSAGES = 512;
 export const MAX_EXPERIMENT_BYTES = 2 * 1024 * 1024;
@@ -15,6 +16,7 @@ export type Experiment = {
   text: string;
   allowed: ReadonlyMap<string, Passage>;
   baseline: readonly Passage[];
+  shortlistCoverage?: ShortlistCoverage[];
 };
 export type CandidateReview = {
   model: string;
@@ -23,9 +25,12 @@ export type CandidateReview = {
   candidates: { passage: Passage; ranks: { channel: string; rank: number }[] }[];
 };
 
-export function prepareExperiment(index: SearchIndex, answer: Answer): Experiment {
+export function prepareExperiment(index: SearchIndex, answer: Answer, mode: 'full' | 'shortlist' = 'full'): Experiment {
   const roles: Role[] = answer.scope === 'both' ? ROLES : [answer.scope];
-  const allowed = allowedPassages(index.rows.map(row => row.passage), roles, answer.pageFilter);
+  if (mode !== 'full' && mode !== 'shortlist') throw new Error('Invalid candidate mode.');
+  const shortlist = mode === 'shortlist' ? buildHybridShortlist(index, answer) : null;
+  const allowed = shortlist ? new Map(shortlist.entries.map(entry => [passageId(entry.source), entry.source]))
+    : allowedPassages(index.rows.map(row => row.passage), roles, answer.pageFilter);
   if (!allowed.size || allowed.size > MAX_EXPERIMENT_PASSAGES) {
     throw new Error('Choose a narrower source or physical page (maximum 512 passages).');
   }
@@ -36,7 +41,7 @@ export function prepareExperiment(index: SearchIndex, answer: Answer): Experimen
   if (new TextEncoder().encode(text).length > MAX_EXPERIMENT_BYTES) {
     throw new Error('Request exceeds the experiment file limit.');
   }
-  return { text, allowed, baseline: answer.citations };
+  return { text, allowed, baseline: answer.citations, ...(shortlist ? { shortlistCoverage: shortlist.coverage } : {}) };
 }
 
 export async function requestHash(text: string): Promise<string> {
