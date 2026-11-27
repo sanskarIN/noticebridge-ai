@@ -18,7 +18,7 @@ export function answerTargets(turns: readonly ChatTurn[]): AnswerTarget[] {
   const targets: AnswerTarget[] = [];
   turns.forEach((turn, turnIndex) => {
     if (!Array.isArray(turn.answers) || !turn.answers.length || turn.answers.length > MAX_SUBQUESTIONS) invalid();
-    turn.answers.forEach((answer, partIndex) => {
+    turn.answers.forEach((answer: Answer, partIndex: number) => {
       if (!answer || typeof answer.question !== 'string' || !answer.question.trim() ||
           !['original', 'revised', 'both'].includes(answer.scope)) invalid();
       targets.push({ id: turnIndex + ':' + partIndex, turnIndex, partIndex, parts: turn.answers.length, answer });

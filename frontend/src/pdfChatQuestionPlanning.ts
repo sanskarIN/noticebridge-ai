@@ -67,7 +67,7 @@ function eventQuestions(subject: string): string[] | null {
 }
 type WindowPart = 'start date' | 'opening date' | 'deadline' | 'last date' | 'fee' | 'eligibility';
 function windowQuestions(subject: string): string[] | null {
-  const match = /^(?:what (?:is|are) (?:the )?)?(application|registration|(?:application )?correction window) (.+)$/i.exec(subject);
+  const match = /^(?:what (?:is|are) (?:the )?)?((?:application )?correction window|application|registration) (.+)$/i.exec(subject);
   if (!match) return null;
   const domain = match[1].toLowerCase();
   const correction = domain.endsWith('correction window');

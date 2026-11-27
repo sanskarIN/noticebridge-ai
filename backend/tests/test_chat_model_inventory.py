@@ -6,7 +6,8 @@ import json
 import httpx
 import pytest
 
-from noticebridge import api, body_limit, chat_model_inventory as inventory
+from noticebridge import api, body_limit
+from noticebridge import chat_model_inventory as inventory
 from noticebridge.chat_embeddings import EmbeddingError
 
 DIGEST = "a" * 64
