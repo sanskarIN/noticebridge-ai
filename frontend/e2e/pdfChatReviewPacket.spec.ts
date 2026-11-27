@@ -107,6 +107,18 @@ test('offline packet verifier produces a bound printable copy without private co
     return spawnSync(process.execPath, [join(bundle, 'verifyPacket.js'), '--packet', packet, '--snapshot', source,
       '--html', output], { encoding: 'utf8', timeout: 20_000 });
   }
+  const cli = join(bundle, 'verifyPacket.js');
+  const help = spawnSync(process.execPath, [cli, '--help'], { encoding: 'utf8', timeout: 20_000 });
+  expect(help.status).toBe(0);
+  expect(help.stdout).toContain('Usage: npm run verify:packet');
+  expect(help.stderr).toBe('');
+  const invalid = spawnSync(process.execPath, [cli, '--packet', 'private-fixture.json'],
+    { encoding: 'utf8', timeout: 20_000 });
+  expect(invalid.status).toBe(1);
+  expect(invalid.stdout).toBe('');
+  expect(invalid.stderr).toContain('Evidence packet verification failed');
+  expect(invalid.stderr).not.toContain('private-fixture.json');
+  expect(existsSync(html)).toBe(false);
   const success = run(html);
   expect(success.status, success.stderr).toBe(0);
   expect(JSON.parse(success.stdout)).toMatchObject({ consistent: true, authority_verified: false, entries: 2,
@@ -114,9 +126,15 @@ test('offline packet verifier produces a bound printable copy without private co
   expect(success.stdout).not.toContain('Application fee');
   const copy = readFileSync(html, 'utf8');
   expect(copy).toContain('&lt;script&gt;');
-  expect(run(html).status).toBe(1);
+  const existing = run(html);
+  expect(existing.status).toBe(1);
+  expect(existing.stdout).toBe('');
+  expect(existing.stderr).not.toContain('Application fee');
   expect(readFileSync(html, 'utf8')).toBe(copy);
   writeFileSync(packet, text.replace('INR 500', 'INR 900'));
-  expect(run(join(root, 'bad.html')).status).toBe(1);
+  const tampered = run(join(root, 'bad.html'));
+  expect(tampered.status).toBe(1);
+  expect(tampered.stdout).toBe('');
+  expect(tampered.stderr).not.toContain('INR 900');
   expect(existsSync(join(root, 'bad.html'))).toBe(false);
 });

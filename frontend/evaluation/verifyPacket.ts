@@ -27,4 +27,12 @@ async function main(args: string[]): Promise<number> {
     return 1;
   }
 }
-process.exitCode = await main(process.argv.slice(2));
+// Keep the Node CLI compatible with Vite's default ES2020 SSR build target.
+// Do not change the browser build target just to support top-level await here.
+void main(process.argv.slice(2)).then(code => {
+  process.exitCode = code;
+}, () => {
+  // Unexpected rejections must not disclose private packet contents.
+  console.error('Evidence packet verification failed.');
+  process.exitCode = 1;
+});

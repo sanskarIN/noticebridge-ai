@@ -2,7 +2,7 @@
  * Separate from the quote-free editable notebook. Never restore chat answers
  * or claim official authenticity from a packet.
  */
-import { pageCoverage, type Passage, type Role, type SearchIndex } from './pdfChatCore';
+import { pageCoverage, type Role, type SearchIndex } from './pdfChatCore';
 import { serializeCorpusSnapshot, parseCorpusSnapshot, indexCorpusSnapshot } from './pdfChatCorpusSnapshot';
 import { serializeReview, parseReview, reviewCounts, type ReviewEntry, type ReviewStatus } from './pdfChatReviewWorkspace';
 import { passageId } from './pdfChatResearch';
