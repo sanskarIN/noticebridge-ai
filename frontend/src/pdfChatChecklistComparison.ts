@@ -30,6 +30,7 @@ export type RoleComparison = {
   pdf_pin_changed: boolean;
   state_changed: boolean;
   coverage_changed: boolean;
+  source_coverage_metadata_changed: boolean;
   strict_count_changed: boolean;
   omission_count_changed: boolean;
   strict_text: TextDelta;
@@ -58,6 +59,12 @@ type SourceBinding = {
   right_processed_pages: number | null;
   left_limited: boolean | null;
   right_limited: boolean | null;
+  left_missing_pages: number[] | null;
+  right_missing_pages: number[] | null;
+  left_limited_pages: number[] | null;
+  right_limited_pages: number[] | null;
+  left_indexed_fragments: number | null;
+  right_indexed_fragments: number | null;
   changed: boolean;
 };
 type ComparisonSummary = {
@@ -149,25 +156,53 @@ function citationKeys(source: ChecklistSourceResult, kind: ChecklistCitation['ki
 function differs(change: TextDelta): boolean {
   return change.left_only_observations > 0 || change.right_only_observations > 0;
 }
+/** For an all-pages query compare extraction metadata independently of
+ * the coarse coverage state. A physical-page query uses the page's own
+ * availability, limitation and fragment count, not other pages' coverage.
+ * A different PDF hash still invalidates source identity for either route.
+ */
+function coverageMetadata(snapshot: CorpusSnapshot, role: Role, page: number | null): string {
+  const corpus = snapshot.corpora[role];
+  if (!corpus) return encode(null);
+  if (page !== null) {
+    return encode({
+      present: page <= corpus.pageCount,
+      indexed: page <= corpus.processedPages,
+      missing: corpus.missingPages.includes(page),
+      limited: corpus.limitedPages.includes(page),
+      fragments: corpus.passages.filter(row => row.page === page).length,
+    });
+  }
+  return encode({
+    physical_pages: corpus.pageCount,
+    processed_pages: corpus.processedPages,
+    missing_pages: corpus.missingPages,
+    limited_pages: corpus.limitedPages,
+    limited: corpus.limited,
+    fragments: corpus.passages.length,
+  });
+}
 function compareRole(left: ChecklistSourceResult, right: ChecklistSourceResult,
-  leftSnapshot: CorpusSnapshot, rightSnapshot: CorpusSnapshot): RoleComparison {
+  leftSnapshot: CorpusSnapshot, rightSnapshot: CorpusSnapshot, page: number | null): RoleComparison {
   if (left.role !== right.role) return invalid();
   const role = left.role;
   const pdf_pin_changed = leftSnapshot.pins[role] !== rightSnapshot.pins[role];
   const state_changed = left.state !== right.state;
   const coverage_changed = left.coverage !== right.coverage;
+  const source_coverage_metadata_changed = coverageMetadata(leftSnapshot, role, page) !==
+    coverageMetadata(rightSnapshot, role, page);
   const strict_count_changed = left.matchedCount !== right.matchedCount;
   const omission_count_changed = left.omittedStrictMatches !== right.omittedStrictMatches;
   const strict_text = delta(citationKeys(left, 'strict', false), citationKeys(right, 'strict', false));
   const context_text = delta(citationKeys(left, 'context', false), citationKeys(right, 'context', false));
   const strict_locations = delta(citationKeys(left, 'strict', true), citationKeys(right, 'strict', true));
   const context_locations = delta(citationKeys(left, 'context', true), citationKeys(right, 'context', true));
-  const classification = pdf_pin_changed || coverage_changed ? 'coverage_or_source_changed'
+  const classification = pdf_pin_changed || coverage_changed || source_coverage_metadata_changed ? 'coverage_or_source_changed'
     : state_changed || strict_count_changed || omission_count_changed || differs(strict_text) ||
       differs(context_text) || differs(strict_locations) || differs(context_locations)
       ? 'retrieval_observation_changed' : 'unchanged_observation';
   return { role, left: observation(left), right: observation(right), pdf_pin_changed, state_changed,
-    coverage_changed, strict_count_changed, omission_count_changed, strict_text, context_text,
+    coverage_changed, source_coverage_metadata_changed, strict_count_changed, omission_count_changed, strict_text, context_text,
     strict_locations, context_locations, classification };
 }
 function compareQuestion(left: ChecklistResult, right: ChecklistResult,
@@ -176,7 +211,7 @@ function compareQuestion(left: ChecklistResult, right: ChecklistResult,
   const sources = left.sources.map(source => {
     const other = right.sources.find(row => row.role === source.role);
     if (!other) return invalid();
-    return compareRole(source, other, leftSnapshot, rightSnapshot);
+    return compareRole(source, other, leftSnapshot, rightSnapshot, left.physicalPage);
   });
   return { question_id: left.item.id, scope: left.item.scope, physical_page: left.physicalPage,
     nearby_fallback: left.item.includeContext, left_state: left.state, right_state: right.state,
@@ -191,6 +226,9 @@ function bindings(left: CorpusSnapshot, right: CorpusSnapshot): SourceBinding[] 
       left_physical_pages: a?.pageCount ?? null, right_physical_pages: b?.pageCount ?? null,
       left_processed_pages: a?.processedPages ?? null, right_processed_pages: b?.processedPages ?? null,
       left_limited: a?.limited ?? null, right_limited: b?.limited ?? null,
+      left_missing_pages: a ? [...a.missingPages] : null, right_missing_pages: b ? [...b.missingPages] : null,
+      left_limited_pages: a ? [...a.limitedPages] : null, right_limited_pages: b ? [...b.limitedPages] : null,
+      left_indexed_fragments: a?.passages.length ?? null, right_indexed_fragments: b?.passages.length ?? null,
       changed: left.pins[role] !== right.pins[role] ||
         encode(a ?? null) !== encode(b ?? null),
     }];

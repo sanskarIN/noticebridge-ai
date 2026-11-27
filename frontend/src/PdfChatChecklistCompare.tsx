@@ -57,7 +57,8 @@ function RoleDetails({ source }: { source: RoleComparison }) {
     <h5>{roleName[source.role]}</h5>
     <p><strong>{className[source.classification]}</strong></p>
     <p className="chat-muted">PDF fingerprint changed: {source.pdf_pin_changed ? 'Yes' : 'No'}.
-      {' '}Coverage changed: {source.coverage_changed ? 'Yes' : 'No'}.</p>
+      {' '}Coverage state changed: {source.coverage_changed ? 'Yes' : 'No'}.
+      {' '}Scoped extraction metadata changed: {source.source_coverage_metadata_changed ? 'Yes' : 'No'}.</p>
     <div className="chat-table-scroll">
       <table>
         <caption>Source retrieval and coverage observations</caption>
@@ -98,6 +99,9 @@ function QuestionDetails({ row }: { row: QuestionComparison }) {
     {row.sources.map(source => <RoleDetails key={source.role} source={source} />)}
   </article>;
 }
+function pageList(pages: number[] | null): string {
+  return pages === null ? 'Unattached' : pages.length ? pages.join(', ') : 'None recorded';
+}
 function SourceBindings({ comparison }: { comparison: ChecklistComparison }) {
   return <details className="chat-context-results">
     <summary>Exact input fingerprints and source coverage</summary>
@@ -116,6 +120,12 @@ function SourceBindings({ comparison }: { comparison: ChecklistComparison }) {
         <dt>Second PDF SHA-256</dt><dd>{source.right_pdf_sha256 ?? 'Unattached'}</dd>
         <dt>First processed / physical pages</dt><dd>{source.left_processed_pages ?? '—'} / {source.left_physical_pages ?? '—'}</dd>
         <dt>Second processed / physical pages</dt><dd>{source.right_processed_pages ?? '—'} / {source.right_physical_pages ?? '—'}</dd>
+        <dt>First indexed fragments</dt><dd>{source.left_indexed_fragments ?? 'Unattached'}</dd>
+        <dt>Second indexed fragments</dt><dd>{source.right_indexed_fragments ?? 'Unattached'}</dd>
+        <dt>First missing text pages</dt><dd>{pageList(source.left_missing_pages)}</dd>
+        <dt>Second missing text pages</dt><dd>{pageList(source.right_missing_pages)}</dd>
+        <dt>First limited pages</dt><dd>{pageList(source.left_limited_pages)}</dd>
+        <dt>Second limited pages</dt><dd>{pageList(source.right_limited_pages)}</dd>
         <dt>First extraction limited</dt><dd>{source.left_limited === null ? 'Unattached' : source.left_limited ? 'Yes' : 'Not flagged'}</dd>
         <dt>Second extraction limited</dt><dd>{source.right_limited === null ? 'Unattached' : source.right_limited ? 'Yes' : 'Not flagged'}</dd>
       </dl>

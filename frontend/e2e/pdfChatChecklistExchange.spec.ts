@@ -300,3 +300,62 @@ test('comparison rejects changed question routing, wording, missing rows, forged
   await expect(replayChecklistComparison(result.text.replace('"authority_verified": false', '"authority_verified": true'), left, left)).rejects.toThrow();
   await expect(replayChecklistComparison(result.text.trim(), left, left)).rejects.toThrow();
 });
+
+test('coarse coverage equality does not conceal changed extraction metadata', async () => {
+  const left = { report: await report(), snapshot };
+  const sources = {
+    original: { ...corpora.original, pageCount: 3 },
+    revised: corpora.revised,
+  };
+  const rightSnapshot = serializeCorpusSnapshot(pins, sources);
+  const right = {
+    snapshot: rightSnapshot,
+    report: await serializeChecklistReport(index, pins, sources, items, reviews,
+      runChecklist(index, sources, items), true),
+  };
+  const result = await compareChecklistRuns(left, right);
+  const fee = result.comparison.questions.find(row => row.question_id === 'fee')!;
+  expect(fee.sources[0]).toMatchObject({
+    coverage_changed: false, source_coverage_metadata_changed: true,
+    pdf_pin_changed: false, classification: 'coverage_or_source_changed',
+  });
+  const unavailable = result.comparison.questions.find(row => row.question_id === 'unavailable')!;
+  expect(unavailable.sources[0].source_coverage_metadata_changed).toBe(false);
+  expect(unavailable.changed).toBe(false);
+  expect(result.comparison.sources[0]).toMatchObject({ left_physical_pages: 2, right_physical_pages: 3,
+    left_missing_pages: [], right_missing_pages: [], left_limited_pages: [1], right_limited_pages: [1] });
+});
+test('unattached requested role is compared without silently substituting another source', async () => {
+  const left = { report: await report(), snapshot };
+  const sources = { original: corpora.original };
+  const search = buildIndex(corpora.original.passages);
+  const firstPin = { original: pins.original };
+  const right = {
+    snapshot: serializeCorpusSnapshot(firstPin, sources),
+    report: await serializeChecklistReport(search, firstPin, sources, items, reviews,
+      runChecklist(search, sources, items), true),
+  };
+  const compared = (await compareChecklistRuns(left, right)).comparison;
+  const fee = compared.questions[0];
+  expect(fee.left_state).toBe('matches_all_requested_roles');
+  expect(fee.right_state).toBe('some_matches_or_context');
+  expect(fee.sources[1]).toMatchObject({
+    role: 'revised', pdf_pin_changed: true, coverage_changed: true,
+    source_coverage_metadata_changed: true,
+    right: { state: 'source_unattached', coverage: 'unattached', displayed_fragments: 0 },
+    strict_text: { identical_observations: 0, left_only_observations: 1, right_only_observations: 0 },
+  });
+  expect(compared.sources[1]).toMatchObject({ right_pdf_sha256: null, right_missing_pages: null,
+    right_limited_pages: null, right_indexed_fragments: null });
+});
+test('nearby-group comparison preserves group boundaries and does not turn context leads into strict matches', async () => {
+  const left = { report: await report(), snapshot };
+  const changed = rows.map(row => row === rows[2] ? { ...row, text: 'Residence certificate requested' } : row);
+  const right = await comparisonFixture(changed);
+  const source = (await compareChecklistRuns(left, right)).comparison.questions
+    .find(row => row.question_id === 'context')!.sources[0];
+  expect(source.left.state).toBe('context_leads');
+  expect(source.right.state).toBe('context_leads');
+  expect(source.strict_text).toEqual({ identical_observations: 0, left_only_observations: 0, right_only_observations: 0 });
+  expect(source.context_text).toEqual({ identical_observations: 0, left_only_observations: 1, right_only_observations: 1 });
+});
