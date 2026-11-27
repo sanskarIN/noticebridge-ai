@@ -490,3 +490,33 @@ or semantic content of two notices is unchanged. A snapshot can be
 replayed without the original PDF file, but its extraction and claimed PDF
 fingerprint then cannot be independently authenticated against actual PDF
 bytes. Neither mode establishes official authority.
+
+### Preserve the exact snapshot with your checklist
+
+After running the checklist, use **Export matching native snapshot** in
+the checklist file exchange. This action has its own consent checkbox.
+Approving a limited report export does not approve the full snapshot.
+The snapshot export reconstructs the current report to ensure the
+snapshot and displayed results agree before producing a download.
+
+For an offline review, retain the canonical report and snapshot together
+in a private local directory. A report includes the SHA-256 of the exact
+snapshot bytes. A changed question or personal annotation requires a new
+report; the same unchanged native snapshot can be reused. Changing
+the attached PDF bytes or extraction changes the required snapshot.
+
+The browser comparison panel does not require live PDF attachments and
+does not show excerpts from uploaded snapshots. It displays identifiers,
+counts, source bindings, and extraction coverage only. To inspect an
+actual PDF page, use the original chat checklist with the matching PDF
+attached. Keep that distinction when sharing aggregate review results.
+
+For an attached source, a different extraction coverage can be hidden
+behind the same coarse status (for example, two runs both marked limited).
+The comparison separately checks scoped extraction metadata. An all-pages
+query compares page counts, missing and limited pages, the limit flag,
+and indexed fragment counts; a physical-page query checks availability,
+limitations, and indexed fragments of that specific page. A changed
+source fingerprint is always significant for any query requesting that
+role. These counts and states are retrieval observations, not a semantic
+diff or a certification of text completeness.

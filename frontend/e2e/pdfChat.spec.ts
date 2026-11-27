@@ -1529,3 +1529,115 @@ test('checklist export requires consent and report replay refuses changed PDF by
   await expect(panel.getByRole('alert')).toContainText('Report rejected');
   await expect(panel.getByRole('region', { name: 'Checklist import confirmation' })).toHaveCount(0);
 });
+
+test('full checklist snapshot has independent consent and replays a downloaded report without a live PDF', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500', 'Unrelated confidential fixture line']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  const panel = await checklistPanel(page);
+  const snapshotButton = panel.getByRole('button', { name: 'Export matching native snapshot' });
+  const reportButton = panel.getByRole('button', { name: 'Export private checklist report' });
+  await panel.getByLabel('Checklist question', { exact: true }).fill('Application fee?');
+  await panel.getByRole('button', { name: 'Add checklist question' }).click();
+  await panel.getByRole('button', { name: 'Run question checklist' }).click();
+  await panel.getByLabel('I approve exporting private source excerpts, questions and saved notes.').check();
+  await expect(reportButton).toBeEnabled();
+  await expect(snapshotButton).toBeDisabled();
+  const [reportDownload] = await Promise.all([page.waitForEvent('download'), reportButton.click()]);
+  const reportText = await readFile((await reportDownload.path())!, 'utf8');
+  expect(reportText).not.toContain('Unrelated confidential fixture line');
+  await panel.getByLabel('I approve exporting the full indexed native text and source fingerprints.').check();
+  await expect(snapshotButton).toBeEnabled();
+  const [snapshotDownload] = await Promise.all([page.waitForEvent('download'), snapshotButton.click()]);
+  const snapshotText = await readFile((await snapshotDownload.path())!, 'utf8');
+  expect(snapshotText).toContain('Unrelated confidential fixture line');
+  expect(JSON.parse(reportText).snapshot_sha256).toBe(createHash('sha256').update(snapshotText).digest('hex'));
+  await page.reload();
+  const comparison = page.locator('details.chat-checklist-comparison');
+  await comparison.locator('summary').click();
+  for (const side of ['First', 'Second']) {
+    await comparison.getByLabel(side + ' checklist report JSON').setInputFiles({
+      name: 'report.json', mimeType: 'application/json', buffer: Buffer.from(reportText),
+    });
+    await comparison.getByLabel(side + ' native snapshot JSON').setInputFiles({
+      name: 'snapshot.json', mimeType: 'application/json', buffer: Buffer.from(snapshotText),
+    });
+  }
+  await comparison.getByRole('button', { name: 'Compare saved checklists' }).click();
+  const result = comparison.getByRole('region', { name: 'Saved checklist comparison results' });
+  await expect(result.getByRole('heading', { name: 'Both checklist runs replayed' })).toBeVisible();
+  await expect(result.getByText('No question comparisons match this filter.')).toBeVisible();
+  await result.getByLabel('Show only different observations').uncheck();
+  await expect(result.getByRole('article', { name: 'Observation comparison question-1' })).toBeVisible();
+  await expect(result.locator('blockquote')).toHaveCount(0);
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});
+test('checklist restores exact report after reattachment and never restores before explicit confirmation', async ({ page }) => {
+  await page.goto('/?view=chat');
+  const lines = ['Application fee: INR 500', 'Application deadline: 19 December 2026'];
+  await attach(page, 'Original / first PDF', lines);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  let panel = await checklistPanel(page);
+  await panel.getByLabel('Checklist question', { exact: true }).fill('Application fee?');
+  await panel.getByRole('button', { name: 'Add checklist question' }).click();
+  await panel.getByRole('button', { name: 'Run question checklist' }).click();
+  await panel.getByLabel('Review status for question-1').selectOption('needs_followup');
+  await panel.getByLabel('Personal note for question-1').fill('Read official publication');
+  await panel.getByRole('button', { name: 'Save note for question-1' }).click();
+  await panel.getByLabel('I approve exporting private source excerpts, questions and saved notes.').check();
+  const [download] = await Promise.all([page.waitForEvent('download'),
+    panel.getByRole('button', { name: 'Export private checklist report' }).click()]);
+  const report = await readFile((await download.path())!);
+  await page.reload();
+  await page.getByLabel('Original / first PDF', { exact: true }).setInputFiles({
+    name: 'renamed-but-identical.pdf', mimeType: 'application/pdf', buffer: pdf(lines),
+  });
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  panel = await checklistPanel(page);
+  await panel.getByLabel('Verify and restore checklist report').setInputFiles({
+    name: 'report.json', mimeType: 'application/json', buffer: report,
+  });
+  await expect(panel.getByRole('region', { name: 'Checklist import confirmation' })).toBeVisible();
+  await expect(panel.getByText('0/40 checklist questions')).toBeVisible();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Apply imported checklist' }).click();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(1);
+  await expect(panel.getByLabel('Review status for question-1')).toHaveValue('needs_followup');
+  await expect(panel.getByLabel('Personal note for question-1')).toHaveValue('Read official publication');
+  await expect(panel.locator('blockquote')).toHaveText('Application fee: INR 500');
+  await expect(panel.getByRole('button', { name: 'Export private checklist report' })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Export matching native snapshot' })).toBeDisabled();
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});
+test('preset and pagination retain all questions and can be filtered without changing the plan', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await page.getByRole('button', { name: 'Try fictional notices' }).click();
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  const panel = await checklistPanel(page);
+  await panel.getByLabel('Checklist preset').selectOption('application');
+  await panel.getByRole('button', { name: 'Add preset questions' }).click();
+  await expect(panel.getByText('9/40 checklist questions')).toBeVisible();
+  await panel.getByRole('button', { name: 'Add preset questions' }).click();
+  await expect(panel.getByText('9/40 checklist questions')).toBeVisible();
+  await panel.getByRole('button', { name: 'Run question checklist' }).click();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(6);
+  await expect(panel.getByText('9 matching checklist results · page 1 of 2')).toBeVisible();
+  await panel.getByRole('button', { name: 'Next checklist results' }).click();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(3);
+  await expect(panel.getByText('9 matching checklist results · page 2 of 2')).toBeVisible();
+  await panel.getByLabel('Filter checklist questions').fill('fee');
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(1);
+  await expect(panel.getByText('9/40 checklist questions')).toBeVisible();
+  await panel.getByLabel('Filter checklist questions').fill('not-a-question');
+  await expect(panel.getByText('No checklist questions match these filters.')).toBeVisible();
+  await panel.getByLabel('Filter checklist questions').fill('');
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(6);
+  await panel.getByRole('button', { name: 'Clear checklist', exact: true }).click();
+  await panel.getByRole('button', { name: 'Keep checklist' }).click();
+  await expect(panel.getByText('9/40 checklist questions')).toBeVisible();
+  await panel.getByRole('button', { name: 'Clear checklist', exact: true }).click();
+  await panel.getByRole('button', { name: 'Confirm clear checklist' }).click();
+  await expect(panel.getByText('0/40 checklist questions')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Run question checklist' })).toBeDisabled();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(0);
+});

@@ -154,6 +154,7 @@ export default function PdfChatChecklist({ files, index, corpora, attached, onIn
   const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
   const [templateConsent, setTemplateConsent] = useState(false);
   const [reportConsent, setReportConsent] = useState(false);
+  const [snapshotConsent, setSnapshotConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingImport | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -238,6 +239,23 @@ export default function PdfChatChecklist({ files, index, corpora, attached, onIn
       setFeedback({ error: false, message: 'Private checklist report exported locally. It contains source text and personal notes.' });
     } catch {
       if (token === generation.current) setFeedback({ error: true, message: 'Report export failed. Run the current checklist and check the exact attached sources.' });
+    } finally { if (token === generation.current) setBusy(false); }
+  }
+  async function exportSnapshot() {
+    if (!snapshotConsent || busy || !results) return;
+    const token = ++generation.current;
+    setBusy(true); setPending(null); setFeedback(null);
+    try {
+      const pins = await fingerprintSources(files);
+      const text = serializeCorpusSnapshot(pins, corpora);
+      // Reconstruct the current report as well: the exported snapshot must
+      // be suitable for exact replay of the currently displayed results.
+      await serializeChecklistReport(index, pins, corpora, items, reviews, results, true);
+      if (token !== generation.current) return;
+      download(text, 'noticebridge-private-checklist-snapshot.json');
+      setFeedback({ error: false, message: 'Full native snapshot exported locally. Keep it private with the matching canonical report.' });
+    } catch {
+      if (token === generation.current) setFeedback({ error: true, message: 'Snapshot export failed. Run the current checklist and check the source index.' });
     } finally { if (token === generation.current) setBusy(false); }
   }
   async function importFile(event: ChangeEvent<HTMLInputElement>, kind: 'template' | 'report') {
@@ -414,6 +432,15 @@ export default function PdfChatChecklist({ files, index, corpora, attached, onIn
         <button type="button" className="chat-button" disabled={!results || !reportConsent}
           onClick={() => void exportReport('csv')}>Export checklist CSV</button>
         <p className="chat-muted">HTML and CSV are reading copies only. Keep the canonical JSON and exact native snapshot for replay.</p>
+        <div className="chat-context-results" aria-label="Full native snapshot export">
+          <h4>Keep a matching snapshot for offline replay</h4>
+          <p className="chat-note">A full native snapshot includes every indexed text fragment and layout hints, not just passages shown in the checklist.
+            It may expose significantly more private information than the report. Export only if you need independent offline replay.</p>
+          <label className="chat-embedding-consent"><input type="checkbox" checked={snapshotConsent}
+            onChange={event => setSnapshotConsent(event.target.checked)} /> I approve exporting the full indexed native text and source fingerprints.</label>
+          <button type="button" className="chat-button" disabled={!results || !snapshotConsent}
+            onClick={() => void exportSnapshot()}>Export matching native snapshot</button>
+        </div>
         <label className="chat-session-file">Verify and restore checklist report
           <input type="file" accept=".json,application/json" onChange={event => void importFile(event, 'report')} />
         </label>

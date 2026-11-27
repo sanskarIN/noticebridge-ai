@@ -297,3 +297,54 @@ test('reusable template imports require confirmation, never import old notes, an
   await expect(panel.getByRole('alert')).toContainText('Template rejected');
   await expect(panel.locator('.chat-checklist-result')).toHaveCount(3);
 });
+
+test('comparison pagination filters observations without changing exported order or content', async ({ page }) => {
+  const panel = await openComparison(page);
+  const selected: ChecklistPlan = [
+    ...plan,
+    ...Array.from({ length: 8 }, (_, i) => ({
+      id: 'additional-' + (i + 1), question: 'Unlisted requirement ' + (i + 1) + '?',
+      scope: 'original' as const, includeContext: false,
+    })),
+  ];
+  const left = await fixture(350, selected), right = await fixture(250, selected);
+  await selectPair(page, 'First', left);
+  await selectPair(page, 'Second', right);
+  await panel.getByRole('button', { name: 'Compare saved checklists' }).click();
+  const results = panel.getByRole('region', { name: 'Saved checklist comparison results' });
+  await expect(results.locator('.chat-checklist-result')).toHaveCount(2);
+  await results.getByLabel('Show only different observations').uncheck();
+  await expect(results.locator('.chat-checklist-result')).toHaveCount(8);
+  await expect(results.getByText('11 question comparisons · page 1 of 2')).toBeVisible();
+  await results.getByRole('button', { name: 'Next comparison page' }).click();
+  await expect(results.locator('.chat-checklist-result')).toHaveCount(3);
+  await expect(results.getByText('11 question comparisons · page 2 of 2')).toBeVisible();
+  await results.getByLabel('I approve exporting private comparison identifiers and fingerprints.').check();
+  const [download] = await Promise.all([page.waitForEvent('download'),
+    results.getByRole('button', { name: 'Export checklist comparison' }).click()]);
+  const text = await readFile((await download.path())!, 'utf8');
+  expect(JSON.parse(text).questions.map((row: { question_id: string }) => row.question_id))
+    .toEqual(selected.map(row => row.id));
+  expect(text).toBe((await compareChecklistRuns(left, right)).text);
+  await results.getByLabel('Show only different observations').check();
+  await expect(results.getByText('2 question comparisons · page 1 of 1')).toBeVisible();
+});
+test('oversized local input is rejected before reading or comparison', async ({ page }) => {
+  const panel = await openComparison(page);
+  const left = await fixture(), right = await fixture(250);
+  await selectPair(page, 'First', left);
+  await selectPair(page, 'Second', right);
+  await panel.getByRole('button', { name: 'Compare saved checklists' }).click();
+  await expect(panel.getByRole('region', { name: 'Saved checklist comparison results' })).toBeVisible();
+  await panel.getByLabel('First checklist report JSON').setInputFiles({
+    name: 'large.json', mimeType: 'application/json', buffer: Buffer.alloc(4 * 1024 * 1024 + 1, 32),
+  });
+  await expect(panel.getByRole('alert')).toContainText('exceeds the input size limit');
+  await expect(panel.getByRole('button', { name: 'Compare saved checklists' })).toBeDisabled();
+  await expect(panel.getByRole('region', { name: 'Saved checklist comparison results' })).toHaveCount(0);
+  await panel.getByLabel('First checklist report JSON').setInputFiles({
+    name: 'empty.json', mimeType: 'application/json', buffer: Buffer.alloc(0),
+  });
+  await expect(panel.getByRole('alert')).toContainText('empty or exceeds');
+  await expect(panel.getByRole('button', { name: 'Compare saved checklists' })).toBeDisabled();
+});
