@@ -1998,3 +1998,60 @@ test('compound application timeline retrieves start date and deadline without co
   await expect(answers.nth(1).locator('blockquote')).toHaveText('Application deadline: 19 December 2026');
   await expect(answers.nth(2).locator('blockquote')).toHaveText('Application fee: INR 500');
 });
+
+test('local model discovery is read-only and settings persist across turns without reusing inference approval', async ({ page }) => {
+  const calls: string[] = [];
+  const inventory = {
+    format: 'noticebridge-local-model-inventory', version: 1,
+    runtime_reported_only: true, authority_verified: false, reported_count: 3, excluded_count: 1,
+    models: [{ name: 'answer:latest', digest: 'a'.repeat(64) }, { name: 'embedding:latest', digest: 'b'.repeat(64) }],
+  };
+  await page.route('**/api/chat/models', async route => {
+    const request = route.request();
+    calls.push(request.method());
+    expect(request.method()).toBe('GET');
+    expect(request.postData()).toBeNull();
+    expect(request.headers()['x-noticebridge-local-ai']).toBe('1');
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(inventory, null, 2) + '\n' });
+  });
+  await page.route('**/api/chat/pipeline', async route => {
+    calls.push('inference');
+    await route.abort();
+  });
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500', 'Application deadline: 19 December 2026']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  await ask(page, 'Application fee?');
+  await page.getByText('Experimental combined local AI workflow', { exact: true }).click();
+  const local = page.getByRole('region', { name: 'Direct local AI workflow' });
+  const run = local.getByRole('button', { name: 'Run direct local AI workflow' });
+  const consent = local.getByLabel('I approve sending scoped private text to the loopback AI backend.');
+  await expect(run).toBeDisabled();
+  expect(calls).toEqual([]);
+  await local.getByRole('button', { name: 'Read installed local models' }).click();
+  await local.getByLabel('Select installed embedding model').selectOption('embedding:latest');
+  await local.getByLabel('Select installed answer model').selectOption('answer:latest');
+  await expect(local.getByLabel('Local embedding model digest')).toHaveValue('b'.repeat(64));
+  await expect(local.getByLabel('Local answer model digest')).toHaveValue('a'.repeat(64));
+  await expect(consent).not.toBeChecked();
+  await expect(run).toBeDisabled();
+  await consent.check();
+  await expect(run).toBeEnabled();
+  await local.getByLabel('Local answer model digest').fill('c'.repeat(64));
+  await expect(consent).not.toBeChecked();
+  await expect(run).toBeDisabled();
+  await local.getByLabel('Select installed answer model').selectOption('answer:latest');
+  await consent.check();
+  await ask(page, 'Application deadline?');
+  await page.getByText('Experimental combined local AI workflow', { exact: true }).click();
+  await expect(local.getByLabel('Local embedding model tag')).toHaveValue('embedding:latest');
+  await expect(local.getByLabel('Local embedding model digest')).toHaveValue('b'.repeat(64));
+  await expect(local.getByLabel('Local answer model tag')).toHaveValue('answer:latest');
+  await expect(local.getByLabel('Local answer model digest')).toHaveValue('a'.repeat(64));
+  await expect(consent).not.toBeChecked();
+  await expect(run).toBeDisabled();
+  await local.getByRole('button', { name: 'Clear local model settings' }).click();
+  await expect(local.getByLabel('Local embedding model tag')).toHaveValue('');
+  await expect(local.getByLabel('Local answer model digest')).toHaveValue('');
+  expect(calls).toEqual(['GET']);
+});

@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import type { Answer, Passage, SearchIndex } from './pdfChatCore';
 import { isLocalChatOrigin } from './pdfChatLocalTransport';
-import { requestLocalPipeline, validLocalPipelineConfig, type LocalPipelineConfig } from './pdfChatLocalPipeline';
+import { requestLocalPipeline, validLocalPipelineConfig, emptyLocalPipelineConfig, type LocalPipelineConfig } from './pdfChatLocalPipeline';
+import { requestLocalModelInventory, inventoryChoice, selectedInventoryTag, type LocalModelInventory } from './pdfChatModelInventory';
 import { requestHash } from './pdfChatEmbeddingBridge';
 import { MAX_PIPELINE_RESULT_BYTES, preparePipeline, reviewPipeline,
   type PipelineRequest, type PipelineReview } from './pdfChatPipeline';
 
-export default function PdfChatPipeline({ index, answer, onInspect }: {
+export default function PdfChatPipeline({ index, answer, onInspect, config, setConfig }: {
   index: SearchIndex; answer: Answer; onInspect: (source: Passage) => void;
+  config: LocalPipelineConfig; setConfig: Dispatch<SetStateAction<LocalPipelineConfig>>;
 }) {
   const [mode, setMode] = useState<'full' | 'shortlist'>('shortlist');
   const [consent, setConsent] = useState(false);
@@ -16,9 +18,9 @@ export default function PdfChatPipeline({ index, answer, onInspect }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [localConsent, setLocalConsent] = useState(false);
-  const [config, setConfig] = useState<LocalPipelineConfig>({
-    embeddingModel: '', embeddingDigest: '', answerModel: '', answerDigest: '',
-  });
+  const [inventory, setInventory] = useState<LocalModelInventory | null>(null);
+  const [inventoryRunning, setInventoryRunning] = useState(false);
+  const [inventoryError, setInventoryError] = useState('');
   const [localSummary, setLocalSummary] = useState<string | null>(null);
   const [localRunning, setLocalRunning] = useState(false);
   const controller = useRef<AbortController | null>(null);
@@ -27,6 +29,26 @@ export default function PdfChatPipeline({ index, answer, onInspect }: {
   useEffect(() => () => { epoch.current++; controller.current?.abort(); }, []);
   function reset() {
     epoch.current++; setPending(null); setReview(null); setError(''); setLocalSummary(null);
+  }
+  async function loadInventory() {
+    if (!loopback || busy) return;
+    const token = ++epoch.current;
+    const abort = new AbortController();
+    controller.current = abort;
+    setBusy(true); setInventoryRunning(true); setInventoryError(''); setInventory(null);
+    try {
+      const result = await requestLocalModelInventory(abort.signal, true);
+      if (token === epoch.current) setInventory(result);
+    } catch {
+      if (token === epoch.current) setInventoryError('Unable to read the local model inventory. Check the opt-in backend and installed runtime.');
+    } finally {
+      if (token === epoch.current) { setBusy(false); setInventoryRunning(false); controller.current = null; }
+    }
+  }
+  function cancelInventory() {
+    epoch.current++; controller.current?.abort(); controller.current = null;
+    setBusy(false); setInventoryRunning(false); setInventory(null);
+    setInventoryError('Inventory request discarded.');
   }
   async function runLocal() {
     if (!loopback || !localConsent || busy || !validLocalPipelineConfig(config)) return;
@@ -121,7 +143,37 @@ export default function PdfChatPipeline({ index, answer, onInspect }: {
       <p className="chat-note">Requires NOTICEBRIDGE_ENABLE_LOCAL_CHAT_AI=1 on the trusted loopback backend.
         Scoped private question and fragment text will be sent to that backend, which invokes the
         installed local model runtime. The browser cannot attest how the runtime processes data.
-        Configuration is kept only in this mounted panel.</p>
+        Model settings are kept in memory for this chat page only. Each question requires fresh consent.</p>
+      <section className="chat-context-results" aria-label="Installed local model inventory">
+        <h5>Choose installed models</h5>
+        <p className="chat-muted">Reading the inventory sends no question or document text. It returns only
+          runtime-reported local model tags and digests. This does not verify their capabilities or offline behavior.</p>
+        <div className="chat-toolbar">
+          <button type="button" className="chat-button" disabled={busy}
+            onClick={() => void loadInventory()}>Read installed local models</button>
+          {inventoryRunning && <button type="button" className="chat-button" onClick={cancelInventory}>Discard inventory request</button>}
+        </div>
+        {inventoryError && <p role="alert" className="chat-error">{inventoryError}</p>}
+        {inventory && <>
+          <p className="chat-muted">{inventory.models.length} eligible reported tags; {inventory.excluded_count} excluded
+            because their metadata was invalid, ambiguous or remote.</p>
+          {inventory.models.length === 0 && <p>No eligible local tags were reported. You can still enter a tag and digest manually.</p>}
+          {inventory.models.length > 0 && (['embedding', 'answer'] as const).map(purpose => <label
+            className="chat-overview-filter" key={purpose}>Select installed {purpose} model
+            <select disabled={busy} value={selectedInventoryTag(inventory, config, purpose)}
+              onChange={event => {
+                const tag = event.target.value;
+                if (!tag) return;
+                reset();
+                setConfig(previous => inventoryChoice(inventory, previous, purpose, tag));
+                setLocalConsent(false);
+              }}>
+              <option value="" disabled>Choose an installed tag</option>
+              {inventory.models.map(model => <option key={model.name} value={model.name}>{model.name}</option>)}
+            </select>
+          </label>)}
+        </>}
+      </section>
       {([
         ['embeddingModel', 'Local embedding model tag', 96],
         ['embeddingDigest', 'Local embedding model digest', 64],
@@ -131,8 +183,12 @@ export default function PdfChatPipeline({ index, answer, onInspect }: {
         {label}<input value={config[key]} maxLength={maximum} autoComplete="off" spellCheck={false}
           disabled={busy} onChange={event => { reset(); setConfig(previous => ({
             ...previous, [key]: event.target.value,
-          })); }} />
+          })); setLocalConsent(false); }} />
       </label>)}
+      <button type="button" className="chat-button" disabled={busy ||
+        !Object.values(config).some(Boolean)} onClick={() => {
+        reset(); setConfig(emptyLocalPipelineConfig()); setLocalConsent(false);
+      }}>Clear local model settings</button>
       <label className="chat-embedding-consent"><input type="checkbox" checked={localConsent}
         disabled={busy} onChange={event => { reset(); setLocalConsent(event.target.checked); }} />
         I approve sending scoped private text to the loopback AI backend.</label>

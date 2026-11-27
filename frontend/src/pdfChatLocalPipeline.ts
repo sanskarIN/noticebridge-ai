@@ -9,6 +9,9 @@ export type LocalPipelineConfig = {
   answerModel: string;
   answerDigest: string;
 };
+export function emptyLocalPipelineConfig(): LocalPipelineConfig {
+  return { embeddingModel: '', embeddingDigest: '', answerModel: '', answerDigest: '' };
+}
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}(?:\/[A-Za-z0-9][A-Za-z0-9_.-]{0,63})?:[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const SHA = /^[a-f0-9]{64}$/;
 export function validLocalPipelineConfig(config: LocalPipelineConfig): boolean {

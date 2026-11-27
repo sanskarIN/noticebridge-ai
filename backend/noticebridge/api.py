@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .body_limit import FRONTEND_ORIGINS, CompareBodyLimit
 from .chat_embeddings import EmbeddingError, validate_model
+from .chat_model_inventory import MAX_INVENTORY_BYTES, list_local_models
 from .chat_ocr_cli import run_ocr_review
 from .chat_ocr_protocol import OcrReviewError, encode_report, validate_selection
 from .chat_pipeline import MAX_REQUEST_BYTES as MAX_PIPELINE_REQUEST_BYTES
@@ -142,6 +143,24 @@ async def chat_ocr(
         ) from exc
     finally:
         await source.close()
+
+
+@app.get("/api/chat/models")
+async def chat_models(request: Request) -> Response:
+    """Read-only local inventory; the ASGI guard requires explicit approval."""
+    if request.url.query:
+        raise HTTPException(status_code=400, detail="Inventory does not accept query parameters")
+    if model_slots.locked():
+        raise HTTPException(status_code=503, detail="Local AI is already processing a request")
+    async with model_slots:
+        try:
+            result = await list_local_models(consent=True)
+            encoded = encode_pipeline(result)
+            if len(encoded) > MAX_INVENTORY_BYTES:
+                raise EmbeddingError("Inventory response exceeds its size limit.")
+        except EmbeddingError as exc:
+            raise HTTPException(status_code=503, detail="Local model inventory failed") from exc
+    return Response(content=encoded, media_type="application/json")
 
 
 @app.post("/api/chat/pipeline")

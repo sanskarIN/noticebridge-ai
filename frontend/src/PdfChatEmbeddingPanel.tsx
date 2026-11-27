@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 import type { Answer, Passage, SearchIndex } from './pdfChatCore';
 import PdfChatSelectionPanel from './PdfChatSelectionPanel';
 import PdfChatExtractivePanel from './PdfChatExtractivePanel';
 import PdfChatPipeline from './PdfChatPipeline';
+import type { LocalPipelineConfig } from './pdfChatLocalPipeline';
 import { MAX_RANK_FILE, prepareExperiment, requestHash, reviewRanking, type Experiment, type CandidateReview } from './pdfChatEmbeddingBridge';
 
 function download(text: string) {
@@ -13,8 +14,9 @@ function download(text: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export default function PdfChatEmbeddingPanel({ index, answer, onInspect }: {
+export default function PdfChatEmbeddingPanel({ index, answer, onInspect, config, setConfig }: {
   index: SearchIndex; answer: Answer; onInspect: (passage: Passage) => void;
+  config: LocalPipelineConfig; setConfig: Dispatch<SetStateAction<LocalPipelineConfig>>;
 }) {
   const generation = useRef(0);
   const [approved, setApproved] = useState(false);
@@ -130,6 +132,6 @@ export default function PdfChatEmbeddingPanel({ index, answer, onInspect }: {
       [row.passage.role, row.passage.page, row.passage.ordinal])) : 'baseline'}
       index={index} answer={answer} candidates={review} onInspect={onInspect} />
   </details>
-  <PdfChatPipeline index={index} answer={answer} onInspect={onInspect} />
+  <PdfChatPipeline index={index} answer={answer} onInspect={onInspect} config={config} setConfig={setConfig} />
   </>;
 }

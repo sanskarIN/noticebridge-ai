@@ -27,6 +27,7 @@ import type { ChatCorpora } from './pdfChatEvidenceReport';
 import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
+import { emptyLocalPipelineConfig, type LocalPipelineConfig } from './pdfChatLocalPipeline';
 import PdfChatDirectAnswer from './PdfChatDirectAnswer';
 import PdfChatCrossPage from './PdfChatCrossPage';
 import PdfChatSearchRecovery from './PdfChatSearchRecovery';
@@ -101,6 +102,7 @@ export default function PdfChat() {
   const [scope, setScope] = useState<ChatScope>('original');
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [localModelConfig, setLocalModelConfig] = useState<LocalPipelineConfig>(emptyLocalPipelineConfig);
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[]>([]);
   const [conversationEpoch, setConversationEpoch] = useState(0);
   const [reuse, setReuse] = useState(false);
@@ -503,7 +505,8 @@ export default function PdfChat() {
         </form>
         {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel
           key={'models:' + generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
-          index={index} answer={turns.at(-1)!.answers[0]} onInspect={inspectNative} />}
+          index={index} answer={turns.at(-1)!.answers[0]} onInspect={inspectNative}
+          config={localModelConfig} setConfig={setLocalModelConfig} />}
         {!indexing && attached.length > 0 && <PdfChatSessionPanel
           key={'session:' + generation.current.original + ':' + generation.current.revised}
           files={files} index={index} turns={turns} onRestore={restored => {

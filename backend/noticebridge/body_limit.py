@@ -20,6 +20,7 @@ MAX_COMPARE_BODY_BYTES = 2 * MAX_UPLOAD_BYTES + 1024 * 1024
 MAX_CHAT_OCR_BODY_BYTES = MAX_UPLOAD_BYTES + 1024 * 1024
 CHAT_OCR_PATH = "/api/chat/ocr"
 CHAT_PIPELINE_PATH = "/api/chat/pipeline"
+CHAT_MODELS_PATH = "/api/chat/models"
 MAX_CHAT_PIPELINE_BODY_BYTES = 3 * 1024 * 1024
 IN_MEMORY_SPOOL_BYTES = 1024 * 1024
 REPLAY_CHUNK_BYTES = 64 * 1024
@@ -111,6 +112,23 @@ class CompareBodyLimit:
         await response(scope, receive, send)
 
     async def __call__(self, scope, receive, send) -> None:
+        # Read-only inventory has no upload body and must pass the same
+        # local host/origin/peer/approval checks before contacting the runtime.
+        if (
+            scope["type"] == "http"
+            and scope.get("path") == CHAT_MODELS_PATH
+            and scope.get("method", "").upper() == "GET"
+        ):
+            if not local_chat_ai_enabled():
+                await self._reject(scope, receive, send, status=404, detail="Local AI is disabled")
+                return
+            if not _permitted_local_context(scope, b"x-noticebridge-local-ai"):
+                await self._reject(
+                    scope, receive, send, status=403, detail="Local AI context denied",
+                )
+                return
+            await self.app(scope, receive, send)
+            return
         if (
             scope["type"] != "http"
             or scope.get("path") not in ("/api/compare", CHAT_OCR_PATH, CHAT_PIPELINE_PATH)

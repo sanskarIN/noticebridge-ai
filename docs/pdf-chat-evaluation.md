@@ -855,3 +855,30 @@ context. The portable question plan stores the original user input,
 not generated answer text. Additional exact single-field templates cover
 explicit fee amounts, registration opening/closing, selection procedures
 and other notice-specific questions without dropping qualifiers.
+
+### Local model configuration without repeated digest entry
+
+On a supported local origin, the optional combined AI panel now offers a
+read-only installed model inventory. Choose **Read installed local models**
+explicitly. The browser sends only a GET request with the local approval
+header, not PDF bytes, excerpts or questions. The backend requires the
+existing local AI opt-in, checks the loopback peer and Host/origin policy,
+and contacts only the fixed local Ollama tags endpoint. It rejects
+redirects, compressed/oversized responses and duplicate JSON keys,
+bounds the request time, and does not pull or run a model.
+
+Only unambiguous validated tag/digest pairs are returned. Remote-marked,
+cloud-named, invalid and duplicate tags are excluded, without exposing
+their raw metadata. The reported inventory does not prove compatibility
+with embeddings or generation, authenticity, or offline behavior.
+The user explicitly selects embedding and answer tags (or enters exact
+values manually). No selection is made automatically. Inference still
+checks the installed digest and metadata before and after processing.
+
+The selected model configuration is kept only in the current mounted chat
+page, including across questions and PDF replacements; it is not written
+to persistent browser storage or exported into the question plan.
+Every new question and model edit requires fresh approval before sending
+private text to the local inference endpoint. Use **Clear local model
+settings** to remove the remembered tags and digests. Model listing
+does not approve inference.
