@@ -16,7 +16,8 @@
     "verify:packet": "vite build --ssr evaluation/verifyPacket.ts --outDir .evaluation-build && node .evaluation-build/verifyPacket.js",
     "agree:retrieval": "vite build --ssr evaluation/agree.ts --outDir .evaluation-build && node .evaluation-build/agree.js",
     "reconcile:retrieval": "vite build --ssr evaluation/reconcile.ts --outDir .evaluation-build && node .evaluation-build/reconcile.js",
-    "qualify:retrieval": "vite build --ssr evaluation/qualify.ts --outDir .evaluation-build && node .evaluation-build/qualify.js"
+    "qualify:retrieval": "vite build --ssr evaluation/qualify.ts --outDir .evaluation-build && node .evaluation-build/qualify.js",
+    "verify:checklist": "vite build --ssr evaluation/verifyChecklist.ts --outDir .evaluation-build && node .evaluation-build/verifyChecklist.js"
   },
   "dependencies": {
     "react": "^19.0.0",

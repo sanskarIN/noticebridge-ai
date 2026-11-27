@@ -9,6 +9,8 @@ import { addChecklistPreset, appendChecklist, carryChecklistReviews,
   MAX_CHECKLIST_ITEMS, MAX_CHECKLIST_NOTE, type ChecklistCoverage, type ChecklistItem,
   type ChecklistPlan, type ChecklistResult, type ChecklistResultState, type ChecklistReview,
   type ChecklistReviewStatus, type ChecklistSourceResult, type SourceMatchState } from './pdfChatChecklist';
+import { serializeCorpusSnapshot } from './pdfChatCorpusSnapshot';
+import { prepareChecklistReadingCopy } from './pdfChatChecklistReadingCopy';
 import { emptyChecklistFromTemplate, readChecklistFile, serializeChecklistReport,
   serializeChecklistTemplate, verifyAttachedChecklistReport } from './pdfChatChecklistExchange';
 
@@ -49,8 +51,8 @@ type PendingImport = {
 };
 type Feedback = { error: boolean; message: string };
 
-function download(text: string, name: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+function download(text: string, name: string, type = 'application/json') {
+  const url = URL.createObjectURL(new Blob([text], { type }));
   const link = document.createElement('a');
   link.href = url; link.download = name;
   document.body.append(link); link.click(); link.remove();
@@ -221,15 +223,18 @@ export default function PdfChatChecklist({ files, index, corpora, attached, onIn
       setFeedback({ error: false, message: 'Question template exported without PDF fingerprints, evidence or review notes.' });
     } catch { setFeedback({ error: true, message: 'Template export failed.' }); }
   }
-  async function exportReport() {
+  async function exportReport(format: 'json' | 'html' | 'csv' = 'json') {
     if (!reportConsent || busy || !results) return;
     const token = ++generation.current;
     setBusy(true); setPending(null); setFeedback(null);
     try {
-      const text = await serializeChecklistReport(index, await fingerprintSources(files), corpora,
-        items, reviews, results, true);
+      const pins = await fingerprintSources(files);
+      const report = await serializeChecklistReport(index, pins, corpora, items, reviews, results, true);
+      const text = format === 'json' ? report : (await prepareChecklistReadingCopy(report,
+        serializeCorpusSnapshot(pins, corpora), format)).text;
       if (token !== generation.current) return;
-      download(text, 'noticebridge-private-question-checklist.json');
+      download(text, 'noticebridge-private-question-checklist.' + format,
+        format === 'html' ? 'text/html;charset=utf-8' : format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json');
       setFeedback({ error: false, message: 'Private checklist report exported locally. It contains source text and personal notes.' });
     } catch {
       if (token === generation.current) setFeedback({ error: true, message: 'Report export failed. Run the current checklist and check the exact attached sources.' });
@@ -404,6 +409,11 @@ export default function PdfChatChecklist({ files, index, corpora, attached, onIn
           onChange={event => setReportConsent(event.target.checked)} /> I approve exporting private source excerpts, questions and saved notes.</label>
         <button type="button" className="chat-button" disabled={!results || !reportConsent}
           onClick={() => void exportReport()}>Export private checklist report</button>
+        <button type="button" className="chat-button" disabled={!results || !reportConsent}
+          onClick={() => void exportReport('html')}>Export printable checklist</button>
+        <button type="button" className="chat-button" disabled={!results || !reportConsent}
+          onClick={() => void exportReport('csv')}>Export checklist CSV</button>
+        <p className="chat-muted">HTML and CSV are reading copies only. Keep the canonical JSON and exact native snapshot for replay.</p>
         <label className="chat-session-file">Verify and restore checklist report
           <input type="file" accept=".json,application/json" onChange={event => void importFile(event, 'report')} />
         </label>
