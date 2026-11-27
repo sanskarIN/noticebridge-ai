@@ -114,3 +114,7 @@ test('composition CLI preserves existing files, rejects symlink inputs and publi
     expect(existsSync(join(root, 'failed.json'))).toBe(false);
   }
 });
+
+test('composition checks actual manifest text bytes against each claimed fingerprint', () => {
+  expect(() => composeDataset('combined', [{ ...a, text: a.text + ' ' }, b], [first, second])).toThrow();
+});

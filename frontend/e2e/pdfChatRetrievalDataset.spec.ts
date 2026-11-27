@@ -167,3 +167,14 @@ test('offline evaluation CLI builds, evaluates both splits and rejects unsafe in
   expect(run('development', failed).status).toBe(1);
   expect(existsSync(failed)).toBe(false);
 });
+
+test('manifest refuses duplicate literal and escaped keys at any level', () => {
+  const text = JSON.stringify(manifest);
+  expect(() => parseDataset(text.replace('"version":1', '"version":9,"version":1'))).toThrow();
+  expect(() => parseDataset(text.replace('"kind":"answerable"', '"kind":"ambiguous","kind":"answerable"'))).toThrow();
+  expect(() => parseDataset(text.replace('"scope":"original"', '"scope":"revised","sc\\u006fpe":"original"'))).toThrow();
+});
+test('dataset loader independently checks content rather than trusting supplied digest metadata', () => {
+  const altered = snapshot('a', [{ ...rows[0], text: 'Application fee: INR 900' }, ...rows.slice(1)]);
+  expect(() => loadDataset(parse(), [{ ...artifacts[0], text: altered }, artifacts[1]])).toThrow();
+});

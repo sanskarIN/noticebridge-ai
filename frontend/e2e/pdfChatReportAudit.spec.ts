@@ -134,3 +134,12 @@ test('report comparison CLI publishes an exclusive bound output and rejects mism
   expect(run(join(root, 'rejected.json')).status).toBe(1);
   expect(existsSync(join(root, 'rejected.json'))).toBe(false);
 });
+
+test('report audit rejects duplicate fields even if last values would be consistent', () => {
+  expect(() => auditReport(beforeText.replace('"authority_verified":false',
+    '"authority_verified":true,"authority_verified":false'))).toThrow();
+  expect(() => auditReport(beforeText.replace('"complete":true',
+    '"complete":false,"compl\\u0065te":true'))).toThrow();
+  expect(() => auditReport(beforeText.replace('"manifest_sha256":',
+    '"manifest_sha256":"forged","manifest_sha256":'))).toThrow();
+});

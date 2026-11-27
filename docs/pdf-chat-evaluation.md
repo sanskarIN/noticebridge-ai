@@ -282,3 +282,13 @@ The pure reconciliation API additionally provides a per-case audit with
 anonymous case IDs, resolution reason, chosen category and alternative count.
 It contains no question text, native quotation, reviewer note, or source
 fragment IDs. This audit is not a signed record of the human decisions.
+
+### Strict research input handling
+
+All offline retrieval-label manifests and evaluation reports reject repeated
+JSON object members (including escape-equivalent spellings), nonfinite
+numbers, malformed JSON and excessive nesting before schema validation.
+Snapshot loading and dataset composition independently recompute SHA-256
+from actual input text bytes instead of trusting a supplied hash string.
+These checks do not authenticate the issuer or reviewer. Inputs must still
+be kept in private, trusted directories.
