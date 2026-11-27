@@ -270,3 +270,66 @@
     padding-inline-start: 20px;
   }
 }
+
+/* Saved-checklist comparison retains a separate local file workflow. */
+.chat-checklist-comparison > summary {
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 650;
+  color: #82e2c6;
+  overflow-wrap: anywhere;
+}
+.chat-comparison-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.chat-comparison-inputs > label {
+  border: 1px solid #38546c;
+  padding: 12px;
+  border-radius: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chat-comparison-inputs input {
+  max-width: 100%;
+}
+.chat-comparison-role {
+  min-width: 0;
+  border-top: 1px solid #38546c;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.chat-comparison-role .chat-table-scroll {
+  margin: 8px 0;
+}
+.chat-comparison-role h5 {
+  margin: 0 0 6px;
+}
+.chat-comparison-fingerprints {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr);
+  gap: 8px 16px;
+  align-items: start;
+}
+.chat-comparison-fingerprints dt {
+  font-weight: 600;
+}
+.chat-comparison-fingerprints dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+}
+@media (max-width: 640px) {
+  .chat-comparison-inputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .chat-comparison-fingerprints {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .chat-comparison-fingerprints dd {
+    margin-bottom: 8px;
+  }
+}

@@ -379,3 +379,114 @@ meaning, model inference quality, or that a policy was registered before
 holdout access. Record the plan digest separately before running the study,
 keep holdout labels away from retrieval developers, and perform the wider
 security, usability and release review independently.
+
+
+## Reusable question checklists
+
+The PDF chat screen includes **Question checklist and systematic notice
+review** when a local PDF is indexed. It is independent of the conversational
+history: running a checklist neither appends turns nor invokes a language
+model. Start with a preset or add distinct questions individually. Each
+question has an explicit original, revised, or both-PDF route and an
+optional nearby-fragment fallback. A single physical-page restriction is
+supported. The maximum is 40 questions.
+
+### Interpret the observations
+
+A result may contain matching passages in every requested PDF, partial
+matches or nearby leads, no matching passages, or unavailable text. These
+are retrieval states, not decisions about whether an application requirement
+is correct, still valid, or absent. Review each excerpt on its actual PDF
+page and consult the issuer's official publication.
+
+For each requested role the report preserves the coverage status, strict
+match count, displayed fragment count, and omitted strict match count.
+Unavailable roles are never silently replaced with an attached PDF. Strict
+matches and nearby groups have distinct labels. Repeated text in different
+physical locations remains distinct.
+
+Review statuses (unreviewed, reviewed manually, needs follow-up) and notes
+are personal annotations. They are not certified labels or evidence of
+the user's identity. Editing a question or its routing resets that question's
+review; reordering preserves reviews for unchanged questions. Save notes
+before changing filters. Replacing an attached PDF clears the in-memory
+checklist, so retain a reusable template if needed.
+
+### Private files and replay
+
+| File | Contains | Purpose |
+| --- | --- | --- |
+| Question checklist template JSON | IDs, questions, scopes, fallback settings | Reuse with other PDFs |
+| Private checklist report JSON | Questions, reviews, excerpts, coverage and fingerprints | Exact deterministic replay |
+| Native corpus snapshot JSON | Full indexed native extraction and source fingerprints | Independent report replay |
+| Printable HTML | A derived human-readable copy with source/review separation | Local reading and printing |
+| CSV | One row per displayed fragment or source with no excerpt | Local tabular inspection |
+| Observation comparison JSON | Question IDs, counts, source/report/snapshot fingerprints | Compare two replayed runs |
+
+Exporting a template or evidence report requires a separate consent choice.
+Questions and notes may themselves contain private data. Do not upload
+reports, snapshots, or derivatives to public repositories, cloud services,
+or issue trackers. Native corpus snapshots may include more private text
+than the checklist report itself.
+
+Import a template and confirm the replacement before running it against
+the intended PDFs. Import a checklist report only with the same PDF bytes,
+roles and native extraction; verification reconstructs each result from the
+attached index, and the user must explicitly confirm restoration.
+
+HTML and CSV are reading copies, not replay inputs. HTML contains no
+external resources, active script, forms or hyperlinks, and escapes all
+untrusted text. CSV quotation plus a conservative formula-prefix defense
+makes formula-like cells inert in common spreadsheet applications; it may
+change how those cells display. The canonical JSON preserves exact text.
+Use a trusted spreadsheet viewer, disable automatic external data
+connections, and retain the original JSON for source verification.
+
+From the frontend directory, using a supported Node.js version:
+
+```bash
+npm run verify:checklist -- --report report.json --snapshot snapshot.json
+npm run verify:checklist -- --report report.json --snapshot snapshot.json --html reading-copy.html
+npm run verify:checklist -- --report report.json --snapshot snapshot.json --csv reading-copy.csv
+```
+
+The verifier accepts at most one derivative per invocation. It independently
+replays the report from the selected native snapshot before writing any
+output. A mismatched fingerprint, altered citation, different coverage,
+noncanonical JSON, invalid file or existing output fails without replacing
+the destination. Logs contain counts and hashes, not question wording,
+source passages, review notes or local paths.
+
+### Compare repeated checklist runs
+
+Use **Compare saved checklist runs offline** on the PDF chat screen, even
+without a currently attached PDF. Select the first report and its native
+snapshot, then the second report and its native snapshot. Both reports
+must independently replay. The same question IDs, wording, source routes,
+physical-page restrictions and fallback settings must be used; ordering
+may differ. Personal review decisions do not influence the comparison.
+
+The comparison distinguishes PDF fingerprint and coverage changes from
+retrieval-observation differences under unchanged fingerprints/coverage.
+It counts exact strict text, strict text with its physical location,
+complete nearby groups and nearby groups with locations as multisets,
+preserving multiplicity. First-only and second-only observation counts
+do not establish the deletion or addition of any real requirement.
+
+The comparison export contains no evidence excerpt, question wording or
+personal review note. It still contains private identifiers and fingerprints.
+Use the optional existing comparison input to replay and verify saved bytes
+against the original four inputs. The command line provides the same
+operation:
+
+```bash
+npm run compare:checklist -- --left-report first.json --left-snapshot first-snapshot.json --right-report second.json --right-snapshot second-snapshot.json --output comparison.json
+npm run compare:checklist -- --left-report first.json --left-snapshot first-snapshot.json --right-report second.json --right-snapshot second-snapshot.json --output comparison.json --verify
+```
+
+An unchanged comparison indicates equality of the displayed retrieval
+observations under the configured queries. It does not imply that all text
+or semantic content of two notices is unchanged. A snapshot can be
+replayed without the original PDF file, but its extraction and claimed PDF
+fingerprint then cannot be independently authenticated against actual PDF
+bytes. Neither mode establishes official authority.
