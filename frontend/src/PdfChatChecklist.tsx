@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import { MAX_QUESTION, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
 import { fingerprintSources, type AttachedFiles } from './pdfChatSession';
 import type { ChatCorpora } from './pdfChatEvidenceReport';
-import { addChecklistPreset, appendChecklist, blankChecklistReviews, carryChecklistReviews,
+import { addChecklistPreset, appendChecklist, carryChecklistReviews,
   checklistCounts, checklistPage, checklistPresets, checklistResultStates, checklistReviewCounts,
   checklistReviewStatuses, filterChecklist, moveChecklistItem, nextChecklistId,
   removeChecklistItem, replaceChecklistItem, runChecklist, updateChecklistReview,
@@ -123,7 +123,7 @@ function ReviewEditor({ row, review, onChange, onInspect, onAsk }: {
           onChange={event => setDraft(event.target.value)} />
       </label>
       <div className="chat-toolbar">
-        <span className="chat-muted">{draft.length}/{MAX_CHECKLIST_NOTE} · Personal annotation, not evidence</span>
+        <span className="chat-muted">{draft.length}/{MAX_CHECKLIST_NOTE} · Personal annotation, not evidence. Save before switching filters.</span>
         <button type="button" className="chat-button" disabled={draft.trim() === review.note}
           onClick={() => onChange({ note: draft.trim() })}>Save note for {row.item.id}</button>
         <button type="button" className="chat-button"
