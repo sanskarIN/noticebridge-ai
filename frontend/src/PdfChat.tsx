@@ -4,6 +4,7 @@ import { comparePrintedValues, groupPrintedValues, nearbyPassages, parseSearchQu
 import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
 import PdfChatLiteralDiff from './PdfChatLiteralDiff';
 import PdfChatTimeline from './PdfChatTimeline';
+import PdfChatChecklist from './PdfChatChecklist';
 import PdfChatLabelWorkbench from './PdfChatLabelWorkbench';
 import PdfChatStructure from './PdfChatStructure';
 import PdfChatCorpusExport from './PdfChatCorpusExport';
@@ -308,6 +309,10 @@ export default function PdfChat() {
       {!indexing && attached.length > 0 && <PdfChatRequirements
         key={'requirements:' + generation.current.original + ':' + generation.current.revised}
         index={index} requirements={requirements} corpora={corpora} attached={attached} onInspect={inspectNative} />}
+      {!indexing && attached.length > 0 && <PdfChatChecklist
+        key={'question-checklist:' + generation.current.original + ':' + generation.current.revised}
+        index={index} files={files} corpora={corpora} attached={attached} onInspect={inspectNative}
+        onAsk={(value, role) => { setQuestion(value); setScope(role); setReuse(false); inputRef.current?.focus(); }} />}
       <section className="chat-panel" aria-labelledby="chat-title">
         <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
           <button type="button" className="chat-button" disabled={!turns.length} onClick={clearConversation}>Clear conversation</button>
