@@ -638,3 +638,87 @@ snapshot. It prints aggregate counts and hashes only, not question
 topics, notes or source text. Neither an offline replay nor a browser
 restore authenticates the personal interpretation, establishes an
 official amendment, or verifies the completeness of native text.
+
+## Dataset preflight: overlap, question routing and coverage
+
+Before evaluating a dataset, review potentially overlapping native text
+across distinct declared notice families. The manifest loader already
+rejects exact shared PDF byte hashes assigned to different families.
+A different PDF hash, however, can contain duplicated text or a lightly
+edited notice. Run this independent lexical preflight:
+
+```bash
+npm run preflight:retrieval -- --manifest labels.json --threshold 0.8 --output preflight.json
+npm run preflight:retrieval -- --manifest labels.json --threshold 0.8 --output preflight.json --verify
+```
+
+The preflight validates all source snapshots and recomputes their hashes.
+It compares normalized ordered word sequences (case folded and NFKC
+normalized, punctuation and extraction line breaks omitted, numeric
+tokens preserved). It separately estimates word-shingle Jaccard overlap
+using deterministic bottom-1024 samples of five-word shingles. A complete
+small sample reports exact hashed-set overlap; a truncated sample is an
+estimate. The sketch is not cryptographic, is not semantic matching,
+and can miss overlaps. Short/empty sources, same-family pairs, total
+compared pairs and cross-split review leads are counted explicitly.
+
+Only sources with at least 20 normalized tokens participate. A near
+overlap requires at least 16 shared sampled hashes and the explicit
+threshold (0.5–1.0); exact normalized sequence matches are independent
+of that threshold. Processing is bounded to 200,000 normalized tokens
+per source and four million per dataset. Oversized input is rejected
+rather than silently sampled at the token-ingestion stage.
+
+The report also flags exact normalized question-route repetition within
+a document, differing labels for repeated questions, explicit source
+wording inconsistent with the declared route, empty retrieval terms,
+unavailable requested native text, negative labels with limited
+coverage, and answerable alternatives restricted to one role of a
+both-PDF request. A label of unindexed with some native text is a
+review lead, not a contradiction: relevant content may still be missing
+from native extraction. Generic questions repeated across different
+notices are common; cross-split repetition of question wording is
+reported separately and does not establish holdout leakage.
+
+Review every high-overlap cross-split lead against the original notices.
+Reassign related documents to one family/split where appropriate before
+freezing holdout evaluation. Never adjust holdout membership based on
+retrieval scores. No report certifies independence, authenticity,
+correctness of human labels, or release readiness. The output contains
+source and case identifiers, hashes and counts; keep it private.
+
+
+### Explicit preflight dispositions
+
+Generate a review queue with the same manifest, preflight report, and
+similarity threshold used in the preceding preflight command.
+
+    npm run review:preflight -- prepare --manifest labels.json --preflight preflight.json --threshold 0.8 --output queue.json
+
+Inspect the original material independently. Edit only each decision and
+its note in the private queue. Pair decisions are pending,
+distinct_after_inspection, regroup_required, and uncertain. Case decisions
+are pending, retained_after_inspection, revision_required, and uncertain.
+Every nonpending entry requires a short rationale (at most 300 UTF-16 code
+units, without control characters). Pending entries have an empty note.
+All generated IDs must be retained exactly once.
+
+    npm run review:preflight -- audit --manifest labels.json --preflight preflight.json --threshold 0.8 --queue queue.json --output audit.json
+
+Exit status 2 denotes outstanding review or requested changes; exit status
+1 denotes invalid inputs or an unavailable output destination. Status 0
+means only that all current leads were disposed of without requesting
+changes. It does not establish that other leads are absent, that the
+reviewer was independent, or that a release is approved. Zero-lead queues
+are valid and equally limited in meaning. A request to regroup or revise
+must be handled in a new manifest and a fresh preflight, not by altering
+the old report. Do not copy these decisions automatically into a new
+preflight.
+
+    npm run review:preflight -- verify --manifest labels.json --preflight preflight.json --threshold 0.8 --queue queue.json --output audit.json
+
+Verification recomputes the preflight against the original snapshots,
+validates every disposition and compares the exact audit bytes. The audit
+binds the original queue bytes, even if formatting changes. Notes are not
+reproduced in the audit or CLI summary. Identifiers and hashes still
+constitute private research metadata. Keep queues and audits local.
