@@ -236,3 +236,49 @@ Use the stable case and source identities to review the exact PDF pages.
 An adjudicator should record a separate, independently reasoned final
 label after inspecting the original documents; the tool does not merge
 reviewer labels, resolve conflicts, or alter either input manifest.
+
+## Reconcile independent annotations
+
+Use the agreement report to find disagreements, but first require the first
+two reviewers to finish exactly the same frozen set of cases. Missing labels
+are not negative examples. Have a third reviewer inspect the original PDF
+and record an independent final label for every disputed case in a separate
+manifest. Their manifest must contain only the disputed cases. A final label
+may choose a different category or a new complete evidence alternative; no
+automatic union or majority vote is applied. Keep provenance declarations,
+case IDs, families, question wording, scopes, page restrictions, slice
+membership and exact snapshot fingerprints unchanged.
+
+Run from the frontend directory:
+
+```bash
+npm run reconcile:retrieval -- --left reviewer-a/labels.json --right reviewer-b/labels.json --third reviewer-c/labels.json --id final-study --output reviewer-a/reconciled.json
+```
+
+When the two complete reviews agree on every category and complete alternative
+set, omit the third input. The tool rejects incomplete pairing, mixed
+provenance, unrequested adjudication cases, missing decisions, changed source
+or question metadata, and evidence outside the frozen scope. All three input
+manifests and their snapshot bytes are checked; reviewer IDs and the output
+dataset ID must be distinct. A distinct declared ID is **not** proof of
+identity or independence. The final dataset retains the declared provenance
+of the inputs; synthetic fixtures remain synthetic.
+
+The output is an ordinary retrieval-label manifest that refers to the first
+reviewer's existing snapshot filenames. Therefore the output must be written
+in the same private directory. Its canonical order is document ID, case ID,
+slice ID and evidence alternative identity. The CLI prints aggregate counts,
+split counts and input/output fingerprints without questions, quotes, local
+paths or individual label details. Existing files are not overwritten.
+
+To replay and check the exact output bytes, use the same arguments plus
+`--verify`. Verification does not modify the output or regenerate missing
+files. It fails when a source, decision, output ID or manifest byte differs
+from the reconstructed result. Keep the original review files and exact PDF
+bytes under restricted access; a reconciled label set still requires human
+quality review and cannot establish official authority or factual correctness.
+
+The pure reconciliation API additionally provides a per-case audit with
+anonymous case IDs, resolution reason, chosen category and alternative count.
+It contains no question text, native quotation, reviewer note, or source
+fragment IDs. This audit is not a signed record of the human decisions.
