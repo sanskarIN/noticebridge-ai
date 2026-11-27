@@ -1418,3 +1418,114 @@ test('annotation category change requires confirmation before discarding evidenc
   await editor.getByRole('button', { name: 'Confirm annotation category change' }).click();
   await expect(editor.getByLabel('Include original:1:1 in alternative 1')).not.toBeChecked();
 });
+
+async function checklistPanel(page: Page) {
+  const panel = page.locator('details.chat-checklist');
+  await panel.locator('summary').click();
+  return panel;
+}
+test('systematic checklist runs on real PDFs, keeps chat separate and opens native source inspection', async ({ page }) => {
+  const api: string[] = [];
+  await page.route('**/api/**', route => { api.push(route.request().url()); return route.abort(); });
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500', 'Application deadline: 19 December 2026']);
+  await attach(page, 'Updated / second PDF', ['Application fee: INR 350']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  const panel = await checklistPanel(page);
+  await panel.getByLabel('Checklist search scope').selectOption('both');
+  await panel.getByLabel('Checklist question', { exact: true }).fill('Application fee?');
+  await panel.getByRole('button', { name: 'Add checklist question' }).click();
+  await panel.getByLabel('Checklist question', { exact: true }).fill('Application deadline?');
+  await panel.getByRole('button', { name: 'Add checklist question' }).click();
+  await panel.getByRole('button', { name: 'Run question checklist' }).click();
+  const fee = panel.getByRole('article', { name: 'Checklist result question-1' });
+  const deadline = panel.getByRole('article', { name: 'Checklist result question-2' });
+  await expect(fee.locator('blockquote')).toHaveText(['Application fee: INR 500', 'Application fee: INR 350']);
+  await expect(deadline.locator('blockquote')).toHaveText(['Application deadline: 19 December 2026']);
+  await expect(deadline.getByText('No sufficiently matching passage')).toBeVisible();
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  await fee.getByRole('button', { name: 'Inspect checklist citation 1' }).first().click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' })).toBeVisible();
+  await fee.getByRole('button', { name: 'Open question in chat composer' }).click();
+  await expect(page.getByLabel('Your question')).toHaveValue('Application fee?');
+  await expect(page.getByLabel('Search scope', { exact: true })).toHaveValue('both');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  expect(api).toEqual([]);
+});
+test('checklist review filters, edit invalidation and explicit removal confirmations preserve unaffected notes', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500', 'Application deadline: 19 December 2026']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  const panel = await checklistPanel(page);
+  for (const question of ['Application fee?', 'Application deadline?']) {
+    await panel.getByLabel('Checklist question', { exact: true }).fill(question);
+    await panel.getByRole('button', { name: 'Add checklist question' }).click();
+  }
+  await panel.getByRole('button', { name: 'Run question checklist' }).click();
+  await panel.getByLabel('Review status for question-1').selectOption('reviewed_manually');
+  await panel.getByLabel('Personal note for question-1').fill('Check publication');
+  await panel.getByRole('button', { name: 'Save note for question-1' }).click();
+  await panel.getByLabel('Review status for question-2').selectOption('needs_followup');
+  await panel.getByLabel('Checklist review filter').selectOption('reviewed_manually');
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(1);
+  await expect(panel.getByLabel('Personal note for question-1')).toHaveValue('Check publication');
+  await panel.getByLabel('Checklist review filter').selectOption('all');
+  await panel.getByRole('button', { name: 'Edit question-2', exact: true }).click();
+  await panel.getByLabel('Checklist question', { exact: true }).fill('Refund policy?');
+  await panel.getByRole('button', { name: 'Save checklist question' }).click();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Run question checklist' }).click();
+  await expect(panel.getByLabel('Review status for question-2')).toHaveValue('unreviewed');
+  await expect(panel.getByLabel('Review status for question-1')).toHaveValue('reviewed_manually');
+  await expect(panel.getByLabel('Personal note for question-1')).toHaveValue('Check publication');
+  await panel.getByRole('button', { name: 'Remove question-2', exact: true }).click();
+  await panel.getByRole('button', { name: 'Cancel removal' }).click();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(2);
+  await panel.getByRole('button', { name: 'Remove question-2', exact: true }).click();
+  await panel.getByRole('button', { name: 'Confirm remove question-2' }).click();
+  await panel.getByRole('button', { name: 'Run question checklist' }).click();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(1);
+  await expect(panel.getByLabel('Personal note for question-1')).toHaveValue('Check publication');
+});
+test('checklist export requires consent and report replay refuses changed PDF bytes', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  let panel = await checklistPanel(page);
+  await panel.getByLabel('Checklist question', { exact: true }).fill('Application fee?');
+  await panel.getByRole('button', { name: 'Add checklist question' }).click();
+  await panel.getByRole('button', { name: 'Run question checklist' }).click();
+  await panel.getByLabel('Personal note for question-1').fill('Saved private note');
+  await panel.getByRole('button', { name: 'Save note for question-1' }).click();
+  const exportButton = panel.getByRole('button', { name: 'Export private checklist report' });
+  await expect(exportButton).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Export printable checklist' })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Export checklist CSV' })).toBeDisabled();
+  await panel.getByLabel('I approve exporting private source excerpts, questions and saved notes.').check();
+  const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);
+  const data = await readFile((await download.path())!);
+  const report = JSON.parse(data.toString('utf8'));
+  expect(report.authority_verified).toBe(false);
+  expect(report.reviews[0].note).toBe('Saved private note');
+  expect(report.results[0].sources[0].citations[0].native_text).toBe('Application fee: INR 500');
+  const [print] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Export printable checklist' }).click()]);
+  expect((await readFile((await print.path())!, 'utf8'))).toContain('Native text retrieval only');
+  const [csv] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Export checklist CSV' }).click()]);
+  expect((await readFile((await csv.path())!, 'utf8'))).toContain('Application fee: INR 500');
+  await panel.getByLabel('Verify and restore checklist report').setInputFiles({
+    name: 'report.json', mimeType: 'application/json', buffer: data,
+  });
+  await expect(panel.getByRole('region', { name: 'Checklist import confirmation' })).toBeVisible();
+  await panel.getByRole('button', { name: 'Cancel checklist import' }).click();
+  await expect(panel.getByLabel('Personal note for question-1')).toHaveValue('Saved private note');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 999']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  panel = page.locator('details.chat-checklist');
+  if (!(await panel.evaluate(element => (element as HTMLDetailsElement).open))) await panel.locator('summary').click();
+  await expect(panel.getByText('0/40 checklist questions')).toBeVisible();
+  await panel.getByLabel('Verify and restore checklist report').setInputFiles({
+    name: 'report.json', mimeType: 'application/json', buffer: data,
+  });
+  await expect(panel.getByRole('alert')).toContainText('Report rejected');
+  await expect(panel.getByRole('region', { name: 'Checklist import confirmation' })).toHaveCount(0);
+});

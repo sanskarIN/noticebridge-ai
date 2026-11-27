@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { prepareChecklistReadingCopy, safeChecklistCsvCell } from '../src/pdfChatChecklistReadingCopy';
+import { compareChecklistRuns, replayChecklistComparison } from '../src/pdfChatChecklistComparison';
 import { buildIndex, type Corpus, type Passage } from '../src/pdfChatCore';
 import { blankChecklistReviews, runChecklist, updateChecklistReview, type ChecklistPlan } from '../src/pdfChatChecklist';
 import { serializeCorpusSnapshot } from '../src/pdfChatCorpusSnapshot';
@@ -163,4 +165,138 @@ test('readers reject malformed UTF-8, empty or oversized files, and noncanonical
   expect(await readChecklistFile(new File([text], 'checklist.json'), 'report')).toBe(text);
   const template = serializeChecklistTemplate(items, true);
   expect(await readChecklistFile(new File([template], 'template.json'), 'template')).toBe(template);
+});
+
+test('print and spreadsheet derivatives contain all requested roles, coverage and explicit private warnings', async () => {
+  const text = await report();
+  const html = await prepareChecklistReadingCopy(text, snapshot, 'html');
+  const csv = await prepareChecklistReadingCopy(text, snapshot, 'csv');
+  expect(html.reportSha256).toBe(sha(text));
+  expect(csv.reportSha256).toBe(html.reportSha256);
+  expect(html.text).toContain('Content-Security-Policy');
+  expect(html.text).toContain('No match does not prove absence');
+  expect(html.text).toContain('Personal review (not evidence)');
+  expect(html.text).toContain('Personal review &lt;b&gt;not evidence&lt;/b&gt;.');
+  expect(html.text).not.toContain('<b>not evidence</b>');
+  expect(html.text).not.toContain('<script');
+  expect(html.text).not.toContain(rows[4].text);
+  expect(html.text).toContain('Application fee: INR 500');
+  expect(html.text).toContain('Application fee: INR 350');
+  expect(html.text).toContain('page not indexed');
+  expect(html.text).toContain(pins.original);
+  expect(csv.text.charCodeAt(0)).toBe(0xfeff);
+  expect(csv.text).toContain('"authority_verified"');
+  expect(csv.text).toContain('"page_not_indexed"');
+  expect(csv.text).toContain('"no_matching_passage"');
+  expect(csv.text).toContain('"context"');
+  expect(csv.text).not.toContain(rows[4].text);
+  expect((await prepareChecklistReadingCopy(text, snapshot, 'html')).text).toBe(html.text);
+});
+test('CSV formula defense handles compatibility markers, whitespace, controls and quoted cells', () => {
+  for (const input of ['=1+1', '+1', '-1', '@SUM(1)', ' \t=1', '\u200b=1', '＝1', '\tplain', '\rplain', '\nplain']) {
+    expect(safeChecklistCsvCell(input)).toBe('"\'' + input + '"');
+  }
+  expect(safeChecklistCsvCell('ordinary, "text"')).toBe('"ordinary, ""text"""');
+  expect(safeChecklistCsvCell('line one\nline two')).toBe('"line one\nline two"');
+  expect(safeChecklistCsvCell(0)).toBe('"0"');
+});
+test('reading copy rejects forged excerpts or changed extraction rather than rendering imported text', async () => {
+  const text = await report();
+  const forged = text.replace('Application fee: INR 500', '<img src=x onerror=alert(1)>');
+  await expect(prepareChecklistReadingCopy(forged, snapshot, 'html')).rejects.toThrow();
+  await expect(prepareChecklistReadingCopy(forged, snapshot, 'csv')).rejects.toThrow();
+  await expect(prepareChecklistReadingCopy(text, snapshot.replace(pins.original, 'c'.repeat(64)), 'html')).rejects.toThrow();
+});
+test('verified source excerpt and personal note are inert in HTML and spreadsheet copy', async () => {
+  const passage: Passage = { role: 'original', page: 1, ordinal: 1, text: '= application fee <img src=x onerror=alert(1)>' };
+  const sources = { original: { passages: [passage], pageCount: 1, processedPages: 1,
+    missingPages: [], limitedPages: [], limited: false } satisfies Corpus };
+  const selected = [{ id: 'fee', question: 'Application fee?', scope: 'original', includeContext: false }] satisfies ChecklistPlan;
+  const search = buildIndex([passage]);
+  const annotations = updateChecklistReview(selected, blankChecklistReviews(selected), 'fee', { note: '=HYPERLINK("x")' });
+  const sourceSnapshot = serializeCorpusSnapshot({ original: pins.original }, sources);
+  const generated = await serializeChecklistReport(search, { original: pins.original }, sources, selected, annotations,
+    runChecklist(search, sources, selected), true);
+  const html = (await prepareChecklistReadingCopy(generated, sourceSnapshot, 'html')).text;
+  const csv = (await prepareChecklistReadingCopy(generated, sourceSnapshot, 'csv')).text;
+  expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+  expect(html).not.toContain('<img');
+  expect(html).toContain('=HYPERLINK(&quot;x&quot;)');
+  expect(csv).toContain('"\'= application fee');
+  expect(csv).toContain('"\'=HYPERLINK(""x"")"');
+});
+
+async function comparisonFixture(changedRows: Passage[], changedPins = pins, questions = items,
+  annotations = blankChecklistReviews(questions)) {
+  const sources = {
+    original: { ...corpora.original, passages: changedRows.filter(row => row.role === 'original') },
+    revised: { ...corpora.revised, passages: changedRows.filter(row => row.role === 'revised') },
+  };
+  const search = buildIndex(changedRows);
+  const snap = serializeCorpusSnapshot(changedPins, sources);
+  const result = await serializeChecklistReport(search, changedPins, sources, questions, annotations,
+    runChecklist(search, sources, questions), true);
+  return { snapshot: snap, report: result };
+}
+test('comparison of identical runs ignores personal review changes and question order', async () => {
+  const left = { report: await report(), snapshot };
+  const right = await comparisonFixture(rows, pins, [...items].reverse());
+  const result = await compareChecklistRuns(left, right);
+  expect(result.comparison.authority_verified).toBe(false);
+  expect(result.comparison.summary).toMatchObject({ questions: 4, unchanged_questions: 4, changed_questions: 0 });
+  expect(result.comparison.questions.map(row => row.question_id)).toEqual(items.map(row => row.id));
+  expect(result.text).not.toContain(reviews[0].note);
+  expect(result.text).not.toContain(rows[0].text);
+  expect(result.text).not.toContain(items[0].question);
+  expect(await replayChecklistComparison(result.text, left, right)).toEqual(result.comparison);
+});
+test('changed printed value and new PDF hash are classified as retrieval observations, not authority', async () => {
+  const left = { report: await report(), snapshot };
+  const changed = rows.map(row => row === rows[3] ? { ...row, text: 'Application fee: INR 250' } : row);
+  const right = await comparisonFixture(changed, { ...pins, revised: 'c'.repeat(64) });
+  const result = await compareChecklistRuns(left, right);
+  const fee = result.comparison.questions.find(row => row.question_id === 'fee')!;
+  expect(fee.sources[0].classification).toBe('unchanged_observation');
+  expect(fee.sources[1]).toMatchObject({
+    classification: 'coverage_or_source_changed', pdf_pin_changed: true, state_changed: false,
+    strict_text: { identical_observations: 0, left_only_observations: 1, right_only_observations: 1 },
+  });
+  expect(result.text).not.toContain('INR 250');
+  expect(result.comparison.sources[1].changed).toBe(true);
+  expect(result.comparison.summary.changed_questions).toBe(2);
+});
+test('same PDF pin but changed native text is distinguishable from source pin changes', async () => {
+  const left = { report: await report(), snapshot };
+  const changed = rows.map(row => row === rows[0] ? { ...row, text: 'Application fee: INR 700' } : row);
+  const right = await comparisonFixture(changed);
+  const result = await compareChecklistRuns(left, right);
+  const source = result.comparison.questions[0].sources[0];
+  expect(source.classification).toBe('retrieval_observation_changed');
+  expect(source.pdf_pin_changed).toBe(false);
+  expect(source.strict_text.left_only_observations).toBe(1);
+  expect(result.comparison.sources[0].changed).toBe(true);
+});
+test('moving a strict text fragment changes location counts without claiming a textual change', async () => {
+  const left = { report: await report(), snapshot };
+  const changed = rows.map(row => row === rows[3] ? { ...row, ordinal: 3 } :
+    row === rows[4] ? { ...row, ordinal: 4 } : row);
+  const right = await comparisonFixture(changed);
+  const source = (await compareChecklistRuns(left, right)).comparison.questions[0].sources[1];
+  expect(source.strict_text).toEqual({ identical_observations: 1, left_only_observations: 0, right_only_observations: 0 });
+  expect(source.strict_locations).toEqual({ identical_observations: 0, left_only_observations: 1, right_only_observations: 1 });
+  expect(source.classification).toBe('retrieval_observation_changed');
+});
+test('comparison rejects changed question routing, wording, missing rows, forged report or output', async () => {
+  const left = { report: await report(), snapshot };
+  for (const plan of [
+    items.slice(1), items.map(row => row.id === 'fee' ? { ...row, question: 'Application fees?' } : row),
+    items.map(row => row.id === 'fee' ? { ...row, scope: 'original' as const } : row),
+    items.map(row => row.id === 'fee' ? { ...row, includeContext: true } : row),
+  ]) {
+    await expect(compareChecklistRuns(left, await comparisonFixture(rows, pins, plan))).rejects.toThrow();
+  }
+  await expect(compareChecklistRuns(left, { ...left, report: left.report.replace('INR 500', 'INR 999') })).rejects.toThrow();
+  const result = await compareChecklistRuns(left, left);
+  await expect(replayChecklistComparison(result.text.replace('"authority_verified": false', '"authority_verified": true'), left, left)).rejects.toThrow();
+  await expect(replayChecklistComparison(result.text.trim(), left, left)).rejects.toThrow();
 });
