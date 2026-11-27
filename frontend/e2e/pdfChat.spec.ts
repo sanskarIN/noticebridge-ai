@@ -1641,3 +1641,98 @@ test('preset and pagination retain all questions and can be filtered without cha
   await expect(panel.getByRole('button', { name: 'Run question checklist' })).toBeDisabled();
   await expect(panel.locator('.chat-checklist-result')).toHaveCount(0);
 });
+
+test('native replay checks real PDF bytes and fresh extraction without modifying chat history', async ({ page }) => {
+  const network: string[] = [];
+  await page.route('**/api/**', route => { network.push(route.request().url()); return route.abort(); });
+  await page.goto('/?view=chat');
+  const lines = ['Application fee: INR 500', 'Unrelated private fixture'];
+  await attach(page, 'Original / first PDF', lines);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  const chatPanel = await checklistPanel(page);
+  await chatPanel.getByLabel('Checklist question', { exact: true }).fill('Application fee?');
+  await chatPanel.getByRole('button', { name: 'Add checklist question' }).click();
+  await chatPanel.getByRole('button', { name: 'Run question checklist' }).click();
+  await chatPanel.getByLabel('I approve exporting private source excerpts, questions and saved notes.').check();
+  await chatPanel.getByLabel('I approve exporting the full indexed native text and source fingerprints.').check();
+  const [report] = await Promise.all([page.waitForEvent('download'),
+    chatPanel.getByRole('button', { name: 'Export private checklist report' }).click()]);
+  const [snapshot] = await Promise.all([page.waitForEvent('download'),
+    chatPanel.getByRole('button', { name: 'Export matching native snapshot' }).click()]);
+  const reportBytes = await readFile((await report.path())!);
+  const snapshotBytes = await readFile((await snapshot.path())!);
+  const panel = page.locator('details.chat-source-replay');
+  await panel.locator('summary').click();
+  await panel.getByLabel('Native snapshot to reproduce', { exact: true }).setInputFiles({
+    name: 'snapshot.json', mimeType: 'application/json', buffer: snapshotBytes,
+  });
+  await panel.getByLabel('Associated private checklist (optional)', { exact: true }).setInputFiles({
+    name: 'report.json', mimeType: 'application/json', buffer: reportBytes,
+  });
+  await panel.getByRole('button', { name: 'Reproduce native snapshot' }).click();
+  const result = panel.getByRole('region', { name: 'Native source replay results' });
+  await expect(result.getByRole('heading', { name: 'Source replay not fully reproduced' })).toBeVisible();
+  await expect(result.getByText('Required PDF was not selected')).toBeVisible();
+  await expect(result.getByText('Replays from saved native snapshot: Yes')).toBeVisible();
+  await expect(result.getByText('Also bound to reproduced PDF bytes and extraction: No')).toBeVisible();
+  await panel.getByLabel('Replay original PDF', { exact: true }).setInputFiles({
+    name: 'renamed.pdf', mimeType: 'application/pdf', buffer: pdf(lines),
+  });
+  await expect(result).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Reproduce native snapshot' }).click();
+  await expect(result.getByRole('heading', { name: 'Exact source replay reproduced' })).toBeVisible();
+  await expect(result.getByText('PDF bytes and native extraction reproduced')).toBeVisible();
+  await expect(result.getByText('Also bound to reproduced PDF bytes and extraction: Yes')).toBeVisible();
+  await expect(result.locator('blockquote')).toHaveCount(0);
+  const exportButton = result.getByRole('button', { name: 'Export native source replay report' });
+  await expect(exportButton).toBeDisabled();
+  await result.getByLabel('I approve exporting private source fingerprints and extraction diagnostics.').check();
+  const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);
+  const replay = await readFile((await download.path())!);
+  const parsed = JSON.parse(replay.toString('utf8'));
+  expect(parsed.status).toBe('exact_replay');
+  expect(parsed.authority_verified).toBe(false);
+  expect(parsed.extraction_completeness_verified).toBe(false);
+  expect(parsed.checklist.actual_pdf_replay_matches).toBe(true);
+  expect(replay.toString('utf8')).not.toContain('Unrelated private fixture');
+  expect(replay.toString('utf8')).not.toContain('Application fee');
+  await panel.getByLabel('Existing source replay report (optional)', { exact: true }).setInputFiles({
+    name: 'replay.json', mimeType: 'application/json', buffer: replay,
+  });
+  await panel.getByRole('button', { name: 'Verify existing source replay report' }).click();
+  await expect(result.getByText(/The supplied replay report exactly matches this fresh run/)).toBeVisible();
+  await expect(exportButton).toBeDisabled();
+  await panel.getByLabel('Replay original PDF', { exact: true }).setInputFiles({
+    name: 'wrong.pdf', mimeType: 'application/pdf', buffer: pdf(['Application fee: INR 999']),
+  });
+  await panel.getByRole('button', { name: 'Reproduce native snapshot' }).click();
+  await expect(result.getByText('PDF fingerprint differs')).toBeVisible();
+  await expect(result.getByText('Also bound to reproduced PDF bytes and extraction: No')).toBeVisible();
+  await panel.getByRole('button', { name: 'Verify existing source replay report' }).click();
+  await expect(panel.getByRole('alert')).toContainText('Source replay rejected');
+  await expect(result).toHaveCount(0);
+  await expect(chatPanel.getByRole('article', { name: 'Checklist result question-1' }).locator('blockquote'))
+    .toHaveText('Application fee: INR 500');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  expect(network).toEqual([]);
+});
+test('source replay panel rejects malformed snapshot and clears independent files', async ({ page }) => {
+  await page.goto('/?view=chat');
+  const panel = page.locator('details.chat-source-replay');
+  await panel.locator('summary').click();
+  const run = panel.getByRole('button', { name: 'Reproduce native snapshot' });
+  await expect(run).toBeDisabled();
+  await panel.getByLabel('Native snapshot to reproduce', { exact: true }).setInputFiles({
+    name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from([0xff]),
+  });
+  await run.click();
+  await expect(panel.getByRole('alert')).toContainText('Source replay rejected');
+  await panel.getByLabel('Replay original PDF', { exact: true }).setInputFiles({
+    name: 'not-a-pdf.txt', mimeType: 'text/plain', buffer: Buffer.from('fixture'),
+  });
+  await expect(panel.getByRole('alert')).toContainText('not a PDF');
+  await panel.getByRole('button', { name: 'Clear source replay files and results' }).click();
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  await expect(run).toBeDisabled();
+  await expect(panel.getByText('No file selected', { exact: true })).toHaveCount(5);
+});

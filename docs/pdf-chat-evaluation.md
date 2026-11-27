@@ -520,3 +520,42 @@ limitations, and indexed fragments of that specific page. A changed
 source fingerprint is always significant for any query requesting that
 role. These counts and states are retrieval observations, not a semantic
 diff or a certification of text completeness.
+
+## Reproduce the native snapshot from actual PDF bytes
+
+The saved snapshot and checklist verify consistency of stored native
+extraction, not whether the underlying PDF actually contained that
+extraction. The PDF chat screen now has a separate **Reproduce a native
+snapshot from actual PDFs** workflow for stronger local reproducibility.
+
+1. Select the canonical native snapshot.
+2. Independently select the original PDF and, if applicable, revised PDF
+   in their corresponding roles. Filenames need not match.
+3. Optionally select a canonical private checklist report.
+4. Reproduce the snapshot. Each selected PDF is bounded to 10 MiB and
+   hashed using SHA-256. Only a matching fingerprint is freshly extracted
+   using the same native PDF.js extraction path as chat.
+5. Inspect the result. It reports missing/extra roles, changed byte
+   fingerprints, extraction errors, or changed text, geometry, identities
+   and coverage without exporting any source quotations.
+6. Optionally consent to export the replay report and later verify that
+   report against the same independently selected input files.
+
+The source replay report does not contain document names, question text,
+review notes, or extracted text. It contains exact byte fingerprints,
+coverage metadata and aggregate fragment differences, which still may
+be sensitive. Keep it private.
+
+Source-role matching, PDF byte matching, and exact native extraction
+matching are separate fields. A checklist may replay against the saved
+native snapshot even when a corresponding PDF is missing or mismatched.
+The stronger checklist binding requires both the saved checklist replay
+and exact re-extraction from every matching PDF role. A verified saved
+failure report remains a failure report.
+
+Fresh extraction may differ across software or platform versions, even
+when PDF bytes agree. These are reproducibility differences rather than
+evidence of a notice amendment. Exact reproduction of an incomplete or
+limited extraction does not certify text completeness. No result verifies
+official authority or answer accuracy. Canceling the operation discards
+its partial state and does not modify the attached chat PDFs.

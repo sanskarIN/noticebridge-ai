@@ -6,6 +6,7 @@ import PdfChatLiteralDiff from './PdfChatLiteralDiff';
 import PdfChatTimeline from './PdfChatTimeline';
 import PdfChatChecklist from './PdfChatChecklist';
 import PdfChatChecklistCompare from './PdfChatChecklistCompare';
+import PdfChatSourceReplay from './PdfChatSourceReplay';
 import PdfChatLabelWorkbench from './PdfChatLabelWorkbench';
 import PdfChatStructure from './PdfChatStructure';
 import PdfChatCorpusExport from './PdfChatCorpusExport';
@@ -315,6 +316,7 @@ export default function PdfChat() {
         index={index} files={files} corpora={corpora} attached={attached} onInspect={inspectNative}
         onAsk={(value, role) => { setQuestion(value); setScope(role); setReuse(false); inputRef.current?.focus(); }} />}
       <PdfChatChecklistCompare />
+      <PdfChatSourceReplay />
       <section className="chat-panel" aria-labelledby="chat-title">
         <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
           <button type="button" className="chat-button" disabled={!turns.length} onClick={clearConversation}>Clear conversation</button>

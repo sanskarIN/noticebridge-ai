@@ -333,3 +333,19 @@
     margin-bottom: 8px;
   }
 }
+
+.chat-source-replay > summary {
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 650;
+  color: #82e2c6;
+  overflow-wrap: anywhere;
+}
+.chat-source-replay .chat-comparison-inputs > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chat-source-replay .chat-comparison-inputs .chat-button {
+  white-space: normal;
+  max-width: 100%;
+}
