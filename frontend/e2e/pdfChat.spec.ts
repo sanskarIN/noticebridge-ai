@@ -1736,3 +1736,89 @@ test('source replay panel rejects malformed snapshot and clears independent file
   await expect(run).toBeDisabled();
   await expect(panel.getByText('No file selected', { exact: true })).toHaveCount(5);
 });
+
+test('manual multi-fragment evidence alignment retains source identities, explicit selection and personal review', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500', 'Rural applicants must provide proof']);
+  await attach(page, 'Updated / second PDF', ['Application fee: INR 350', 'Rural applicants may submit a certificate']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  const panel = page.locator('details.chat-alignment');
+  await panel.locator('summary').click();
+  const add = panel.getByRole('button', { name: 'Add evidence group' });
+  await expect(add).toBeDisabled();
+  await panel.getByLabel('Evidence group topic').fill('Fee review');
+  await panel.getByLabel('Select alignment fragment original:1:1', { exact: true }).check();
+  await panel.getByLabel('Select alignment fragment revised:1:1', { exact: true }).check();
+  await add.click();
+  const fee = panel.getByRole('article', { name: 'Evidence group group-1' });
+  await expect(fee.getByText('Selected wording counts differ')).toBeVisible();
+  await fee.getByLabel('Show literal single-pair alignment').check();
+  await expect(fee.locator('mark')).toHaveText(['500', '350']);
+  await fee.getByRole('button', { name: 'Inspect grouped original:1:1' }).click();
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).locator('blockquote')).toHaveText('Application fee: INR 500');
+  await fee.getByLabel('Alignment review status group-1').selectOption('reviewed_manually');
+  await fee.getByLabel('Alignment personal note group-1').fill('Check full original notice');
+  await fee.getByRole('button', { name: 'Save alignment note group-1' }).click();
+  await panel.getByLabel('Evidence group topic').fill('Eligibility review');
+  await panel.getByLabel('Select alignment fragment original:1:1', { exact: true }).check();
+  await panel.getByLabel('Select alignment fragment original:1:2', { exact: true }).check();
+  await panel.getByLabel('Select alignment fragment revised:1:2', { exact: true }).check();
+  await add.click();
+  const eligibility = panel.getByRole('article', { name: 'Evidence group group-2' });
+  await expect(eligibility.getByText(/No token alignment across multiple fragments/)).toBeVisible();
+  await expect(eligibility.getByRole('region', { name: 'Alignment selected original' }).locator('blockquote'))
+    .toHaveText(['Application fee: INR 500', 'Rural applicants must provide proof']);
+  await expect(fee.getByText('original:1:1 · selected in 2 group(s)')).toBeVisible();
+  await panel.getByLabel('Alignment status filter').selectOption('reviewed_manually');
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(1);
+  await panel.getByLabel('Alignment status filter').selectOption('all');
+  await fee.getByRole('button', { name: 'Edit evidence group group-1' }).click();
+  await panel.getByLabel('Evidence group topic').fill('Updated fee topic');
+  await panel.getByRole('button', { name: 'Save evidence group edit' }).click();
+  await expect(fee.getByLabel('Alignment review status group-1')).toHaveValue('unreviewed');
+  await expect(fee.getByLabel('Alignment personal note group-1')).toHaveValue('');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+});
+test('alignment report export and restore require consent, matching PDF bytes and confirmation', async ({ page }) => {
+  await page.goto('/?view=chat');
+  const originalLines = ['Application fee: INR 500', 'Unrelated private line'];
+  const revisedLines = ['Application fee: INR 350'];
+  await attach(page, 'Original / first PDF', originalLines);
+  await attach(page, 'Updated / second PDF', revisedLines);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  let panel = page.locator('details.chat-alignment');
+  await panel.locator('summary').click();
+  await panel.getByLabel('Evidence group topic').fill('Manual fee review');
+  await panel.getByLabel('Select alignment fragment original:1:1', { exact: true }).check();
+  await panel.getByLabel('Select alignment fragment revised:1:1', { exact: true }).check();
+  await panel.getByRole('button', { name: 'Add evidence group' }).click();
+  const button = panel.getByRole('button', { name: 'Export private evidence alignment' });
+  await expect(button).toBeDisabled();
+  await panel.getByLabel('I approve exporting selected alignment excerpts and personal annotations.').check();
+  const [download] = await Promise.all([page.waitForEvent('download'), button.click()]);
+  const report = await readFile((await download.path())!);
+  const parsed = JSON.parse(report.toString('utf8'));
+  expect(parsed.authority_verified).toBe(false);
+  expect(parsed.results[0].original[0].native_text).toBe('Application fee: INR 500');
+  expect(report.toString('utf8')).not.toContain('Unrelated private line');
+  await panel.getByRole('button', { name: 'Clear evidence alignment groups' }).click();
+  await panel.getByRole('button', { name: 'Confirm clear evidence groups' }).click();
+  await panel.getByLabel('Verify and restore evidence alignment').setInputFiles({
+    name: 'alignment.json', mimeType: 'application/json', buffer: report,
+  });
+  const confirmation = panel.getByRole('region', { name: 'Alignment import confirmation' });
+  await expect(confirmation).toBeVisible();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Apply imported evidence groups' }).click();
+  await expect(panel.getByRole('article', { name: 'Evidence group group-1' })).toBeVisible();
+  await attach(page, 'Updated / second PDF', ['Application fee: INR 999']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  panel = page.locator('details.chat-alignment');
+  await panel.locator('summary').click();
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(0);
+  await panel.getByLabel('Verify and restore evidence alignment').setInputFiles({
+    name: 'alignment.json', mimeType: 'application/json', buffer: report,
+  });
+  await expect(panel.getByRole('alert')).toContainText('Alignment report rejected');
+  await expect(panel.locator('.chat-checklist-result')).toHaveCount(0);
+});

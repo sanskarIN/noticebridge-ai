@@ -349,3 +349,45 @@
   white-space: normal;
   max-width: 100%;
 }
+
+/* Human-selected evidence groups; each source remains a separate excerpt. */
+.chat-alignment > summary {
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 650;
+  color: #82e2c6;
+  overflow-wrap: anywhere;
+}
+.chat-alignment-editor {
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid #38546c;
+  padding-bottom: 20px;
+}
+.chat-alignment-picker {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.chat-alignment-selected {
+  display: grid;
+  gap: 8px;
+  padding-inline-start: 20px;
+}
+.chat-alignment-selected li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chat-alignment blockquote {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-alignment .chat-button {
+  white-space: normal;
+  max-width: 100%;
+}
+.chat-alignment textarea {
+  width: 100%;
+  resize: vertical;
+}

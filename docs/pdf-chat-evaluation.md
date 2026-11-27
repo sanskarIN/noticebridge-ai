@@ -596,3 +596,45 @@ families and declared labels. They are not corrected for multiple
 comparisons, do not establish significance, may be unreliable for small or
 unrepresentative cohorts, and do not certify any release. Use independent
 holdout families and plan evaluation before inspecting outcomes.
+
+## Manual evidence alignment groups
+
+For a complex topic, one retrieved fragment may omit a qualifier,
+exception, or cross-page requirement. Open **Build manual evidence
+alignment groups** with both PDFs attached. Select up to six native
+fragments per role, give the group a topic, and save it. Up to forty
+groups are supported. Every selected fragment retains its physical page
+and ordinal; no new source quotation is assembled from separate lines.
+
+Use the candidate filters to locate literal text and physical pages.
+The grouping is entirely human-authored. An unselected side does not
+mean the corresponding requirement is absent from that PDF. Exact wording
+counts are multiset comparisons of selected fragments only, preserving
+identical text repeated at distinct physical identities. A fragment reused
+across groups is counted explicitly. Single-pair groups optionally show
+the bounded literal token alignment and unpaired numeric markers; the
+tool does not interpret the numbers or apply the same algorithm to
+concatenated multi-fragment groups.
+
+Personal review statuses and notes are separate from the observations.
+Changing a topic or selected source identities clears the group's old
+review status and note. Reordering unchanged selections or groups does
+not. Replacing either PDF clears the in-memory workspace.
+
+A private alignment JSON contains the manual groups, selected excerpts,
+source coverage, fingerprints and exact observations. It requires explicit
+export consent. Keep it together with the full native snapshot from
+**Research: export private native index**. Restore requires matching
+actual PDF bytes, native extraction, and explicit replacement confirmation.
+The report can also be checked offline:
+
+```bash
+npm run verify:alignment -- --report alignment.json --snapshot snapshot.json
+```
+
+The offline verifier reconstructs every native quotation, physical
+identity, exact count and token alignment from the independently chosen
+snapshot. It prints aggregate counts and hashes only, not question
+topics, notes or source text. Neither an offline replay nor a browser
+restore authenticates the personal interpretation, establishes an
+official amendment, or verifies the completeness of native text.

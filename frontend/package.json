@@ -19,7 +19,8 @@
     "qualify:retrieval": "vite build --ssr evaluation/qualify.ts --outDir .evaluation-build && node .evaluation-build/qualify.js",
     "verify:checklist": "vite build --ssr evaluation/verifyChecklist.ts --outDir .evaluation-build && node .evaluation-build/verifyChecklist.js",
     "compare:checklist": "vite build --ssr evaluation/compareChecklist.ts --outDir .evaluation-build && node .evaluation-build/compareChecklist.js",
-    "uncertainty:retrieval": "vite build --ssr evaluation/uncertainty.ts --outDir .evaluation-build && node .evaluation-build/uncertainty.js"
+    "uncertainty:retrieval": "vite build --ssr evaluation/uncertainty.ts --outDir .evaluation-build && node .evaluation-build/uncertainty.js",
+    "verify:alignment": "vite build --ssr evaluation/verifyAlignment.ts --outDir .evaluation-build && node .evaluation-build/verifyAlignment.js"
   },
   "dependencies": {
     "react": "^19.0.0",

@@ -3,6 +3,7 @@ import { buildIndex, MAX_QUESTION, pageCoverage, type Answer, type Corpus, type 
 import { comparePrintedValues, groupPrintedValues, nearbyPassages, parseSearchQuestion, type ChatScope } from './pdfChatInsights';
 import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
 import PdfChatLiteralDiff from './PdfChatLiteralDiff';
+import PdfChatAlignment from './PdfChatAlignment';
 import PdfChatTimeline from './PdfChatTimeline';
 import PdfChatChecklist from './PdfChatChecklist';
 import PdfChatChecklistCompare from './PdfChatChecklistCompare';
@@ -287,6 +288,9 @@ export default function PdfChat() {
       {!indexing && attached.length === 2 && <PdfChatLiteralDiff
         key={'literal-diff:' + generation.current.original + ':' + generation.current.revised}
         index={index} onInspect={inspectNative} />}
+      {!indexing && attached.length === 2 && <PdfChatAlignment
+        key={'alignment:' + generation.current.original + ':' + generation.current.revised}
+        index={index} files={files} corpora={corpora} onInspect={inspectNative} />}
       {!indexing && attached.length > 0 && <PdfChatTimeline
         key={'timeline:' + generation.current.original + ':' + generation.current.revised}
         index={index} corpora={corpora} onInspect={inspectNative} />}
