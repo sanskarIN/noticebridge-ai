@@ -269,7 +269,7 @@ export default function PdfChatAlignment({ index, files, corpora, onInspect }: {
       <form onSubmit={save} className="chat-alignment-editor">
         <h3>{draft.id ? 'Edit ' + draft.id : 'Create evidence group'}</h3>
         <label className="chat-overview-filter">Evidence group topic
-          <input ref={titleRef} value={draft.title} maxLength={MAX_ALIGNMENT_TITLE}
+          <input ref={titleRef} aria-label="Evidence group topic" value={draft.title} maxLength={MAX_ALIGNMENT_TITLE}
             onChange={event => setDraft(old => ({ ...old, title: event.target.value }))} />
         </label>
         <div className="chat-checklist-editor-grid">
@@ -308,7 +308,7 @@ export default function PdfChatAlignment({ index, files, corpora, onInspect }: {
               {alignmentStatuses.map(value => <option key={value} value={value}>{statusNames[value]}</option>)}
             </select>
           </label>
-          <label className="chat-overview-filter">Filter evidence group topics
+          <label className="chat-overview-filter">Filter saved groups by topic
             <input value={keyword} maxLength={MAX_ALIGNMENT_FILTER} onChange={event => { setKeyword(event.target.value); setPage(1); }} />
           </label>
         </div>

@@ -312,7 +312,7 @@ export default function PdfChatChecklist({ files, index, corpora, attached, onIn
         <form className="chat-context-results chat-checklist-form" onSubmit={saveItem}>
           <h4>{editor.id ? 'Edit checklist question' : 'Add your own question'}</h4>
           <label className="chat-overview-filter">Checklist question
-            <textarea ref={editorRef} maxLength={MAX_QUESTION} rows={3} value={editor.question}
+            <textarea ref={editorRef} aria-label="Checklist question" maxLength={MAX_QUESTION} rows={3} value={editor.question}
               onChange={event => setEditor(old => ({ ...old, question: event.target.value }))} />
           </label>
           <ScopePicker value={editor.scope} onChange={scope => setEditor(old => ({ ...old, scope }))}

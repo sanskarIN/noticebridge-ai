@@ -829,7 +829,7 @@ test('manual evidence source filter and question scope remain independent', asyn
   await page.getByText('Explore indexed PDF evidence', { exact: true }).click();
   await page.getByLabel('Evidence source filter').selectOption('revised');
   await expect(page.getByLabel('Search scope', { exact: true })).toHaveValue('original');
-  await expect(page.getByLabel('Search scope')).toHaveCount(1);
+  await expect(page.getByLabel('Search scope', { exact: true })).toHaveCount(1);
   const result = await ask(page, 'Application fee');
   await expect(result.locator('blockquote')).toHaveText('Application fee: Rs. 500');
 });
@@ -1746,7 +1746,7 @@ test('manual multi-fragment evidence alignment retains source identities, explic
   await panel.locator('summary').click();
   const add = panel.getByRole('button', { name: 'Add evidence group' });
   await expect(add).toBeDisabled();
-  await panel.getByLabel('Evidence group topic').fill('Fee review');
+  await panel.getByLabel('Evidence group topic', { exact: true }).fill('Fee review');
   await panel.getByLabel('Select alignment fragment original:1:1', { exact: true }).check();
   await panel.getByLabel('Select alignment fragment revised:1:1', { exact: true }).check();
   await add.click();
@@ -1755,11 +1755,11 @@ test('manual multi-fragment evidence alignment retains source identities, explic
   await fee.getByLabel('Show literal single-pair alignment').check();
   await expect(fee.locator('mark')).toHaveText(['500', '350']);
   await fee.getByRole('button', { name: 'Inspect grouped original:1:1' }).click();
-  await expect(page.getByRole('region', { name: 'Source page inspection' }).locator('blockquote')).toHaveText('Application fee: INR 500');
+  await expect(page.getByRole('region', { name: 'Source page inspection' }).locator(':scope > blockquote')).toHaveText('Application fee: INR 500');
   await fee.getByLabel('Alignment review status group-1').selectOption('reviewed_manually');
   await fee.getByLabel('Alignment personal note group-1').fill('Check full original notice');
   await fee.getByRole('button', { name: 'Save alignment note group-1' }).click();
-  await panel.getByLabel('Evidence group topic').fill('Eligibility review');
+  await panel.getByLabel('Evidence group topic', { exact: true }).fill('Eligibility review');
   await panel.getByLabel('Select alignment fragment original:1:1', { exact: true }).check();
   await panel.getByLabel('Select alignment fragment original:1:2', { exact: true }).check();
   await panel.getByLabel('Select alignment fragment revised:1:2', { exact: true }).check();
@@ -1773,7 +1773,7 @@ test('manual multi-fragment evidence alignment retains source identities, explic
   await expect(panel.locator('.chat-checklist-result')).toHaveCount(1);
   await panel.getByLabel('Alignment status filter').selectOption('all');
   await fee.getByRole('button', { name: 'Edit evidence group group-1' }).click();
-  await panel.getByLabel('Evidence group topic').fill('Updated fee topic');
+  await panel.getByLabel('Evidence group topic', { exact: true }).fill('Updated fee topic');
   await panel.getByRole('button', { name: 'Save evidence group edit' }).click();
   await expect(fee.getByLabel('Alignment review status group-1')).toHaveValue('unreviewed');
   await expect(fee.getByLabel('Alignment personal note group-1')).toHaveValue('');
@@ -1788,7 +1788,7 @@ test('alignment report export and restore require consent, matching PDF bytes an
   await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
   let panel = page.locator('details.chat-alignment');
   await panel.locator('summary').click();
-  await panel.getByLabel('Evidence group topic').fill('Manual fee review');
+  await panel.getByLabel('Evidence group topic', { exact: true }).fill('Manual fee review');
   await panel.getByLabel('Select alignment fragment original:1:1', { exact: true }).check();
   await panel.getByLabel('Select alignment fragment revised:1:1', { exact: true }).check();
   await panel.getByRole('button', { name: 'Add evidence group' }).click();
