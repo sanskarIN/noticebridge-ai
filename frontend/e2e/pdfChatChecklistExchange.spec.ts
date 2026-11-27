@@ -359,3 +359,54 @@ test('nearby-group comparison preserves group boundaries and does not turn conte
   expect(source.strict_text).toEqual({ identical_observations: 0, left_only_observations: 0, right_only_observations: 0 });
   expect(source.context_text).toEqual({ identical_observations: 0, left_only_observations: 1, right_only_observations: 1 });
 });
+
+test('a physical-page query does not attribute a change on another physical page to its own scoped observations', async () => {
+  const firstPage = { role: 'original', page: 1, ordinal: 1, text: 'Application fee: INR 500' } satisfies Passage;
+  const secondPage = { role: 'original', page: 2, ordinal: 1, text: 'Administrative note' } satisfies Passage;
+  const first: Corpus = { passages: [firstPage, secondPage], pageCount: 2, processedPages: 2,
+    missingPages: [], limitedPages: [], limited: false };
+  const second: Corpus = { ...first, passages: [firstPage, { ...secondPage, text: 'Different administrative note' }],
+    limitedPages: [2], limited: true };
+  const selected: ChecklistPlan = [
+    { id: 'whole', question: 'Application fee?', scope: 'original', includeContext: false },
+    { id: 'physical', question: 'Application fee on page 1?', scope: 'original', includeContext: false },
+  ];
+  const localPins = { original: pins.original };
+  async function input(corpus: Corpus) {
+    const sources = { original: corpus };
+    const search = buildIndex(corpus.passages);
+    return {
+      snapshot: serializeCorpusSnapshot(localPins, sources),
+      report: await serializeChecklistReport(search, localPins, sources, selected,
+        blankChecklistReviews(selected), runChecklist(search, sources, selected), true),
+    };
+  }
+  const result = (await compareChecklistRuns(await input(first), await input(second))).comparison;
+  const whole = result.questions[0], physical = result.questions[1];
+  expect(whole.changed).toBe(true);
+  expect(whole.sources[0]).toMatchObject({
+    classification: 'coverage_or_source_changed',
+    source_coverage_metadata_changed: true,
+    strict_text: { identical_observations: 1, left_only_observations: 0, right_only_observations: 0 },
+  });
+  expect(physical.changed).toBe(false);
+  expect(physical.sources[0]).toMatchObject({
+    classification: 'unchanged_observation',
+    source_coverage_metadata_changed: false,
+    coverage_changed: false,
+  });
+  expect(result.sources[0].changed).toBe(true);
+  expect(result.summary.changed_questions).toBe(1);
+});
+test('a comparison cannot verify if the same two inputs are supplied in reverse order', async () => {
+  const left = { report: await report(), snapshot };
+  const right = await comparisonFixture(rows.map(row => row === rows[3] ?
+    { ...row, text: 'Application fee: INR 300' } : row), { ...pins, revised: 'd'.repeat(64) });
+  const forward = await compareChecklistRuns(left, right);
+  const backward = await compareChecklistRuns(right, left);
+  expect(forward.text).not.toBe(backward.text);
+  expect(forward.comparison.left).toEqual(backward.comparison.right);
+  expect(forward.comparison.right).toEqual(backward.comparison.left);
+  await expect(replayChecklistComparison(forward.text, right, left)).rejects.toThrow();
+  await expect(replayChecklistComparison(backward.text, left, right)).rejects.toThrow();
+});
