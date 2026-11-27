@@ -882,3 +882,21 @@ Every new question and model edit requires fresh approval before sending
 private text to the local inference endpoint. Use **Clear local model
 settings** to remove the remembered tags and digests. Model listing
 does not approve inference.
+
+### AI tools for earlier questions and compound turns
+
+The optional AI answer tools have an explicit question/part selector.
+By default it selects the first answer of the latest turn. Every
+historical answer and separately cited compound part can be selected,
+with its effective source and physical page shown. Changing the target,
+submitting a new question, revising the conversation or replacing a
+PDF resets the active model-result panel and approvals. The selected
+model tag/digest configuration remains in page memory, but it does
+not authorize sending private text for another question.
+
+The same existing request builders and independent review validators
+are used for the selected single answer. No combined citation pool or
+previous answer text is substituted. Imported results must still match
+the exact current request fingerprint; changing the question/part
+invalidates prior pending imports. The selector itself is ephemeral,
+not part of the portable question plan.

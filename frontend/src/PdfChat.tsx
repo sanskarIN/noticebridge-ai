@@ -28,6 +28,7 @@ import { readPdf } from './pdfChatExtract';
 import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
 import { emptyLocalPipelineConfig, type LocalPipelineConfig } from './pdfChatLocalPipeline';
+import { answerTargets, selectAnswerTarget, answerTargetLabel } from './pdfChatAnswerTarget';
 import PdfChatDirectAnswer from './PdfChatDirectAnswer';
 import PdfChatCrossPage from './PdfChatCrossPage';
 import PdfChatSearchRecovery from './PdfChatSearchRecovery';
@@ -103,6 +104,7 @@ export default function PdfChat() {
   const [question, setQuestion] = useState('');
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [localModelConfig, setLocalModelConfig] = useState<LocalPipelineConfig>(emptyLocalPipelineConfig);
+  const [modelTargetId, setModelTargetId] = useState<string | null>(null);
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[]>([]);
   const [conversationEpoch, setConversationEpoch] = useState(0);
   const [reuse, setReuse] = useState(false);
@@ -148,6 +150,8 @@ export default function PdfChat() {
   const indexing = demoLoading || Object.values(slots).some(slot => slot.kind === 'loading');
   const canAsk = !indexing && (scope === 'auto' ? attached.length > 0 : scope === 'both' ? ready('original') && ready('revised') : ready(scope));
 
+  const modelTargets = useMemo(() => answerTargets(turns), [turns]);
+  const modelTarget = selectAnswerTarget(modelTargets, modelTargetId);
   const previousTurn = editingTurn === null ? turns.at(-1) : turns[editingTurn - 1];
   const canReuse = previousTurn?.answers.length === 1;
   const canSubmit = canAsk && !!question.trim() && (!reuse || canReuse) &&
@@ -186,6 +190,7 @@ export default function PdfChat() {
     }
   }
   function clearConversation() {
+    setModelTargetId(null);
     sourceReturnRef.current = null;
     savedDraft.current = null;
     setEditingTurn(null);
@@ -266,6 +271,7 @@ export default function PdfChat() {
         setConversationEpoch(epoch => epoch + 1);
         setEditingTurn(null); setDiscardLater(false); savedDraft.current = null;
       }
+      setModelTargetId(null);
       setQuestion('');
       setReuse(false);
       setPreview(null);
@@ -503,10 +509,27 @@ export default function PdfChat() {
           {turns.length >= MAX_TURNS && editingTurn === null && <p className="chat-note">Conversation limit reached. Revise an earlier question or clear the conversation to continue.</p>}
           {error && <p role="alert" className="chat-error">{error}</p>}
         </form>
-        {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel
-          key={'models:' + generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length}
-          index={index} answer={turns.at(-1)!.answers[0]} onInspect={inspectNative}
-          config={localModelConfig} setConfig={setLocalModelConfig} />}
+        {!indexing && modelTarget && <section className="chat-context-results chat-model-target" aria-label="Optional AI answer tools">
+          <h3>Optional AI answer tools</h3>
+          <p className="chat-muted">Choose one answer, including an earlier question or a single part of a compound question.
+            Switching targets or asking another question clears the current experimental results and approvals.
+            Nothing is sent automatically.</p>
+          <label className="chat-overview-filter">AI review question
+            <select value={modelTarget.id} onChange={event => {
+              const id = event.target.value;
+              if (selectAnswerTarget(modelTargets, id)) setModelTargetId(id);
+            }}>
+              {modelTargets.map(target => <option key={target.id} value={target.id}>{answerTargetLabel(target)}</option>)}
+            </select>
+          </label>
+          <p className="chat-note">Selected question: {modelTarget.answer.question}
+            {' '}· {modelTarget.answer.scope === 'both' ? 'Both PDFs' : names[modelTarget.answer.scope]}
+            {modelTarget.answer.pageFilter === undefined ? '' : ' · Physical PDF page ' + modelTarget.answer.pageFilter + ' only'}</p>
+          <PdfChatEmbeddingPanel
+            key={'models:' + generation.current.original + ':' + generation.current.revised + ':' + conversationEpoch + ':' + turns.length + ':' + modelTarget.id}
+            index={index} answer={modelTarget.answer} onInspect={inspectNative}
+            config={localModelConfig} setConfig={setLocalModelConfig} />
+        </section>}
         {!indexing && attached.length > 0 && <PdfChatSessionPanel
           key={'session:' + generation.current.original + ':' + generation.current.revised}
           files={files} index={index} turns={turns} onRestore={restored => {

@@ -455,3 +455,7 @@
 .chat-recovery-suggestion { padding: 10px 0; border-top: 1px solid #38546c; overflow-wrap: anywhere; }
 .chat-recovery-quote { white-space: pre-wrap; overflow-wrap: anywhere; background: #0b1829; border-radius: 6px; padding: 10px; }
 .chat-recovery .chat-button { white-space: normal; max-width: 100%; }
+
+.chat-model-target h3 { margin: 0 0 8px; }
+.chat-model-target select { width: 100%; max-width: 100%; min-width: 0; }
+.chat-model-target > .chat-note { overflow-wrap: anywhere; }

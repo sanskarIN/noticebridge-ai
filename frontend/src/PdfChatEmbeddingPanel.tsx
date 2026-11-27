@@ -65,7 +65,7 @@ export default function PdfChatEmbeddingPanel({ index, answer, onInspect, config
   return <>
   <details className="chat-session chat-embedding-panel">
     <summary>Experimental semantic retrieval (local file workflow)</summary>
-    <p className="chat-note">Optional research experiment for the last single question. Export includes the
+    <p className="chat-note">Optional research experiment for the selected single question. Export includes the
       question and complete indexed passages within its selected source/page scope. The file may contain
       private document text. Use only a trusted local-only model runtime; no browser model connection is made.</p>
     <label className="chat-overview-filter">Semantic candidate mode
