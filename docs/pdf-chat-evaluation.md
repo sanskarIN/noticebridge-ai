@@ -834,3 +834,24 @@ withheld rather than using an arbitrary prefix. Suggestions are not
 semantic equivalence claims. The user must inspect the alternative,
 explicitly copy it into an empty composer and submit it separately.
 Existing unsent drafts and the selected role/page are preserved.
+
+### Compound notice questions
+
+The closed compound-query grammar handles explicit date, time and venue
+lists for examinations, interviews and document verification, including
+“when and where” and “where and at what time”. It also handles explicit
+application, registration and correction-window field lists. Each
+component is searched separately, with the same explicit trailing source
+and physical-page route. For example, “When and where is the exam in the
+revised notice on page 2?” produces two independently cited questions:
+examination date and examination venue, both restricted to the revised
+PDF's physical page 2. A manual scope selection still takes precedence.
+
+Only full recognized forms are split. Alternatives, duplicate fields,
+additional category/exception conditions, unknown event names and
+ambiguous routes stay intact. Existing question-mark and semicolon
+boundaries take precedence; no compound turn is implicitly reused as
+context. The portable question plan stores the original user input,
+not generated answer text. Additional exact single-field templates cover
+explicit fee amounts, registration opening/closing, selection procedures
+and other notice-specific questions without dropping qualifiers.

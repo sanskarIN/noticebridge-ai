@@ -3,6 +3,7 @@ import { extractKnownField } from './pdfChatOverview';
 import { scalarComparisonIntent, type ScalarIntent } from './pdfChatScalarIntent';
 import { noticeFieldIntent, type NoticeIntent } from './pdfChatNoticeIntent';
 import { requirementIntent } from './pdfChatRequirements';
+import { planStructuredQuestions } from './pdfChatQuestionPlanning';
 
 export const MAX_SUBQUESTIONS = 4;
 
@@ -17,9 +18,11 @@ export function planQuestions(question: string): string[] {
   if (parts.length > 1) return parts;
   const fieldList = /^(?:what (?:is|are) (?:the )?)?(application )?(deadline|fee|eligibility|last date)(?:\s*,\s*(?:and )?|\s+and\s+)(deadline|fee|eligibility|last date)(?:(?:\s*,\s*(?:and )?|\s+and\s+)(deadline|fee|eligibility|last date))?\??$/i;
   const match = fieldList.exec(clean);
-  if (!match) return [clean];
+  if (!match) return planStructuredQuestions(clean) ?? [clean];
   const [, prefix, first, second, third] = match;
-  return [first, second, third].filter((field): field is string => Boolean(field)).map(field =>
+  const fields = [first, second, third].filter((field): field is string => Boolean(field));
+  if (new Set(fields.map(field => field.toLowerCase().replace('last date', 'deadline'))).size !== fields.length) return [clean];
+  return fields.map(field =>
     prefix && field.toLowerCase() !== 'eligibility' ? prefix + field : field,
   );
 }

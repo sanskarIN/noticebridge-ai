@@ -1971,3 +1971,30 @@ test('search recovery preserves role and physical page isolation for partial evi
   await inspector.getByRole('button', { name: 'Close source page' }).click();
   await expect(recovery.getByRole('button', { name: 'Inspect partial lead original:1:1' })).toBeFocused();
 });
+
+test('compound event question produces separately cited date and venue in the same source scope', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Examination date: 19 December 2026', 'Examination time: 10:00', 'Examination venue: Hall A']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  await attach(page, 'Updated / second PDF', ['Examination date: 20 December 2026', 'Examination time: 11:00', 'Examination venue: Hall B']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  await page.getByLabel('Search scope', { exact: true }).selectOption('auto');
+  const turn = await ask(page, 'When and where is the exam in the revised notice on page 1?');
+  const answers = turn.locator('.chat-answer');
+  await expect(answers).toHaveCount(2);
+  await expect(answers.nth(0).locator('blockquote')).toHaveText('Examination date: 20 December 2026');
+  await expect(answers.nth(1).locator('blockquote')).toHaveText('Examination venue: Hall B');
+  await expect(page.getByLabel('Include previous question as search context')).toBeDisabled();
+});
+test('compound application timeline retrieves start date and deadline without conflating the payment deadline', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application opening date: 1 December 2026',
+    'Application deadline: 19 December 2026', 'Payment deadline: 21 December 2026', 'Application fee: INR 500']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  const turn = await ask(page, 'What are the application opening date, deadline and fee?');
+  const answers = turn.locator('.chat-answer');
+  await expect(answers).toHaveCount(3);
+  await expect(answers.nth(0).locator('blockquote')).toHaveText('Application opening date: 1 December 2026');
+  await expect(answers.nth(1).locator('blockquote')).toHaveText('Application deadline: 19 December 2026');
+  await expect(answers.nth(2).locator('blockquote')).toHaveText('Application fee: INR 500');
+});

@@ -378,7 +378,7 @@ export default function PdfChat() {
         </div>
         <div ref={historyRef} className="chat-history" role="log" aria-label="Document chat history" aria-live="polite">
           {!turns.length && <p className="chat-muted">Your questions and matching document passages will appear here.</p>}
-          {turns.map(({ input, resolved, answers }, i) => <article className="chat-turn" key={conversationEpoch + ':' + i}>
+          {turns.map(({ input, resolved, answers, includeContext: turnIncludeContext }, i) => <article className="chat-turn" key={conversationEpoch + ':' + i}>
             <p className="chat-user"><strong>You</strong> {input}</p>
             <div className="chat-turn-actions" role="group" aria-label={'Actions for question ' + (i + 1)}>
               <button type="button" className="chat-button" disabled={indexing || editingTurn !== null}
@@ -442,7 +442,7 @@ export default function PdfChat() {
                   (answer.scope === 'both' ? attached.length !== 2 : !attached.includes(answer.scope))}
                 onDraft={value => {
                   if (indexing || editingTurn !== null || question.trim() || turns.length >= MAX_TURNS) return;
-                  applyDraft({ input: value, scope: answer.scope, includeContext, reuse: false });
+                  applyDraft({ input: value, scope: answer.scope, includeContext: turnIncludeContext, reuse: false });
                   inputRef.current?.focus();
                 }} />
               <PdfChatQuestionEvidence index={index} answer={answer} corpora={corpora} onInspect={inspectNative} />

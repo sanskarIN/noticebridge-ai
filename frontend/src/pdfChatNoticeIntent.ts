@@ -5,6 +5,21 @@ import { fieldDefinitions, fieldForLabel, type FieldDefinition, type FieldId } f
 
 type Rule = { field: FieldId; pattern: RegExp };
 const rules: readonly Rule[] = [
+  { field: 'application_fee', pattern: /^(?:how much (?:is|are) (?:the )?application (?:fee|fees|charge|charges)|what (?:amount|fee) (?:must|should|do) (?:i|we) pay (?:to apply|for (?:the )?application))$/i },
+  { field: 'registration_fee', pattern: /^(?:how much (?:is|are) (?:the )?registration (?:fee|fees|charge|charges)|what (?:amount|fee) (?:must|should|do) (?:i|we) pay (?:to register|for registration))$/i },
+  { field: 'exam_fee', pattern: /^how much (?:is|are) (?:the )?(?:exam|examination) (?:fee|fees)$/i },
+  { field: 'application_deadline', pattern: /^(?:what is (?:the )?(?:last day|final day) to apply|until when can (?:i|we) apply|by what date (?:must|should) (?:i|we) submit (?:the )?application)$/i },
+  { field: 'registration_deadline', pattern: /^(?:what is (?:the )?(?:last day|last date|final day) to register|until when can (?:i|we) register|by what date (?:must|should) (?:i|we) register)$/i },
+  { field: 'application_start', pattern: /^(?:on what date (?:do|will) (?:the )?applications? (?:open|start|begin)|from what date can (?:i|we) apply)$/i },
+  { field: 'registration_start', pattern: /^(?:on what date (?:does|will) (?:the )?registration (?:open|start|begin)|from what date can (?:i|we) register)$/i },
+  { field: 'eligibility', pattern: /^(?:who (?:can|may|is eligible to) apply|who is eligible (?:to apply|for (?:the )?application)|what (?:qualifications|educational qualifications) (?:do|must) (?:i|we) (?:need|have))$/i },
+  { field: 'exam_date', pattern: /^(?:on which date (?:is|will be) (?:the )?(?:exam|examination)|when will (?:the )?(?:exam|examination) (?:be held|take place))$/i },
+  { field: 'interview_date', pattern: /^(?:on which date (?:is|will be) (?:the )?interview|when will (?:the )?interview (?:be held|take place))$/i },
+  { field: 'verification_date', pattern: /^(?:on which date (?:is|will be) (?:the )?document verification|when will (?:the )?document verification (?:be held|take place))$/i },
+  { field: 'application_portal', pattern: /^(?:what (?:is|are) (?:the )?link (?:to|for) (?:the )?online application|which portal (?:should|must|can) (?:i|we) use to apply)$/i },
+  { field: 'contact_email', pattern: /^(?:where (?:should|can) (?:i|we) send (?:an )?email (?:to|for) (?:the )?helpdesk|what is (?:the )?email address (?:of|for) (?:the )?helpdesk)$/i },
+  { field: 'contact_phone', pattern: /^(?:what is (?:the )?(?:phone|telephone) number (?:of|for) (?:the )?helpdesk|which number (?:should|can) (?:i|we) call (?:for|to reach) (?:the )?helpdesk)$/i },
+  { field: 'selection_process', pattern: /^(?:how (?:are|will) (?:the )?(?:applicants|candidates) (?:be )?selected|what (?:are|is) (?:the )?stages? of (?:the )?selection process)$/i },
   { field: 'application_deadline', pattern: /^(?:when do (?:the )?applications close|when does (?:the )?application close|when is (?:the )?last date to apply)$/i },
   { field: 'application_start', pattern: /^(?:when do (?:the )?applications open|when does (?:the )?application open)$/i },
   { field: 'registration_start', pattern: /^when does (?:the )?registration (?:open|start|begin)$/i },
@@ -47,7 +62,7 @@ export function noticeFieldIntent(question: string): NoticeIntent | null {
   if (!question || question.length > 400) return null;
   const clean = question.trim().replace(/\?$/, '').trim().replace(/[ \t]+/g, ' ');
   if (!clean || /[\r\n;?]/.test(clean)) return null;
-  const label = clean.replace(/^(?:what (?:is|are)|what's|tell me|show me)\s+(?:the\s+)?/i, '');
+  const label = clean.replace(/^(?:what (?:is|are)|what's|tell me|show me|(?:can|could|would) you (?:please )?(?:tell|show) me|please (?:tell|show) me)\s+(?:the\s+)?/i, '');
   const field = fieldForLabel(label);
   if (field) return { field, form: 'label' };
   const matched = rules.filter(rule => rule.pattern.test(clean));
