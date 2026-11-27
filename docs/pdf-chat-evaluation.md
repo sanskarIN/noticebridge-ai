@@ -775,3 +775,21 @@ be misleading; the minimum family count is a guardrail rather than a
 statistical guarantee. These are descriptive checks with no adjustment
 for multiple comparisons. A local frozen plan does not independently
 prove that it existed before outcomes were examined.
+
+### Refine an earlier chat question
+
+Every saved turn has a **Revise question** action. The composer restores
+the original user wording, source selection, nearby fallback setting and
+context-reuse flag. A revision uses the preceding turn (if any), not
+the most recent turn in the old history. Saving computes the new
+answer from the current native index, preserving all earlier turns.
+If later turns exist, an explicit checkbox is required before removing
+them, because they may depend on the edited question. Cancel restores
+the unsent composer draft; replacing a PDF clears the conversation and
+any in-progress revision. Source-bound review notes remain separate.
+
+**Repeat question independently** copies the earlier turn's resolved
+wording and routing settings to an empty composer with context reuse
+disabled. The new question is not submitted automatically. No previous
+answer text is used. Existing question-plan export and replay continue
+to work without a new wire format.

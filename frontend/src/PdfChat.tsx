@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { buildIndex, MAX_QUESTION, pageCoverage, type Answer, type Corpus, type Passage, type Role } from './pdfChatCore';
 import { comparePrintedValues, groupPrintedValues, nearbyPassages, parseSearchQuestion, type ChatScope } from './pdfChatInsights';
-import { MAX_CHAT_TURNS, runChatStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
+import { MAX_CHAT_TURNS, runChatStep, reviseChatHistory, independentQuestionFromTurn, type QuestionStep, type ChatTurn, type AttachedFiles } from './pdfChatSession';
 import PdfChatLiteralDiff from './PdfChatLiteralDiff';
 import PdfChatAlignment from './PdfChatAlignment';
 import PdfChatTimeline from './PdfChatTimeline';
@@ -103,6 +103,9 @@ export default function PdfChat() {
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[]>([]);
   const [conversationEpoch, setConversationEpoch] = useState(0);
   const [reuse, setReuse] = useState(false);
+  const [editingTurn, setEditingTurn] = useState<number | null>(null);
+  const [discardLater, setDiscardLater] = useState(false);
+  const savedDraft = useRef<QuestionStep | null>(null);
   const [includeContext, setIncludeContext] = useState(true);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<{
@@ -139,7 +142,47 @@ export default function PdfChat() {
   const indexing = demoLoading || Object.values(slots).some(slot => slot.kind === 'loading');
   const canAsk = !indexing && (scope === 'auto' ? attached.length > 0 : scope === 'both' ? ready('original') && ready('revised') : ready(scope));
 
+  const previousTurn = editingTurn === null ? turns.at(-1) : turns[editingTurn - 1];
+  const canReuse = previousTurn?.answers.length === 1;
+  const canSubmit = canAsk && !!question.trim() &&
+    (editingTurn !== null || turns.length < MAX_TURNS) &&
+    (editingTurn === null || editingTurn === turns.length - 1 || discardLater);
+  function applyDraft(draft: QuestionStep) {
+    setQuestion(draft.input); setScope(draft.scope);
+    setIncludeContext(draft.includeContext); setReuse(draft.reuse);
+    setError('');
+  }
+  function currentDraft(): QuestionStep {
+    return { input: question, scope, includeContext, reuse };
+  }
+  function cancelRevision() {
+    const draft = savedDraft.current;
+    savedDraft.current = null;
+    setEditingTurn(null); setDiscardLater(false);
+    if (draft) applyDraft(draft);
+    inputRef.current?.focus({ preventScroll: true });
+  }
+  function startRevision(at: number) {
+    const turn = turns[at];
+    if (!turn || indexing) return;
+    if (editingTurn === null) savedDraft.current = currentDraft();
+    setEditingTurn(at); setDiscardLater(false);
+    applyDraft({ input: turn.input, scope: turn.scope, includeContext: turn.includeContext, reuse: turn.reuse });
+    inputRef.current?.focus();
+  }
+  function copyIndependent(at: number) {
+    if (indexing || editingTurn !== null || question.trim() || turns.length >= MAX_TURNS) return;
+    try {
+      applyDraft(independentQuestionFromTurn(turns[at]));
+      inputRef.current?.focus();
+    } catch {
+      setError('This resolved question exceeds the composer limit. Write a shorter independent question.');
+    }
+  }
   function clearConversation() {
+    savedDraft.current = null;
+    setEditingTurn(null);
+    setDiscardLater(false);
     setConversationEpoch(epoch => epoch + 1);
     setTurns([]);
     setPreview(null);
@@ -204,10 +247,18 @@ export default function PdfChat() {
   }
   function ask(event: FormEvent) {
     event.preventDefault();
-    if (!canAsk || turns.length >= MAX_TURNS) return;
+    if (!canSubmit) return;
     try {
-      const turn = runChatStep(index, { input: question.trim(), scope, includeContext, reuse }, turns.at(-1), attached);
-      setTurns(old => [...old, turn]);
+      const step = { input: question.trim(), scope, includeContext, reuse };
+      if (editingTurn === null) {
+        const turn = runChatStep(index, step, turns.at(-1), attached);
+        setTurns(old => [...old, turn]);
+      } else {
+        const revised = reviseChatHistory(index, turns, editingTurn, step, attached, discardLater);
+        setTurns(revised);
+        setConversationEpoch(epoch => epoch + 1);
+        setEditingTurn(null); setDiscardLater(false); savedDraft.current = null;
+      }
       setQuestion('');
       setReuse(false);
       setPreview(null);
@@ -329,6 +380,12 @@ export default function PdfChat() {
           {!turns.length && <p className="chat-muted">Your questions and matching document passages will appear here.</p>}
           {turns.map(({ input, resolved, answers }, i) => <article className="chat-turn" key={conversationEpoch + ':' + i}>
             <p className="chat-user"><strong>You</strong> {input}</p>
+            <div className="chat-turn-actions" role="group" aria-label={'Actions for question ' + (i + 1)}>
+              <button type="button" className="chat-button" disabled={indexing}
+                onClick={() => startRevision(i)}>Revise question {i + 1}</button>
+              <button type="button" className="chat-button" disabled={indexing || editingTurn !== null || !!question.trim() || turns.length >= MAX_TURNS}
+                onClick={() => copyIndependent(i)}>Repeat question {i + 1} independently</button>
+            </div>
             {resolved !== input && <p className="chat-muted">Search context: {resolved}</p>}
             {answers.map((answer, part) => <div className="chat-answer" key={part}>
               {answers.length > 1 && <h4 className="chat-subquestion">Question {part + 1}: {answer.question}</h4>}
@@ -387,6 +444,16 @@ export default function PdfChat() {
           </article>)}
         </div>
         <form className="chat-form" onSubmit={ask}>
+          {editingTurn !== null && <section className="chat-revision" aria-label="Question revision">
+            <h3>Revise question {editingTurn + 1}</h3>
+            <p>Your earlier questions remain unchanged. The revised answer is computed from the current local PDFs.
+              The old answer and subsequent turns are not kept in the active conversation.</p>
+            {editingTurn < turns.length - 1 && <label className="chat-checkbox">
+              <input type="checkbox" checked={discardLater} onChange={event => setDiscardLater(event.target.checked)} />
+              Confirm removal of {turns.length - editingTurn - 1} later question(s) when saving this revision
+            </label>}
+            <button type="button" className="chat-button" onClick={cancelRevision}>Cancel question revision</button>
+          </section>}
           <label htmlFor="chat-search-scope">Search scope</label>
           <select id="chat-search-scope" aria-label="Search scope" value={scope}
             onChange={event => setScope(event.target.value as ChatScope)}>
@@ -405,17 +472,17 @@ export default function PdfChat() {
           <p className="chat-muted">Ask separate questions with question marks or semicolons (up to four). Use “on page 2” to restrict a question to physical PDF page 2.</p>
           <label className="chat-checkbox"><input type="checkbox" checked={includeContext}
             onChange={event => setIncludeContext(event.target.checked)} /> Search nearby lines when no single line matches</label>
-          <label className="chat-checkbox"><input type="checkbox" checked={reuse} disabled={!turns.length || turns.at(-1)?.answers.length !== 1}
+          <label className="chat-checkbox"><input type="checkbox" checked={reuse} disabled={!canReuse}
             onChange={event => setReuse(event.target.checked)} /> Include previous question as search context</label>
           {reuse && <p className="chat-muted">For source or page changes, try “What about the revised notice?”
             or “On page 2?”. The previous question’s subject and qualifiers are retained.
             The selected search scope still takes precedence over automatic source wording.</p>}
           <div className="chat-toolbar">
             <span className="chat-muted">{question.length}/{MAX_QUESTION} · {turns.length}/{MAX_TURNS} turns</span>
-            <button type="submit" className="primary-button" disabled={!canAsk || !question.trim() || turns.length >= MAX_TURNS}>Ask PDF</button>
+            <button type="submit" className="primary-button" disabled={!canSubmit}>{editingTurn === null ? 'Ask PDF' : 'Save revised question'}</button>
           </div>
           {!canAsk && <p className="chat-muted">{indexing ? 'Finish indexing the selected PDFs before asking.' : 'Attach the PDF or PDFs selected in the scope before asking.'}</p>}
-          {turns.length >= MAX_TURNS && <p className="chat-note">Conversation limit reached. Clear the conversation to continue.</p>}
+          {turns.length >= MAX_TURNS && editingTurn === null && <p className="chat-note">Conversation limit reached. Revise an earlier question or clear the conversation to continue.</p>}
           {error && <p role="alert" className="chat-error">{error}</p>}
         </form>
         {!indexing && turns.at(-1)?.answers.length === 1 && <PdfChatEmbeddingPanel

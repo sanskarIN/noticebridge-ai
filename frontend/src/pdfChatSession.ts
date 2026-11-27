@@ -132,3 +132,27 @@ export async function loadQuestionPlan(file: File, pins: SourcePins): Promise<Qu
 export function stepsFromTurns(turns: ChatTurn[]): QuestionStep[] {
   return turns.map(({ input, scope, includeContext, reuse }) => ({ input, scope, includeContext, reuse }));
 }
+
+/** Replace one turn, retaining the unchanged prefix. Later questions may
+ * depend on the edited wording, so they are deliberately not replayed
+ * or silently retained. The caller must explicitly approve truncation.
+ * Build the replacement before returning any new history.
+ */
+export function reviseChatHistory(index: SearchIndex, turns: readonly ChatTurn[], at: number,
+  replacement: QuestionStep, attached: Role[], discardLater: boolean): ChatTurn[] {
+  if (!Number.isSafeInteger(at) || at < 0 || at >= turns.length ||
+      turns.length > MAX_CHAT_TURNS || (at + 1 < turns.length && discardLater !== true)) fail();
+  const prefix = turns.slice(0, at);
+  const next = runChatStep(index, questionStep(replacement), prefix.at(-1), attached);
+  return [...prefix, next];
+}
+
+/** A prior resolved question can be reused as a new independent turn.
+ * Use its original route and nearby-search setting, but never implicitly
+ * reuse the latest turn's context. The user can edit the copied wording.
+ */
+export function independentQuestionFromTurn(turn: ChatTurn): QuestionStep {
+  return questionStep({
+    input: turn.resolved, scope: turn.scope, includeContext: turn.includeContext, reuse: false,
+  });
+}

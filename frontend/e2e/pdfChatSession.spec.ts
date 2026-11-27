@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { buildIndex, type Passage } from '../src/pdfChatCore';
 import {
   ChatSessionError, MAX_CHAT_TURNS, MAX_SESSION_BYTES, parseQuestionPlan,
-  replayQuestions, runChatStep, serializeQuestionPlan, stepsFromTurns, type QuestionStep,
+  replayQuestions, runChatStep, serializeQuestionPlan, stepsFromTurns, reviseChatHistory, independentQuestionFromTurn, type QuestionStep,
 } from '../src/pdfChatSession';
 
 const pins = { original: 'a'.repeat(64), revised: 'b'.repeat(64) };
@@ -126,4 +126,44 @@ test('route-only follow-ups are recomputed identically after question-plan expor
   expect(restored.map(turn => turn.answers[0].citations.map(p => p.text))).toEqual([
     ['Application fee: Rs. 500'], ['Application fee: Rs. 350'], [], ['Application fee: Rs. 350'],
   ]);
+});
+
+test('revision retains only the unchanged prefix and recomputes the selected turn', () => {
+  const history = replayQuestions(index, steps, ['original', 'revised']);
+  const before = JSON.stringify(history);
+  const next = reviseChatHistory(index, history, 1,
+    { ...steps[1], input: 'What about the original notice?' }, ['original', 'revised'], true);
+  expect(next).toHaveLength(2);
+  expect(next[0]).toBe(history[0]);
+  expect(next[1].answers[0].citations).toEqual([lines[0]]);
+  expect(next[1].reuse).toBe(true);
+  expect(JSON.stringify(history)).toBe(before);
+  const exported = serializeQuestionPlan(pins, stepsFromTurns(next));
+  expect(replayQuestions(index, parseQuestionPlan(exported, pins), ['original', 'revised'])).toEqual(next);
+});
+test('revising the last turn requires no truncation confirmation, but earlier turns do', () => {
+  const history = replayQuestions(index, steps, ['original', 'revised']);
+  expect(() => reviseChatHistory(index, history, 0, steps[0], ['original', 'revised'], false)).toThrow();
+  const updated = reviseChatHistory(index, history, 3, { ...steps[3], includeContext: true }, ['original', 'revised'], false);
+  expect(updated).toHaveLength(4);
+  expect(updated.slice(0, 3)).toEqual(history.slice(0, 3));
+  expect(updated[3].answers[0].citations).toEqual(lines.slice(2));
+});
+test('revision fails atomically for invalid bounds, context or unavailable source', () => {
+  const history = replayQuestions(index, steps, ['original', 'revised']);
+  const before = JSON.stringify(history);
+  for (const at of [-1, 4, 1.5, NaN]) {
+    expect(() => reviseChatHistory(index, history, at, steps[0], ['original', 'revised'], true)).toThrow();
+  }
+  expect(() => reviseChatHistory(index, history, 0, { ...steps[0], reuse: true }, ['original', 'revised'], true)).toThrow();
+  expect(() => reviseChatHistory(index, history, 1, { ...steps[0], scope: 'revised' }, ['original'], true)).toThrow();
+  expect(() => reviseChatHistory(index, history, 0, { ...steps[0], input: ' ' }, ['original', 'revised'], true)).toThrow();
+  expect(JSON.stringify(history)).toBe(before);
+});
+test('repeat resolved follow-up independently preserves the effective wording and settings', () => {
+  const history = replayQuestions(index, steps, ['original', 'revised']);
+  const copied = independentQuestionFromTurn(history[1]);
+  expect(copied).toEqual({ input: history[1].resolved, scope: 'auto', includeContext: true, reuse: false });
+  expect(runChatStep(index, copied, history[3], ['original', 'revised']).answers).toEqual(history[1].answers);
+  expect(independentQuestionFromTurn(history[3])).toEqual(steps[3]);
 });

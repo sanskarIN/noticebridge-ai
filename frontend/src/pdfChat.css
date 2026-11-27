@@ -391,3 +391,24 @@
   width: 100%;
   resize: vertical;
 }
+
+.chat-turn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.chat-turn-actions .chat-button {
+  font-size: 0.85rem;
+  white-space: normal;
+}
+.chat-revision {
+  border: 1px solid #50627d;
+  border-radius: 10px;
+  background: #14283d;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+.chat-revision h3, .chat-revision p { margin: 0; }
+.chat-revision > button { justify-self: start; }
