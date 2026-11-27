@@ -793,3 +793,14 @@ wording and routing settings to an empty composer with context reuse
 disabled. The new question is not submitted automatically. No previous
 answer text is used. Existing question-plan export and replay continue
 to work without a new wire format.
+
+### Primary chat workflow and keyboard navigation
+
+The conversation is now presented directly after PDF attachment, before
+advanced evidence tools. The workflow links jump to attachment,
+questions, review tools and the active source inspection. Ctrl+Enter
+or Command+Enter submits a valid question; ordinary Enter inserts a
+newline. Explicit source-inspection actions focus and scroll to the
+selected physical page. Closing the inspector restores focus to the
+original citation or control when it still exists. Changing pages
+within the inspector keeps that original return target.

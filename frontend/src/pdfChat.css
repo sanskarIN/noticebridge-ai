@@ -412,3 +412,34 @@
 }
 .chat-revision h3, .chat-revision p { margin: 0; }
 .chat-revision > button { justify-self: start; }
+
+.chat-workflow-nav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 20px;
+}
+.chat-workflow-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 12px;
+  background: #172a41;
+  border: 1px solid #62748e;
+  border-radius: 8px;
+  color: #e8edf7;
+  text-decoration: none;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.chat-workflow-nav a:hover { background: #243c51; }
+.chat-advanced-tools { margin-top: 28px; min-width: 0; }
+.chat-advanced-tools > h2 { margin: 0 0 8px; font-size: 23px; }
+.pdf-chat :is(#chat-title,#chat-files-title,#chat-tools-title,#chat-source-heading) {
+  scroll-margin-top: 24px;
+}
+.pdf-chat h2[tabindex="-1"]:focus-visible {
+  outline: 3px solid #82e2c6;
+  outline-offset: 4px;
+  border-radius: 3px;
+}

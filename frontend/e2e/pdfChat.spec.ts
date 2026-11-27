@@ -1875,3 +1875,55 @@ test('independent repeat copies the resolved context of an earlier question, not
   await expect(history).toHaveCount(4);
   await expect(history.last().locator('blockquote')).toHaveText('Application fee: INR 500');
 });
+
+test('primary workflow presents question composer before advanced evidence tools', async ({ page }) => {
+  await page.goto('/?view=chat');
+  const nav = page.getByRole('navigation', { name: 'PDF chat workflow' });
+  await expect(nav.getByRole('link', { name: 'Ask questions' })).toHaveAttribute('href', '#chat-title');
+  await expect(nav.getByRole('link', { name: 'Evidence and review tools' })).toHaveAttribute('href', '#chat-tools-title');
+  const order = await page.evaluate(() => {
+    const files = document.querySelector('#chat-files-title')!;
+    const chat = document.querySelector('#chat-title')!;
+    const tools = document.querySelector('#chat-tools-title')!;
+    return Boolean(files.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+      Boolean(chat.compareDocumentPosition(tools) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  expect(order).toBe(true);
+  await nav.getByRole('link', { name: 'Ask questions' }).click();
+  await expect(page).toHaveURL(/#chat-title$/);
+  await expect(page.getByRole('heading', { name: '2. Ask a question' })).toBeInViewport();
+  await nav.getByRole('link', { name: 'Evidence and review tools' }).click();
+  await expect(page.getByRole('heading', { name: '3. Evidence and review tools' })).toBeInViewport();
+});
+test('composer submits with Ctrl+Enter and keeps ordinary Enter as a newline', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  const composer = page.getByLabel('Your question', { exact: true });
+  await composer.fill('Application');
+  await composer.press('Enter');
+  await composer.pressSequentially('fee?');
+  await expect(composer).toHaveValue('Application\nfee?');
+  await expect(page.locator('.chat-turn')).toHaveCount(0);
+  await composer.press('Control+Enter');
+  await expect(page.locator('.chat-turn')).toHaveCount(1);
+  await expect(page.locator('.chat-turn').last().locator('blockquote')).toHaveText('Application fee: INR 500');
+  await expect(composer).toHaveValue('');
+  await expect(composer).toBeFocused();
+});
+test('source inspection moves focus to the selected physical page and returns to citation on close', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  const turn = await ask(page, 'Application fee?');
+  const citation = turn.getByRole('button', { name: 'Inspect source [1]', exact: true });
+  await citation.focus();
+  await citation.press('Enter');
+  const inspector = page.getByRole('region', { name: 'Source page inspection' });
+  await expect(inspector.getByRole('heading', { name: 'Original / first PDF · page 1' })).toBeFocused();
+  await expect(inspector.getByRole('heading', { name: 'Original / first PDF · page 1' })).toBeInViewport();
+  await expect(inspector.locator(':scope > blockquote')).toHaveText('Application fee: INR 500');
+  await inspector.getByRole('button', { name: 'Close source page' }).click();
+  await expect(inspector).toHaveCount(0);
+  await expect(citation).toBeFocused();
+});

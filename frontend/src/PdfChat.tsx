@@ -117,6 +117,9 @@ export default function PdfChat() {
   const [demoLoading, setDemoLoading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
+  const sourceHeadingRef = useRef<HTMLHeadingElement>(null);
+  const sourcePanelRef = useRef<HTMLElement>(null);
+  const sourceReturnRef = useRef<HTMLElement | null>(null);
   useEffect(() => () => {
     for (const controller of Object.values(controllers.current)) controller?.abort();
     generation.current.original++;
@@ -144,7 +147,7 @@ export default function PdfChat() {
 
   const previousTurn = editingTurn === null ? turns.at(-1) : turns[editingTurn - 1];
   const canReuse = previousTurn?.answers.length === 1;
-  const canSubmit = canAsk && !!question.trim() &&
+  const canSubmit = canAsk && !!question.trim() && (!reuse || canReuse) &&
     (editingTurn !== null || turns.length < MAX_TURNS) &&
     (editingTurn === null || editingTurn === turns.length - 1 || discardLater);
   function applyDraft(draft: QuestionStep) {
@@ -164,8 +167,8 @@ export default function PdfChat() {
   }
   function startRevision(at: number) {
     const turn = turns[at];
-    if (!turn || indexing) return;
-    if (editingTurn === null) savedDraft.current = currentDraft();
+    if (!turn || indexing || editingTurn !== null) return;
+    savedDraft.current = currentDraft();
     setEditingTurn(at); setDiscardLater(false);
     applyDraft({ input: turn.input, scope: turn.scope, includeContext: turn.includeContext, reuse: turn.reuse });
     inputRef.current?.focus();
@@ -180,6 +183,7 @@ export default function PdfChat() {
     }
   }
   function clearConversation() {
+    sourceReturnRef.current = null;
     savedDraft.current = null;
     setEditingTurn(null);
     setDiscardLater(false);
@@ -262,6 +266,7 @@ export default function PdfChat() {
       setQuestion('');
       setReuse(false);
       setPreview(null);
+      sourceReturnRef.current = null;
       setError('');
       inputRef.current?.focus({ preventScroll: true });
     } catch (failure) {
@@ -276,16 +281,40 @@ export default function PdfChat() {
       historyRef.current.scrollTop = historyRef.current.scrollHeight;
     }
   }, [turns.length, conversationEpoch]);
+  // Move keyboard and visual focus to the source that was explicitly
+  // selected. Page navigation and linked fragments inside the inspector
+  // must not replace the original return target.
+  function captureSourceReturn() {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && !sourcePanelRef.current?.contains(active)) {
+      sourceReturnRef.current = active;
+    }
+  }
+  function closeSource() {
+    setPreview(null);
+    const target = sourceReturnRef.current;
+    sourceReturnRef.current = null;
+    if (target?.isConnected) target.focus();
+    else inputRef.current?.focus();
+  }
+  useEffect(() => {
+    if (!preview) return;
+    sourceHeadingRef.current?.focus({ preventScroll: true });
+    sourceHeadingRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+  }, [preview]);
   function inspectNative(source: Passage) {
+    captureSourceReturn();
     setPreview({ role: source.role, page: source.page, source, kind: 'native' });
   }
   function inspectOcr(source: Passage) {
+    captureSourceReturn();
     setPreview({ role: source.role, page: source.page, source, kind: 'ocr' });
   }
   function inspectPage(role: Role, page: number) {
     const slot = slots[role];
     if (slot.kind !== 'ready' || !Number.isSafeInteger(page) ||
         page < 1 || page > slot.corpus.pageCount) return;
+    captureSourceReturn();
     setPreview({ role, page, kind: 'page' });
   }
   const previewSlot = preview ? slots[preview.role] : null;
@@ -301,8 +330,14 @@ export default function PdfChat() {
         <p>Ask about deadlines, fees, eligibility and other written requirements. Search one notice or both versions and inspect the pages yourself.</p>
         <p className="chat-note">Default answers are generated from locally indexed source text, not by a language model. Files and questions stay in this browser unless you explicitly export them for optional local AI processing. A matching passage is not a verified answer or proof of official authority.</p>
       </section>
+      <nav className="chat-workflow-nav" aria-label="PDF chat workflow">
+        <a href="#chat-files-title">Attach PDFs</a>
+        <a href="#chat-title">Ask questions</a>
+        <a href="#chat-tools-title">Evidence and review tools</a>
+        {preview && <a href="#chat-source-heading">Open source inspection</a>}
+      </nav>
       <section className="chat-panel" aria-labelledby="chat-files-title">
-        <div className="chat-toolbar"><h2 id="chat-files-title">1. Attach notices</h2>
+        <div className="chat-toolbar"><h2 id="chat-files-title" tabIndex={-1}>1. Attach notices</h2>
           <button type="button" className="chat-button" onClick={() => void tryDemo()}
             disabled={demoLoading || Object.values(slots).some(slot => slot.kind === 'loading')}>Try fictional notices</button></div>
         <div className="chat-file-grid">
@@ -336,44 +371,8 @@ export default function PdfChat() {
           key={'page-navigator:' + generation.current.original + ':' + generation.current.revised}
           corpora={corpora} onInspect={inspectPage} />}
       </section>
-      {!indexing && attached.length === 2 && <PdfChatLiteralDiff
-        key={'literal-diff:' + generation.current.original + ':' + generation.current.revised}
-        index={index} onInspect={inspectNative} />}
-      {!indexing && attached.length === 2 && <PdfChatAlignment
-        key={'alignment:' + generation.current.original + ':' + generation.current.revised}
-        index={index} files={files} corpora={corpora} onInspect={inspectNative} />}
-      {!indexing && attached.length > 0 && <PdfChatTimeline
-        key={'timeline:' + generation.current.original + ':' + generation.current.revised}
-        index={index} corpora={corpora} onInspect={inspectNative} />}
-      {!indexing && attached.length > 0 && <PdfChatLabelWorkbench
-        key={'labels:' + generation.current.original + ':' + generation.current.revised}
-        index={index} files={files} corpora={corpora} attached={attached} onInspect={inspectNative} />}
-      {!indexing && attached.length > 0 && <PdfChatCorpusExport
-        key={'corpus-export:' + generation.current.original + ':' + generation.current.revised}
-        files={files} corpora={corpora} />}
-      {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={inspectNative}
-        onAsk={value => { setQuestion(value); setReuse(false); setScope('auto'); inputRef.current?.focus(); }} />}
-      {!indexing && <PdfChatTableExplorer key={'tables:' + generation.current.original + ':' + generation.current.revised}
-        indexes={tableIndexes} onInspect={inspectNative} onAsk={(value, role) => {
-          setQuestion(value); setReuse(false); setScope(role); inputRef.current?.focus();
-        }} />}
-      {!indexing && attached.length > 0 && <PdfChatEvidenceExplorer
-        key={'explorer:' + generation.current.original + ':' + generation.current.revised}
-        index={index} corpora={corpora} onInspect={inspectNative} />}
-      {!indexing && attached.length > 0 && <PdfChatStructure
-        key={'structure:' + generation.current.original + ':' + generation.current.revised}
-        corpora={corpora} onInspect={inspectNative} />}
-      {!indexing && attached.length > 0 && <PdfChatRequirements
-        key={'requirements:' + generation.current.original + ':' + generation.current.revised}
-        index={index} requirements={requirements} corpora={corpora} attached={attached} onInspect={inspectNative} />}
-      {!indexing && attached.length > 0 && <PdfChatChecklist
-        key={'question-checklist:' + generation.current.original + ':' + generation.current.revised}
-        index={index} files={files} corpora={corpora} attached={attached} onInspect={inspectNative}
-        onAsk={(value, role) => { setQuestion(value); setScope(role); setReuse(false); inputRef.current?.focus(); }} />}
-      <PdfChatChecklistCompare />
-      <PdfChatSourceReplay />
       <section className="chat-panel" aria-labelledby="chat-title">
-        <div className="chat-toolbar"><h2 id="chat-title">2. Ask a question</h2>
+        <div className="chat-toolbar"><h2 id="chat-title" tabIndex={-1}>2. Ask a question</h2>
           <button type="button" className="chat-button" disabled={!turns.length} onClick={clearConversation}>Clear conversation</button>
         </div>
         <div ref={historyRef} className="chat-history" role="log" aria-label="Document chat history" aria-live="polite">
@@ -381,7 +380,7 @@ export default function PdfChat() {
           {turns.map(({ input, resolved, answers }, i) => <article className="chat-turn" key={conversationEpoch + ':' + i}>
             <p className="chat-user"><strong>You</strong> {input}</p>
             <div className="chat-turn-actions" role="group" aria-label={'Actions for question ' + (i + 1)}>
-              <button type="button" className="chat-button" disabled={indexing}
+              <button type="button" className="chat-button" disabled={indexing || editingTurn !== null}
                 onClick={() => startRevision(i)}>Revise question {i + 1}</button>
               <button type="button" className="chat-button" disabled={indexing || editingTurn !== null || !!question.trim() || turns.length >= MAX_TURNS}
                 onClick={() => copyIndependent(i)}>Repeat question {i + 1} independently</button>
@@ -468,7 +467,15 @@ export default function PdfChat() {
               setQuestion(example); setReuse(false); inputRef.current?.focus();
             }}>{example}</button>)}</div>
           <label>Your question<textarea ref={inputRef} value={question} maxLength={MAX_QUESTION}
-            onChange={event => setQuestion(event.target.value)} rows={3} placeholder="Ask about the notice…" /></label>
+            aria-label="Your question" onChange={event => setQuestion(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) &&
+                  !event.nativeEvent.isComposing && !event.repeat) {
+                event.preventDefault();
+                if (canSubmit) event.currentTarget.form?.requestSubmit();
+              }
+            }} rows={3} placeholder="Ask about the notice…" /></label>
+          <p className="chat-muted">Ctrl+Enter or Command+Enter submits. Enter alone adds a new line.</p>
           <p className="chat-muted">Ask separate questions with question marks or semicolons (up to four). Use “on page 2” to restrict a question to physical PDF page 2.</p>
           <label className="chat-checkbox"><input type="checkbox" checked={includeContext}
             onChange={event => setIncludeContext(event.target.checked)} /> Search nearby lines when no single line matches</label>
@@ -508,15 +515,56 @@ export default function PdfChat() {
           answer={turns.at(-1)?.answers.length === 1 ? turns.at(-1)!.answers[0] : null}
           onInspect={inspectOcr} />}
       </section>
-      {!indexing && attached.length > 0 && <PdfChatReviewWorkspace
-        key={'review-workspace:' + generation.current.original + ':' + generation.current.revised}
-        entries={reviewEntries} files={files} index={index} onChange={setReviewEntries} onInspect={inspectNative} />}
-      {!indexing && attached.length > 0 && <PdfChatReviewPacket
-        key={'review-packet:' + generation.current.original + ':' + generation.current.revised}
-        index={index} files={files} corpora={corpora} entries={reviewEntries} />}
-      {preview && previewSlot?.kind === 'ready' && <section className="chat-panel" aria-label="Source page inspection">
-        <div className="chat-toolbar"><h2>{names[preview.role]} · page {preview.page}</h2>
-          <button type="button" className="chat-button" onClick={() => setPreview(null)}>Close source page</button></div>
+      <section className="chat-advanced-tools" aria-labelledby="chat-tools-title">
+        <h2 id="chat-tools-title" tabIndex={-1}>3. Evidence and review tools</h2>
+        <p className="chat-muted">Optional tools for comparing, inspecting, reviewing and exporting local evidence.
+          You can ask questions without opening these panels.</p>
+        {!indexing && attached.length === 2 && <PdfChatLiteralDiff
+          key={'literal-diff:' + generation.current.original + ':' + generation.current.revised}
+          index={index} onInspect={inspectNative} />}
+        {!indexing && attached.length === 2 && <PdfChatAlignment
+          key={'alignment:' + generation.current.original + ':' + generation.current.revised}
+          index={index} files={files} corpora={corpora} onInspect={inspectNative} />}
+        {!indexing && attached.length > 0 && <PdfChatTimeline
+          key={'timeline:' + generation.current.original + ':' + generation.current.revised}
+          index={index} corpora={corpora} onInspect={inspectNative} />}
+        {!indexing && attached.length > 0 && <PdfChatLabelWorkbench
+          key={'labels:' + generation.current.original + ':' + generation.current.revised}
+          index={index} files={files} corpora={corpora} attached={attached} onInspect={inspectNative} />}
+        {!indexing && attached.length > 0 && <PdfChatCorpusExport
+          key={'corpus-export:' + generation.current.original + ':' + generation.current.revised}
+          files={files} corpora={corpora} />}
+        {!indexing && <PdfChatOverview index={index} attached={attached} onInspect={inspectNative}
+          onAsk={value => { setQuestion(value); setReuse(false); setScope('auto'); inputRef.current?.focus(); }} />}
+        {!indexing && <PdfChatTableExplorer key={'tables:' + generation.current.original + ':' + generation.current.revised}
+          indexes={tableIndexes} onInspect={inspectNative} onAsk={(value, role) => {
+            setQuestion(value); setReuse(false); setScope(role); inputRef.current?.focus();
+          }} />}
+        {!indexing && attached.length > 0 && <PdfChatEvidenceExplorer
+          key={'explorer:' + generation.current.original + ':' + generation.current.revised}
+          index={index} corpora={corpora} onInspect={inspectNative} />}
+        {!indexing && attached.length > 0 && <PdfChatStructure
+          key={'structure:' + generation.current.original + ':' + generation.current.revised}
+          corpora={corpora} onInspect={inspectNative} />}
+        {!indexing && attached.length > 0 && <PdfChatRequirements
+          key={'requirements:' + generation.current.original + ':' + generation.current.revised}
+          index={index} requirements={requirements} corpora={corpora} attached={attached} onInspect={inspectNative} />}
+        {!indexing && attached.length > 0 && <PdfChatChecklist
+          key={'question-checklist:' + generation.current.original + ':' + generation.current.revised}
+          index={index} files={files} corpora={corpora} attached={attached} onInspect={inspectNative}
+          onAsk={(value, role) => { setQuestion(value); setScope(role); setReuse(false); inputRef.current?.focus(); }} />}
+        <PdfChatChecklistCompare />
+        <PdfChatSourceReplay />
+        {!indexing && attached.length > 0 && <PdfChatReviewWorkspace
+          key={'review-workspace:' + generation.current.original + ':' + generation.current.revised}
+          entries={reviewEntries} files={files} index={index} onChange={setReviewEntries} onInspect={inspectNative} />}
+        {!indexing && attached.length > 0 && <PdfChatReviewPacket
+          key={'review-packet:' + generation.current.original + ':' + generation.current.revised}
+          index={index} files={files} corpora={corpora} entries={reviewEntries} />}
+      </section>
+      {preview && previewSlot?.kind === 'ready' && <section className="chat-panel" ref={sourcePanelRef} aria-label="Source page inspection">
+        <div className="chat-toolbar"><h2 id="chat-source-heading" tabIndex={-1} ref={sourceHeadingRef}>{names[preview.role]} · page {preview.page}</h2>
+          <button type="button" className="chat-button" onClick={closeSource}>Close source page</button></div>
         {preview.kind === 'ocr' && <p className="chat-note">Unverified OCR transcription. Compare this text
           with the rendered PDF page; it is not an indexed native-text fragment.</p>}
         {preview.source && <blockquote>{preview.source.text}</blockquote>}
