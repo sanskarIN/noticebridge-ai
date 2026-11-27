@@ -722,3 +722,56 @@ validates every disposition and compares the exact audit bytes. The audit
 binds the original queue bytes, even if formatting changes. Notes are not
 reproduced in the audit or CLI summary. Identifiers and hashes still
 constitute private research metadata. Keep queues and audits local.
+
+
+### Combined study qualification
+
+The optional combined study plan requires a replayable preflight and
+complete human dispositions that request no further changes. It binds
+the exact manifest, queue, preflight, derived review audit, point gate,
+and resampling configuration before any retrieval outcome is scored.
+The queue is a record of human decisions, not proof that those
+decisions are correct. Revisions require a fresh plan.
+
+A study policy is a JSON object with exactly these fields:
+
+- gate: the existing retrieval gate policy object, with its mode,
+  cohort, slice, count and metric thresholds.
+- similarity_threshold: the same numeric preflight threshold.
+- bootstrap: seed (1 through 4294967295), resamples (200 through 5000),
+  and level (0.9, 0.95 or 0.99).
+- minimum_supporting_families: integer between 5 and 100, applied
+  separately to each configured rate's denominator.
+- require_leave_one_family_out: boolean. If true, the lowest defined
+  rate after excluding any one family must also meet the threshold;
+  any undefined exclusion is a failure.
+
+The combined policy accepts up to twelve distinct required slices.
+Every configured point threshold is additionally applied to the
+lower endpoint of the descriptive family-cluster percentile interval.
+A missing slice, insufficient support, undefined interval, or lower
+endpoint below threshold cannot pass. There is no automatic rounding
+up to meet thresholds. Point minimum counts still apply independently.
+
+    npm run qualify:study -- freeze --manifest labels.json --preflight preflight.json --queue queue.json --policy study-policy.json --output study-plan.json
+
+    npm run qualify:study -- run --manifest labels.json --preflight preflight.json --queue queue.json --plan study-plan.json --output study-report.json
+
+    npm run qualify:study -- verify --manifest labels.json --preflight preflight.json --queue queue.json --plan study-plan.json --output study-report.json
+
+Freeze returns status 0 only for valid inputs and an accepted review
+queue, without evaluating retrieval. Run and verify return status 0
+for descriptive study qualification, 2 for a valid but nonqualifying
+study, and 1 for invalid, changed or unavailable artifacts. The report
+binds its component evaluation, point gate and uncertainty outputs by
+SHA-256. Verification recomputes every component from the original
+native sources and checks the exact report bytes. A report is never
+overwritten by a run.
+
+Even a qualified study does not establish verified labels, independence,
+official authority, answer correctness, or release readiness. Percentile
+intervals from a small or nonrepresentative collection of families can
+be misleading; the minimum family count is a guardrail rather than a
+statistical guarantee. These are descriptive checks with no adjustment
+for multiple comparisons. A local frozen plan does not independently
+prove that it existed before outcomes were examined.
