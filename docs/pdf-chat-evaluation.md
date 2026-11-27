@@ -559,3 +559,40 @@ evidence of a notice amendment. Exact reproduction of an incomplete or
 limited extraction does not certify text completeness. No result verifies
 official authority or answer accuracy. Canceling the operation discards
 its partial state and does not modify the attached chat PDFs.
+
+## Descriptive uncertainty across notice families
+
+A retrieval report with hundreds of questions from a few notice families
+does not establish performance on independent notices. The offline
+uncertainty command resamples whole notice families with replacement,
+retaining every case in a sampled family. For a paired comparison of
+retrieval modes, each draw uses identical family weights for every mode.
+
+```bash
+npm run uncertainty:retrieval -- --report evaluation.json --output uncertainty.json --seed 123 --resamples 1000 --level 0.95 --slice deadline
+npm run uncertainty:retrieval -- --report evaluation.json --output uncertainty.json --seed 123 --resamples 1000 --level 0.95 --slice deadline --verify
+```
+
+The command checks the full evaluation report structure and rejects any
+routing or source-integrity violations before analysis. For each metric it
+reports the pooled numerator, denominator and rate, count of supporting
+families, equal-family mean rate, percentile bootstrap interval, and
+leave-one-family-out sensitivity range. Paired mode differences use the
+same family draw. Undefined denominators are counted, never replaced by
+zero. Intervals are withheld for undefined points, fewer than five
+supporting families (jointly supporting families for paired differences),
+or fewer than 95% defined draws. Five families is a conservative software
+floor, not a guarantee of statistical adequacy.
+
+Choose a reproducible nonzero 32-bit seed, 200–5000 resamples, and one
+of the supported interval levels (0.90, 0.95, 0.99; the CLI spells the first
+as 0.9). Up to twelve explicit named slices are allowed. The artifact
+contains aggregate data and the exact input report fingerprint, no source
+excerpts or question text. Verification reruns the deterministic analysis
+and compares exact bytes. Existing files are not overwritten.
+
+These are descriptive percentile intervals conditioned on the sampled
+families and declared labels. They are not corrected for multiple
+comparisons, do not establish significance, may be unreliable for small or
+unrepresentative cohorts, and do not certify any release. Use independent
+holdout families and plan evaluation before inspecting outcomes.

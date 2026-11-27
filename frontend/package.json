@@ -18,7 +18,8 @@
     "reconcile:retrieval": "vite build --ssr evaluation/reconcile.ts --outDir .evaluation-build && node .evaluation-build/reconcile.js",
     "qualify:retrieval": "vite build --ssr evaluation/qualify.ts --outDir .evaluation-build && node .evaluation-build/qualify.js",
     "verify:checklist": "vite build --ssr evaluation/verifyChecklist.ts --outDir .evaluation-build && node .evaluation-build/verifyChecklist.js",
-    "compare:checklist": "vite build --ssr evaluation/compareChecklist.ts --outDir .evaluation-build && node .evaluation-build/compareChecklist.js"
+    "compare:checklist": "vite build --ssr evaluation/compareChecklist.ts --outDir .evaluation-build && node .evaluation-build/compareChecklist.js",
+    "uncertainty:retrieval": "vite build --ssr evaluation/uncertainty.ts --outDir .evaluation-build && node .evaluation-build/uncertainty.js"
   },
   "dependencies": {
     "react": "^19.0.0",
