@@ -1,4 +1,5 @@
 /** Compose independently prepared manifests without rewriting labels or splitting families. */
+import { createHash } from 'node:crypto';
 import { parseDataset, loadDataset, MAX_DATASET_DOCUMENTS, MAX_DATASET_CASES,
   type Dataset, type DatasetArtifact, type DocumentLabels } from './retrievalDataset';
 import type { RetrievalCase } from './retrievalMetrics';
@@ -49,6 +50,7 @@ export function composeDataset(id: string, inputs: NamedManifest[], artifacts: D
   const auditInputs: Composition['audit']['inputs'] = [];
   for (const input of inputs) {
     if (!FILE.test(input.name) || !SHA.test(input.sha256) ||
+        createHash('sha256').update(input.text, 'utf8').digest('hex') !== input.sha256 ||
         inputNames.has(input.name) || inputDigests.has(input.sha256)) invalid();
     inputNames.add(input.name); inputDigests.add(input.sha256);
     const dataset = parseDataset(input.text);

@@ -2,6 +2,7 @@
  * Reports contain case IDs and metrics, not source text or model answers.
  * Internal consistency does not authenticate the evaluator or labels.
  */
+import { parseStrictJson } from './strictJson';
 import { summarize, type CaseMetrics, type RetrievalMode } from './retrievalMetrics';
 import type { DatasetReport, Split } from './retrievalDataset';
 
@@ -146,8 +147,7 @@ function expectedTransitions(modes: ReturnType<typeof expectedMode>[]) {
 export function auditReport(text: string): AuditedReport {
   if (!text || text.length > MAX_EVALUATION_REPORT_BYTES ||
       new TextEncoder().encode(text).length > MAX_EVALUATION_REPORT_BYTES) invalid();
-  let value: unknown;
-  try { value = JSON.parse(text); } catch { return invalid(); }
+  const value = parseStrictJson(text, MAX_EVALUATION_REPORT_BYTES);
   const raw = object(value, ['format', 'version', 'dataset', 'label_kind', 'split', 'documents',
     'synthetic', 'authority_verified', 'integrity_violations', 'modes', 'transitions', 'manifest_sha256']);
   if (raw.format !== 'noticebridge-retrieval-evaluation' || raw.version !== 1 ||

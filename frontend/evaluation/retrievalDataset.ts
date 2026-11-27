@@ -1,6 +1,8 @@
 /** Evaluate separately indexed notice families without mixing their term statistics.
  * Dataset labels must be independently reviewed; this program does not create labels.
  */
+import { createHash } from 'node:crypto';
+import { parseStrictJson } from './strictJson';
 import { indexCorpusSnapshot, parseCorpusSnapshot, type CorpusSnapshot } from '../src/pdfChatCorpusSnapshot';
 import { parseSearchQuestion, planQuestions } from '../src/pdfChatInsights';
 import { runRetrievalEvaluation, summarize, validateCases, type CaseMetrics,
@@ -90,8 +92,7 @@ function evaluationCase(value: unknown, family: string): RetrievalCase {
 
 export function parseDataset(text: string): Dataset {
   if (!text || text.length > MAX_MANIFEST_BYTES || new TextEncoder().encode(text).length > MAX_MANIFEST_BYTES) invalid();
-  let value: unknown;
-  try { value = JSON.parse(text); } catch { return invalid(); }
+  const value = parseStrictJson(text, MAX_MANIFEST_BYTES);
   const raw = object(value, ['format', 'version', 'id', 'kind', 'documents']);
   if (raw.format !== FORMAT || raw.version !== 1 ||
       (raw.kind !== 'synthetic' && raw.kind !== 'independently_reviewed') ||
@@ -128,7 +129,8 @@ export function loadDataset(dataset: Dataset, artifacts: DatasetArtifact[]): Loa
   let totalBytes = 0;
   return dataset.documents.map(labels => {
     const artifact = byName.get(labels.snapshot);
-    if (!artifact || artifact.sha256 !== labels.snapshot_sha256) invalid();
+    if (!artifact || artifact.sha256 !== labels.snapshot_sha256 ||
+        createHash('sha256').update(artifact.text, 'utf8').digest('hex') !== artifact.sha256) invalid();
     totalBytes += new TextEncoder().encode(artifact.text).length;
     if (totalBytes > MAX_DATASET_TOTAL_BYTES) invalid();
     const snapshot = parseCorpusSnapshot(artifact.text);

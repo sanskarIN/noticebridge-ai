@@ -63,13 +63,10 @@ function sorted(values: readonly string[]): string[] {
   return [...values].sort(lexical);
 }
 
-/** Recompute the actual bytes of all text inputs; do not rely on an
- * artifact's caller-supplied digest even in the in-process interface. */
+/** The shared dataset loader recomputes actual snapshot hashes; the input
+ * manifest's own byte digest is recorded independently here. */
 function validate(input: ReviewInput): ValidatedSide {
   const dataset = parseDataset(input.manifest);
-  for (const file of input.artifacts) {
-    if (sha(file.text) !== file.sha256) fail();
-  }
   loadDataset(dataset, input.artifacts);
   return { dataset, artifacts: input.artifacts, digest: sha(input.manifest) };
 }
