@@ -292,3 +292,90 @@ Snapshot loading and dataset composition independently recompute SHA-256
 from actual input text bytes instead of trusting a supplied hash string.
 These checks do not authenticate the issuer or reviewer. Inputs must still
 be kept in private, trusted directories.
+
+## Frozen retrieval qualification plan
+
+A metric report alone does not qualify a release. Before evaluating a held-out
+corpus, the operator must record thresholds and minimum sample sizes, and
+choose which retrieval modes and slices to qualify. Create a private
+`policy.json` with the following shape (illustrative thresholds, **not**
+an empirically established NoticeBridge release standard):
+
+```json
+{
+  "id": "holdout-qualification",
+  "purpose": "release",
+  "split": "holdout",
+  "minimums": {
+    "cases": 100,
+    "families": 10,
+    "answerable": 60,
+    "unanswerable": 30,
+    "inaccessible": 5,
+    "ambiguous": 5
+  },
+  "modes": [
+    {
+      "mode": "strict",
+      "thresholds": {
+        "citationPrecision": 0.9,
+        "citationRecall": 0.85,
+        "completeEvidenceRate": 0.8,
+        "unanswerableAbstentionRate": 0.95
+      },
+      "slices": [
+        {
+          "slice": "deadline",
+          "minimums": {
+            "cases": 10,
+            "families": 3,
+            "answerable": 10,
+            "unanswerable": 0,
+            "inaccessible": 0,
+            "ambiguous": 0
+          },
+          "thresholds": { "completeEvidenceRate": 0.9 }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Freeze the exact manifest and policy without computing retrieval metrics:
+
+```bash
+npm run qualify:retrieval -- freeze --manifest reconciled.json --policy policy.json --output plan.json
+```
+
+Run and verify against the exact same pinned native extraction:
+
+```bash
+npm run qualify:retrieval -- run --manifest reconciled.json --plan plan.json --output gate.json
+npm run qualify:retrieval -- verify --manifest reconciled.json --plan plan.json --output gate.json
+```
+
+The gate checks global and slice support counts, each configured metric,
+and zero routing/source integrity violations across all retrieval modes.
+Undefined denominators fail any configured threshold; a missing slice
+cannot pass merely by assigning a zero threshold. Release policies require
+the holdout split, declared independently reviewed labels, at least two
+source families, both answerable and unanswerable examples, and positive
+thresholds for precision, recall, complete evidence recovery and
+unanswerable abstention. Operators should set substantially stronger
+cohort minima for a meaningful study. Synthetic studies may be used for
+development policies only.
+
+The run reconstructs the evaluation from the source snapshots, audits its
+structure, and pins the evaluation, manifest and plan byte hashes in the
+gate report. Exit code 0 means the frozen metric checks passed (or the
+freeze operation succeeded); 2 means a valid run did not qualify; 1 means
+invalid input, inconsistent replay or an unavailable destination. No file is
+overwritten. Logs contain only aggregate status and fingerprints.
+
+The result always sets `release_approved` to false. It does not establish
+official notice authority, human reviewer independence, correct answer
+meaning, model inference quality, or that a policy was registered before
+holdout access. Record the plan digest separately before running the study,
+keep holdout labels away from retrieval developers, and perform the wider
+security, usability and release review independently.

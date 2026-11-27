@@ -214,8 +214,8 @@ function inventory(dataset: Dataset, split: Split): Inventory {
   const documents = dataset.documents.filter(row => row.split === split);
   const cases = documents.flatMap(row => row.cases);
   return {
-    documents: documents.length, families: new Set(documents.map(row => row.family)).size,
-    cases: cases.length, answerable: cases.filter(row => row.label.kind === 'answerable').length,
+    documents: documents.length, cases: cases.length,
+    families: new Set(documents.map(row => row.family)).size, answerable: cases.filter(row => row.label.kind === 'answerable').length,
     unanswerable: cases.filter(row => row.label.kind === 'unanswerable').length,
     inaccessible: cases.filter(row => row.label.kind === 'unindexed').length,
     ambiguous: cases.filter(row => row.label.kind === 'ambiguous').length,
@@ -259,7 +259,9 @@ function planFor(policy: GatePolicy, dataset: Dataset, manifestHash: string): Pl
 export function freezeGatePlan(policy: GatePolicy, input: GateInput): string {
   const validated = parseGatePolicy(policy);
   const { dataset, manifestHash } = prepare(input);
-  return bound(encode(planFor(validated, dataset, manifestHash)), MAX_GATE_PLAN_BYTES);
+  const text = bound(encode(planFor(validated, dataset, manifestHash)), MAX_GATE_PLAN_BYTES);
+  parseGatePlan(text);
+  return text;
 }
 export function parseGatePlan(text: string): Plan {
   const raw = object(parseStrictJson(text, MAX_GATE_PLAN_BYTES), ['format', 'version', 'dataset',
