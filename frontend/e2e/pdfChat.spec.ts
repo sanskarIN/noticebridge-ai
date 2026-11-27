@@ -1927,3 +1927,47 @@ test('source inspection moves focus to the selected physical page and returns to
   await expect(inspector).toHaveCount(0);
   await expect(citation).toBeFocused();
 });
+
+test('search recovery explains missing terms and copies a spelling alternative only after explicit action', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application deadline: 19 December 2026', 'Application fee: INR 500']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  const turn = await ask(page, 'Application deadlien on page 1?');
+  await expect(turn.getByRole('heading', { name: 'Insufficient matching evidence' })).toBeVisible();
+  const recovery = turn.locator('details.chat-recovery');
+  await recovery.locator('summary').click();
+  const side = recovery.getByRole('region', { name: 'Search diagnostics original' });
+  await expect(side.getByText('Some normalized search terms do not occur in the selected indexed text.')).toBeVisible();
+  await expect(side.getByRole('row').filter({ hasText: 'deadlien' })).toContainText('0 — not found');
+  await expect(side.getByRole('region', { name: 'Partial evidence leads original' }).locator('.chat-citation')).toHaveCount(2);
+  await expect(turn.locator('blockquote')).toHaveCount(0);
+  const button = side.getByRole('button', { name: 'Draft alternative: deadline' });
+  await expect(button).toBeEnabled();
+  await page.getByLabel('Your question', { exact: true }).fill('An existing unsent draft');
+  await expect(button).toBeDisabled();
+  await page.getByLabel('Your question', { exact: true }).fill('');
+  await button.click();
+  await expect(page.getByLabel('Your question', { exact: true })).toHaveValue('Application deadline on page 1?');
+  await expect(page.getByLabel('Search scope', { exact: true })).toHaveValue('original');
+  await expect(page.locator('.chat-turn')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Ask PDF' }).click();
+  await expect(page.locator('.chat-turn')).toHaveCount(2);
+  await expect(page.locator('.chat-turn').last().locator('blockquote')).toHaveText('Application deadline: 19 December 2026');
+});
+test('search recovery preserves role and physical page isolation for partial evidence', async ({ page }) => {
+  await page.goto('/?view=chat');
+  await attach(page, 'Original / first PDF', ['Application fee: INR 500']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(1);
+  await attach(page, 'Updated / second PDF', ['Application fee: INR 350', 'Application deadline: 20 December 2026']);
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  const turn = await ask(page, 'Application deadlien on page 1?');
+  const recovery = turn.locator('details.chat-recovery');
+  await recovery.locator('summary').click();
+  await expect(recovery.getByRole('region', { name: 'Search diagnostics revised' })).toHaveCount(0);
+  await expect(recovery.getByRole('button', { name: 'Draft alternative: deadline' })).toHaveCount(0);
+  await recovery.getByRole('button', { name: 'Inspect partial lead original:1:1' }).click();
+  const inspector = page.getByRole('region', { name: 'Source page inspection' });
+  await expect(inspector.locator(':scope > blockquote')).toHaveText('Application fee: INR 500');
+  await inspector.getByRole('button', { name: 'Close source page' }).click();
+  await expect(recovery.getByRole('button', { name: 'Inspect partial lead original:1:1' })).toBeFocused();
+});

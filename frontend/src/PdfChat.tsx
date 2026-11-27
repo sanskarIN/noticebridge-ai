@@ -29,6 +29,7 @@ import PdfChatOverview from './PdfChatOverview';
 import PdfChatEmbeddingPanel from './PdfChatEmbeddingPanel';
 import PdfChatDirectAnswer from './PdfChatDirectAnswer';
 import PdfChatCrossPage from './PdfChatCrossPage';
+import PdfChatSearchRecovery from './PdfChatSearchRecovery';
 import PdfChatEvidenceExplorer, { PdfChatQuestionEvidence } from './PdfChatEvidenceExplorer';
 import PdfChatTableAnswer from './PdfChatTableAnswer';
 import PdfChatTableExplorer from './PdfChatTableExplorer';
@@ -436,6 +437,14 @@ export default function PdfChat() {
               </div>)}
               {answer.citations.length > 0 && <p className="chat-muted">Quoted extracted text only. Review nearby context, images and the official publication before acting.</p>}
               <PdfChatCrossPage index={index} answer={answer} onInspect={inspectNative} />
+              <PdfChatSearchRecovery index={index} answer={answer} onInspect={inspectNative}
+                draftDisabled={indexing || editingTurn !== null || !!question.trim() || turns.length >= MAX_TURNS ||
+                  (answer.scope === 'both' ? attached.length !== 2 : !attached.includes(answer.scope))}
+                onDraft={value => {
+                  if (indexing || editingTurn !== null || question.trim() || turns.length >= MAX_TURNS) return;
+                  applyDraft({ input: value, scope: answer.scope, includeContext, reuse: false });
+                  inputRef.current?.focus();
+                }} />
               <PdfChatQuestionEvidence index={index} answer={answer} corpora={corpora} onInspect={inspectNative} />
               <PdfChatRequirementAnswer index={index} requirements={requirements} corpora={corpora}
                 attached={attached} answer={answer} onInspect={inspectNative} />

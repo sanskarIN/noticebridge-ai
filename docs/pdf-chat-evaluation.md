@@ -804,3 +804,33 @@ newline. Explicit source-inspection actions focus and scroll to the
 selected physical page. Closing the inspector restores focus to the
 original citation or control when it still exists. Changing pages
 within the inspector keeps that original return target.
+
+### Explain and recover from a missed lexical match
+
+Each question has an optional local search diagnostics panel. It reports
+the normalized terms, per-role fragment and physical-page occurrence
+counts, exact full lexical match counts, recognized printed-field counts
+and partial candidates. It never changes the original answer or evidence
+report. All candidate counts are physical source identities, not distinct
+wordings; full lexical and recognized field counts can overlap.
+
+Partial leads must match at least one term but not all terms, and exclude
+recognized field matches. Ranking uses coverage first, scoped inverse
+document frequency second and physical source order for ties. All partial
+fragments contribute to the counts; at most 120 leads per role are
+retained for inspection, with six per displayed page. Filtering applies
+only to these retained leads. A lead is not proof that its missing terms
+are irrelevant.
+
+When a normalized ASCII word of 5–24 letters is absent, the panel can
+suggest scoped vocabulary words one insertion, deletion, substitution or
+adjacent transposition away. It excludes numeric identifiers, protected
+routing and qualifier terms, repeated literal occurrences, existing query
+terms and any replacement that changes the parsed route or more than one
+normalized search term. At most three alternatives per missing term are
+shown, ordered by fragment frequency then spelling. If more than 30,000
+eligible vocabulary terms are encountered, spelling suggestions are
+withheld rather than using an arbitrary prefix. Suggestions are not
+semantic equivalence claims. The user must inspect the alternative,
+explicitly copy it into an empty composer and submit it separately.
+Existing unsent drafts and the selected role/page are preserved.

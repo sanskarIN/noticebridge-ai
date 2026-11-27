@@ -443,3 +443,15 @@
   outline-offset: 4px;
   border-radius: 3px;
 }
+
+.chat-recovery > summary { cursor: pointer; color: #82e2c6; font-weight: 650; }
+.chat-recovery-side { margin-top: 12px; padding: 12px; border: 1px solid #38546c; border-radius: 8px; min-width: 0; }
+.chat-recovery-side h5 { font-size: 1rem; margin: 0 0 8px; }
+.chat-recovery-table { overflow-x: auto; max-width: 100%; }
+.chat-recovery-table table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.chat-recovery-table caption { text-align: left; margin: 0 0 8px; color: #b2c1d6; }
+.chat-recovery-table th, .chat-recovery-table td { text-align: left; padding: 8px; border-bottom: 1px solid #38546c; overflow-wrap: anywhere; }
+.chat-recovery-table tbody th { font-weight: 500; }
+.chat-recovery-suggestion { padding: 10px 0; border-top: 1px solid #38546c; overflow-wrap: anywhere; }
+.chat-recovery-quote { white-space: pre-wrap; overflow-wrap: anywhere; background: #0b1829; border-radius: 6px; padding: 10px; }
+.chat-recovery .chat-button { white-space: normal; max-width: 100%; }
