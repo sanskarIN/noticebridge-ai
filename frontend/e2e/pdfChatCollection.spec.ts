@@ -573,3 +573,23 @@ test('collection snapshot export and independent replay bind to exact real PDF b
   await panel.getByRole('button',{name:'Run independent collection source replay'}).click();
   await expect(result).toContainText('Expected PDF not selected');
 });
+
+test('collection AI preparation is local and requires explicit consent for exporting scoped requests',async({page})=>{
+  const api:string[]=[];
+  await page.route('**/api/**',route=>{api.push(route.request().url());return route.abort();});
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Application fee: INR 500']]),fixture('b.pdf',[['Application fee: INR 350']])],2);
+  await ask(page,'Application fee?');
+  await root.getByText('Optional independent collection AI proposals',{exact:true}).click();
+  const panel=root.getByRole('group',{name:'Collection local model experiments',exact:true});
+  await panel.getByRole('button',{name:'Prepare independent collection model plan'}).click();
+  await expect(panel.getByText(/2 independent request/)).toBeVisible();
+  const first=panel.getByRole('region',{name:/Collection model request: Document 1/});
+  const button=first.getByRole('button',{name:'Export this collection model request'});
+  await expect(button).toBeDisabled();
+  await panel.getByLabel('I approve exporting this collection model plan and private request text.').check();
+  const event=page.waitForEvent('download');await button.click();
+  const bytes=await readFile((await (await event).path())!);
+  expect(bytes.toString()).toContain('INR 500');expect(bytes.toString()).not.toContain('INR 350');
+  expect(api).toEqual([]);
+});

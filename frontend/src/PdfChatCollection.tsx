@@ -16,6 +16,7 @@ import PdfChatCollectionRecovery from './PdfChatCollectionRecovery';
 import PdfChatCollectionRequirements from './PdfChatCollectionRequirements';
 import PdfChatCollectionOutline from './PdfChatCollectionOutline';
 import PdfChatCollectionReplay from './PdfChatCollectionReplay';
+import PdfChatCollectionModels from './PdfChatCollectionModels';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -372,6 +373,8 @@ export default function PdfChatCollection() {
             }} onChange={(next, active) => {
               setTurns(next); setActiveTurn(active); setPreview(null); setError('');
             }} />
+          <PdfChatCollectionModels key={'models:' + activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}
+            documents={documents} turn={currentTurn} names={names} onInspect={inspect} />
           <div className="chat-collection-results" aria-label="Collection results" key={activeTurn + ':' + turns.length + ':' +
             currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}>
             {currentTurn.results.map(result => <section key={result.documentId} className="chat-answer"

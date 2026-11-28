@@ -128,3 +128,7 @@ Explore recognized heading candidates, repeated heading keys and native fragment
 ## Independent collection source replay
 
 Export a private canonical snapshot of the bounded native extraction, with explicit consent. Replay uses separately selected PDFs, identifies them by SHA-256 (not names or order), rejects duplicate bytes, and never extracts unexpected files. Missing sources, changed extraction and extraction failures remain distinct. A deterministic report contains fingerprints, coverage and fragment counts, not source quotations. Saved reports must be reproduced independently before acceptance. Neither the snapshot nor replay certifies authority, extraction completeness or answer accuracy.
+
+## Independent collection local AI proposals
+
+Prepare bounded semantic-ranking/extractive requests for one saved question part and explicitly selected PDFs. Each request retains its own PDF identity and native source map. No text is pooled across PDFs. Empty native scopes are skipped. Preparation sends no network requests; export and optional loopback processing require explicit consent. Results are independently checked against the existing local model protocol and exact local source fragments. A portable result bundle binds all constituent results to the canonical plan manifest. Model outputs do not change the deterministic conversation or establish verified answers.
