@@ -195,3 +195,13 @@ The at-a-glance view groups saved results by question part, keeps each PDF's pri
 ## Optional native line location
 
 The source viewer can show an opt-in dashed location cue. It independently streams the same physical PDF page through the bounded native assembler, requiring exact fragment ordinal, text and geometry before transforming a conservative line area into the rendered viewport. No approximate substitute is shown for a mismatch. The marker is not verified glyph geometry, a certified transcription or an official source verdict. Navigation resets the opt-in selection.
+
+## Offline structural audit of a review packet
+
+Export the native collection snapshot and canonical review packet from the same collection. The independent Python checker validates the exact snapshot byte hash, source inventory, annotation hashes, displayed quotation references, physical page scopes, coverage and literal printed fields. Optionally check the complete independently selected PDF byte set:
+
+```bash
+python -m noticebridge.chat_collection_audit_cli packet.json snapshot.json --pdf a.pdf --pdf b.pdf --output audit.json
+```
+
+The audit report contains only hashes, counts and explicit status fields. It does not execute the browser's extraction, question planning or ranking, and does not authenticate historical runs or certify source accuracy. Exit code 3 indicates that the packet is structurally consistent but the supplied PDF byte set differs; exit code 2 indicates a rejected artifact or output failure. Use browser source replay and packet verification for the independent native extraction and retrieval checks.
