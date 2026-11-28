@@ -1,3 +1,4 @@
+import PdfChatGuidedQuestions from './PdfChatGuidedQuestions';
 import PdfChatQuestionVariants from './PdfChatQuestionVariants';
 import PdfChatEvidenceUsage from './PdfChatEvidenceUsage';
 import PdfChatCollectionQuality from './PdfChatCollectionQuality';
@@ -358,6 +359,9 @@ export default function PdfChatCollection() {
           </div>
         </div>}
       </>}
+      {documents.length>0&&!busy&&<PdfChatGuidedQuestions key={'guided:'+documents.map(doc=>doc.id).join(':')} documents={documents}
+        selected={selected} turns={turns} names={names} includeContext={includeContext} draft={question} disabled={busy}
+        onDraft={step=>{setQuestion(step.question);setSelected(step.documentIds);setIncludeContext(step.includeContext);questionRef.current?.focus();}}/>}
       <form className="chat-form" onSubmit={submit} id={collectionToolAnchor('question')} tabIndex={-1}>
         <label>Collection question
           <textarea aria-label="Collection question" ref={questionRef} value={question} maxLength={MAX_QUESTION}

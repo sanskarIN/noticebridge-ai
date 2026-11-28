@@ -320,3 +320,7 @@ Recompute saved independent question steps to see which native source fragments 
 ## Paired question experiments
 
 Import independently authored retrieval labels and compare the saved baseline wording/context with a user-entered alternative. Each pair must preserve the exact PDF and physical-page scope, and explicitly confirm that the alternative retains the same information need. Score both against the same labels, report gains, losses, tradeoffs and order-only changes, and inspect exact native sources. Unlabelled returns are not necessarily irrelevant. Exported results bind the original label artifact and can be exactly reproduced without model execution or automatic paraphrasing.
+
+## Guided question composer
+
+Build editable question wording from fixed recognized notice topics or an explicit printed clause identifier. Each of up to four topics can have a distinct physical page restriction; PDF selection and nearby-line settings are explicit. Optional printed-label inventory counts are navigation hints, never proof of absence. The draft preview uses the real question planner and requires explicit replacement of an existing unsent draft. No question is automatically submitted.
