@@ -116,3 +116,7 @@ Prepare up to twelve independent question turns with an explicit PDF selection a
 ## Collection retrieval diagnostics
 
 Each answer part can explain normalized term coverage, partial lexical leads and bounded one-edit spelling alternatives within its exact document and physical page scope. An alternative explicitly prefills a standalone question scoped to the PDF that supplied its vocabulary. It never submits automatically or overwrites an existing draft. Diagnostic leads are separate from answer citations and portable evidence replay.
+
+## Collection requirement wording
+
+Inspect mandatory, prohibited, exception, permission and recommendation cues separately by physical page and literal keyword. Exact counterpart counts include only distinct selected documents, never duplicate fragments within one PDF. A missing counterpart does not imply removal, change or applicability. Each source can be inspected and saved in the review notebook.

@@ -521,3 +521,16 @@ test('collection diagnostics do not replace insufficient answers or automaticall
   await expect(first).toContainText('No matching indexed evidence');
   await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
 });
+
+test('collection requirement cues keep exact counterparts separate from inferred changes',async({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Applicants must submit a certificate','Do not pay cash']]),fixture('b.pdf',[['Applicants must submit a certificate']])],2);
+  await root.getByText('Inspect requirement wording across collection PDFs',{exact:true}).click();
+  const panel=root.getByRole('group',{name:'Collection requirement inspection',exact:true});
+  await panel.getByLabel('Collection requirement wording').selectOption('shared');
+  await expect(panel.getByRole('status')).toContainText('2 collection requirement fragment(s)');
+  await panel.getByLabel('Collection requirement wording').selectOption('unshared');
+  await expect(panel.getByRole('status')).toContainText('1 collection requirement fragment(s)');
+  await panel.getByRole('button',{name:'Inspect collection requirement source',exact:true}).click();
+  await expect(root.getByRole('region',{name:'Collection source inspection'}).locator('blockquote')).toHaveText('Do not pay cash');
+});
