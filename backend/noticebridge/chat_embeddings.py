@@ -123,7 +123,8 @@ async def _json_response(client: httpx.AsyncClient, method: str, path: str, **kw
         # Some local runtime versions omit Content-Type. Reject an explicitly
         # incompatible type, but continue validating bounded JSON itself.
         media_type = response.headers.get("content-type")
-        if media_type is not None and media_type.split(";", 1)[0].strip().lower() != "application/json":
+        if (media_type is not None
+                and media_type.split(";", 1)[0].strip().lower() != "application/json"):
             raise EmbeddingError("Unexpected local response type.")
         declared = response.headers.get("content-length")
         if declared is not None and (

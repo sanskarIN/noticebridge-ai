@@ -86,7 +86,7 @@ export function CollectionFieldOverview({ documents, selected, names, onInspect,
     [open, documents, selected]);
   const visible = filterCollectionFields(fields, filter, needle);
   const current = collectionFieldPage(visible, Math.min(page, Math.max(1, Math.ceil(visible.length / COLLECTION_FIELD_PAGE_SIZE))));
-  return <details className="chat-collection-inspection" onToggle={event => setOpen(event.currentTarget.open)}>
+  return <details className="chat-collection-inspection" aria-label="Compare recognized printed fields across selected collection PDFs" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>Compare recognized printed fields across selected collection PDFs</summary>
     <p className="chat-muted">This is a literal field inventory, not a verified summary, revision relationship,
       or decision about which document applies. Unrecognized fields and scanned text may be missed.</p>

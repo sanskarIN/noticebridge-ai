@@ -59,7 +59,7 @@ test('explicit selection and physical page scope never substitute a different PD
   const selected = await ask(page, 'Application fee on page 2?');
   await expect(selected.locator('blockquote')).toHaveText('Application fee: INR 250');
   await expect(selected.getByRole('region')).toHaveCount(1);
-  await root.getByRole('button', { name: 'Select all collection PDFs' }).click();
+  await root.getByRole('button', { name: 'Select all collection PDFs', exact: true }).click();
   const both = await ask(page, 'Application fee on page 2?');
   await expect(both.locator('blockquote')).toHaveText('Application fee: INR 250');
   await expect(both.getByRole('region', { name: 'Collection result: Document 2: one-page.pdf' }))
@@ -165,7 +165,7 @@ test('field matrix shows distinct literal values, retains coverage and can prefi
     fixture('third.pdf', [['Eligibility: Class 12']]),
   ], 3);
   await root.getByText('Compare recognized printed fields across selected collection PDFs', { exact: true }).click();
-  const matrix = root.locator('details').filter({ has: root.getByText('Compare recognized printed fields across selected collection PDFs', { exact: true }) });
+  const matrix = root.getByRole('group', { name: 'Compare recognized printed fields across selected collection PDFs', exact: true });
   await matrix.getByLabel('Find collection field').fill('fee');
   await expect(matrix.getByText('No recognized field in one or more selected documents.')).toBeVisible();
   await expect(matrix.getByText('INR 500', { exact: true })).toBeVisible();
