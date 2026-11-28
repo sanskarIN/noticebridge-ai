@@ -136,3 +136,7 @@ Prepare bounded semantic-ranking/extractive requests for one saved question part
 ### Offline collection AI runner
 
 The collection model CLI accepts the canonical manifest and a directory containing the exact named request files. It validates every file length, SHA-256, question and single-document scope before invoking the trusted local runtime. Requests run sequentially with a bounded overall deadline; incomplete runs do not publish partial bundles. The browser imports the complete result only after independently validating every nested response against the active plan. Local runtime configuration and processing are opt-in and do not certify the correctness of model proposals.
+
+## Human-labelled collection retrieval evaluation
+
+The evaluation lab lets a reviewer explicitly label native fragments for a saved question part and exact PDF, or record an expected abstention. It computes micro precision/recall, reciprocal rank, expected evidence retrieval, abstention agreement and incomplete coverage separately. Labels are not generated from baseline answers. Unlabelled retrieved fragments may still be relevant. Canonical labels bind exact PDF fingerprints and expected native text hashes; canonical reports can be independently recomputed. All metrics are agreement with personal annotations, not answer truth or verified authority.

@@ -593,3 +593,27 @@ test('collection AI preparation is local and requires explicit consent for expor
   expect(bytes.toString()).toContain('INR 500');expect(bytes.toString()).not.toContain('INR 350');
   expect(api).toEqual([]);
 });
+
+test('collection evaluation uses explicit human source labels and reports retrieval agreement',async({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Application fee: INR 500','Eligibility: Class 12']])],1);
+  await ask(page,'Application fee?');
+  await root.getByText('Evaluate collection retrieval against human labels',{exact:true}).click();
+  const panel=root.getByRole('group',{name:'Collection retrieval evaluation lab',exact:true});
+  await panel.getByRole('button',{name:'Prepare human retrieval label'}).click();
+  await panel.getByLabel('Expected physical page').fill('1');
+  await panel.getByLabel('Expected fragment ordinal').fill('1');
+  await panel.getByRole('button',{name:'Add expected retrieval fragment'}).click();
+  await panel.getByRole('button',{name:'Save human retrieval label'}).click();
+  await panel.getByRole('button',{name:'Run labelled collection retrieval evaluation'}).click();
+  const result=panel.getByRole('region',{name:'Collection retrieval evaluation results'});
+  await expect(result).toContainText('All labelled fragments retrieved');
+  await expect(result).toContainText('100.0%');
+  const exportButton=panel.getByRole('button',{name:'Export collection retrieval labels'});
+  await expect(exportButton).toBeDisabled();
+  await panel.getByLabel('I approve exporting private collection retrieval evaluation data.').check();
+  const event=page.waitForEvent('download');await exportButton.click();
+  const bytes=await readFile((await (await event).path())!);
+  expect(bytes.toString()).not.toContain('INR 500');
+  await expect(exportButton).toBeDisabled();
+});
