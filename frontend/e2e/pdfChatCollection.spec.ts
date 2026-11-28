@@ -827,7 +827,8 @@ test('independent scoped question planner previews mixed selections and preserve
   await plan.getByLabel('Search Document 1: a.pdf for question 2',{exact:true}).uncheck();
   await plan.getByLabel('Search nearby lines for question 2',{exact:true}).check();
   await plan.getByRole('button',{name:'Move question 2 earlier'}).click();
-  await expect(plan.getByLabel('Question 1',{exact:true})).toHaveValue('Eligibility?');
+  await expect(plan.getByRole('textbox').first()).toHaveValue('Eligibility?');
+  await expect(plan.getByRole('textbox').nth(1)).toHaveValue('Application fee?');
   await plan.getByRole('button',{name:'Prepare independently scoped plan'}).click();
   await expect(plan.getByRole('region',{name:'Prepared independently scoped plan'})).toContainText('2 independent searches');
   await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
@@ -903,6 +904,7 @@ test('checkpoint replacement uses a storage revision lease across two tabs',asyn
   await otherPanel.getByRole('button',{name:'Prepare local checkpoint restore'}).click();
   await expect(otherPanel.getByRole('region',{name:'Local checkpoint restore preview'})).toContainText('Exact native extraction and workspace replay matched');
   await otherPanel.getByRole('button',{name:'Apply verified local checkpoint'}).click();
-  await expect(otherRoot.getByText('Document 1: a.pdf',{exact:true}).first()).toBeVisible();
+  await expect(otherRoot.getByRole('region',{name:'Document 1: a.pdf',exact:true})).toBeVisible();
+  await expect(otherRoot.getByRole('region',{name:'Document 1: a.pdf',exact:true}).getByRole('heading',{name:'a.pdf',exact:true})).toBeVisible();
   await other.close();
 });

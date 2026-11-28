@@ -79,7 +79,7 @@ export default function PdfChatScopedPlan({documents,selected,turns,names,onAppl
     <p className="chat-muted">{rows.length}/{MAX_BATCH_QUESTIONS} draft rows · {validation.searches}/{MAX_BATCH_SEARCHES} independent searches · {validation.capacity} remaining history slots.</p>
     {rows.map((row,i)=><fieldset key={row.key} className="chat-citation" disabled={busy}>
       <legend>Scoped question {i+1}</legend>
-      <label>Question {i+1}<textarea maxLength={MAX_QUESTION} rows={2} value={row.question}
+      <label>Question {i+1}<textarea aria-label={'Question '+(i+1)} maxLength={MAX_QUESTION} rows={2} value={row.question}
         onChange={event=>edit(row.key,{question:event.target.value})}/></label>
       <div className="chat-collection-filter-grid">
         {documents.map(doc=><label className="chat-checkbox" key={doc.id}>

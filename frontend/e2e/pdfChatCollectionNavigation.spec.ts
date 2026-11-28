@@ -6,7 +6,7 @@ const full:CollectionToolState={documents:3,selected:2,turns:1,preview:true,busy
 test('workspace catalog has unique stable destinations and explicit availability',()=>{
   expect(new Set(COLLECTION_TOOLS.map(tool=>collectionToolAnchor(tool.id))).size).toBe(COLLECTION_TOOLS.length);
   const available=collectionToolSearch('','all',empty,true).map(row=>row.tool.id);
-  expect(available).toEqual(['sources','question','replay']);
+  expect(available).toEqual(['sources','question','checkpoint','replay']);
   expect(collectionToolSearch('','all',full,true)).toHaveLength(COLLECTION_TOOLS.length);
   expect(()=>collectionToolAnchor('unknown' as never)).toThrow();
 });
