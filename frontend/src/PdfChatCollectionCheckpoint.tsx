@@ -2,12 +2,12 @@ import {useEffect,useRef,useState} from 'react';
 import {buildCheckpoint,restoreCheckpoint,type CheckpointState,type CheckpointInfo,type CheckpointProgress} from './pdfChatCollectionCheckpoint';
 import {createCheckpointStore} from './pdfChatCheckpointStore';
 import {readPdf} from './pdfChatExtract';
-type Props={state:CheckpointState;disabled:boolean;onRestore:(state:CheckpointState)=>void};
-type Pending={state:CheckpointState;current:CheckpointState;revision:string};
+type Props={state:CheckpointState;draft:string;disabled:boolean;onRestore:(state:CheckpointState)=>void};
+type Pending={state:CheckpointState;current:CheckpointState;revision:string;draft:string};
 function same(a:CheckpointState,b:CheckpointState){
   return a.documents===b.documents&&a.turns===b.turns&&a.reviews===b.reviews&&a.selected===b.selected;
 }
-export default function PdfChatCollectionCheckpoint({state,disabled,onRestore}:Props){
+export default function PdfChatCollectionCheckpoint({state,draft,disabled,onRestore}:Props){
   const [info,setInfo]=useState<CheckpointInfo|null|undefined>(undefined);
   const [busy,setBusy]=useState(false);
   const [approval,setApproval]=useState<CheckpointState|null>(null);
@@ -17,10 +17,11 @@ export default function PdfChatCollectionCheckpoint({state,disabled,onRestore}:P
   const [feedback,setFeedback]=useState('');
   const [error,setError]=useState('');
   const latest=useRef(state);latest.current=state;
+  const latestDraft=useRef(draft);latestDraft.current=draft;
   const controller=useRef<AbortController|null>(null),generation=useRef(0);
   useEffect(()=>()=>{generation.current++;controller.current?.abort();},[]);
   const approved=approval!==null&&same(approval,state);
-  const pendingFresh=pending!==null&&same(pending.current,state)&&pending.revision===info?.revision;
+  const pendingFresh=pending!==null&&same(pending.current,state)&&pending.revision===info?.revision&&pending.draft===draft;
   async function act(mode:'refresh'|'save'|'restore'|'delete'){
     if(disabled||controller.current||mode==='save'&&(!approved||info===undefined||!state.documents.length)||
       mode==='delete'&&(!info||deleteApproval!==info.revision)||mode==='restore'&&!info)return;
@@ -43,7 +44,7 @@ export default function PdfChatCollectionCheckpoint({state,disabled,onRestore}:P
         if(active()&&same(latest.current,state)){
           const current=await store.info();
           if(current?.revision!==checkpoint.revision)throw Error('changed');
-          if(active()&&same(latest.current,state))setPending({state:restored,current:state,revision:checkpoint.revision});
+          if(active()&&same(latest.current,state)&&latestDraft.current===draft)setPending({state:restored,current:state,revision:checkpoint.revision,draft});
         }else if(active())throw Error('stale');
       }else{
         await store.remove(info!.revision,task.signal);

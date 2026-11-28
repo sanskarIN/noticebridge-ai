@@ -262,7 +262,7 @@ export default function PdfChatCollection() {
       <PdfChatCollectionNavigation state={{documents:documents.length,selected:selected.length,turns:turns.length,
         preview:!!preview,busy}} onNavigate={id=>!!workspaceRoot.current&&focusCollectionDestination(workspaceRoot.current,id)} />
       <div id={collectionToolAnchor('checkpoint')} tabIndex={-1} className="chat-collection-destination">
-        <PdfChatCollectionCheckpoint state={{documents,turns,reviews,selected}} disabled={busy} onRestore={value=>{
+        <PdfChatCollectionCheckpoint state={{documents,turns,reviews,selected}} draft={question} disabled={busy} onRestore={value=>{
           if(busy)return;
           setDocuments(value.documents);setSelected(value.selected);setTurns(value.turns);setReviews(value.reviews);
           setActiveTurn(value.turns.length?value.turns.length-1:null);setQuestion('');setPreview(null);
