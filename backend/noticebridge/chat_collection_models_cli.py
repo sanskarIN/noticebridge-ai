@@ -60,7 +60,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.preflight_only:
         print("Collection candidate inventory written. No model was invoked.")
     else:
-        print("Collection proposal bundle written. Review source evidence; authority is not verified.")
+        print("Collection proposal bundle written. "
+              "Review source evidence; authority is not verified.")
     return 0
 
 

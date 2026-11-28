@@ -66,8 +66,8 @@ export function collectionToolAnchor(id:CollectionToolId):string{
   if(!catalog.has(id))throw new Error('Unknown collection workspace destination.');
   return 'collection-tool-'+id;
 }
-function words(value:string){
-  return value.toLowerCase().normalize('NFKC').match(/[a-z0-9]+/g)??[];
+function words(value:string):string[]{
+  return value.normalize('NFKC').toLowerCase().match(/[a-z0-9]+/g)??[];
 }
 export function collectionToolAvailability(tool:CollectionTool,state:CollectionToolState):string|null{
   if(tool.blockedDuringIndexing&&state.busy)return 'Available after indexing finishes.';

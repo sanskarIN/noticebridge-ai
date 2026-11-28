@@ -438,7 +438,8 @@ def audit_context(groups, citations: list[Fragment], strict: int, enabled: bool)
         fragments = [citations[item - 1] for item in ids]
         if any(fragment.page != page for fragment in fragments):
             invalid()
-        if any(not same_flow(left, right) for left, right in zip(fragments[:-1], fragments[1:], strict=True)):
+        pairs = zip(fragments[:-1], fragments[1:], strict=True)
+        if any(not same_flow(left, right) for left, right in pairs):
             invalid()
         if sum(len(fragment.text.encode("utf-16-le")) // 2 for fragment in fragments) > 1400:
             invalid()
