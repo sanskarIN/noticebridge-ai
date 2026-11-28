@@ -25,7 +25,8 @@
     "review:preflight": "vite build --ssr evaluation/reviewPreflight.ts --outDir .evaluation-build && node .evaluation-build/reviewPreflight.js",
     "qualify:study": "vite build --ssr evaluation/qualifyStudy.ts --outDir .evaluation-build && node .evaluation-build/qualifyStudy.js",
     "replay:collection": "vite build --ssr evaluation/replayCollection.ts --outDir .evaluation-build && node .evaluation-build/replayCollection.js",
-    "ingest:collection": "vite build --ssr evaluation/ingestCollection.ts --outDir .evaluation-build && node --max-old-space-size=768 .evaluation-build/ingestCollection.js"
+    "ingest:collection": "vite build --ssr evaluation/ingestCollection.ts --outDir .evaluation-build && node --max-old-space-size=768 .evaluation-build/ingestCollection.js",
+    "compare:collection-snapshots": "vite build --ssr evaluation/compareCollectionSnapshots.ts --outDir .evaluation-build && node .evaluation-build/compareCollectionSnapshots.js"
   },
   "dependencies": {
     "react": "^19.0.0",
