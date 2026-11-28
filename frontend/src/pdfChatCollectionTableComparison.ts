@@ -76,6 +76,7 @@ export function compareCollectionTables(documents:readonly CollectionDocument[],
     if(!cells.some(cell=>cell.value))continue;
     const state=cells.some(cell=>!cell.value)?'missing':
       new Set(cells.map(cell=>cell.value!.text)).size===1?'same_text':'different_text';
+    if(rows.length>=MAX_TABLE_COMPARISON_ROWS)invalid();
     counts[state]++;
     rows.push({categoryKey:category,field,cells,state,
       differentCategoryLabels:new Set(cells.flatMap(cell=>cell.category?[cell.category.text]:[])).size>1,

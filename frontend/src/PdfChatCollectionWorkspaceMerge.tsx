@@ -11,7 +11,8 @@ export default function PdfChatCollectionWorkspaceMerge({documents,current,impor
   const [choices,setChoices]=useState<WorkspaceMergeResolution[]>([]);
   const [page,setPage]=useState(1);
   const [error,setError]=useState(false);
-  const plan=useMemo(()=>prepareWorkspaceMerge(documents,current,imported),[documents,current,imported]);
+  const plan=useMemo(()=>prepareWorkspaceMerge(documents,current,imported),
+    [documents,current.turns,current.reviews,imported]);
   const summary=workspaceMergeSummary(plan,choices);
   const shown=workspaceConflictPage(plan.conflicts,page);
   return <section className="chat-note" aria-label="Collection workspace merge preview">

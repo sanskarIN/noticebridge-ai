@@ -26,6 +26,7 @@ export function explainCollectionRanking(documents:readonly CollectionDocument[]
   includeContext:boolean):CollectionRankingTrace{
   const [doc]=selectedCollectionDocuments(documents,[documentId]);
   if(typeof includeContext!=='boolean'||part.answer.scope!=='original')invalid();
+  for(const citation of part.answer.citations)collectionCitation(documents,documentId,citation);
   const parsed=parseSearchQuestion(part.answer.question);
   if(parsed.page!==part.answer.pageFilter)invalid();
   // Re-execute the saved question part before explaining it. A caller may

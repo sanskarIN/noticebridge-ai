@@ -45,11 +45,11 @@ test('page-scoped score explanation retains complete PDF document frequencies',a
 });
 test('field aliases can qualify independently of all query terms without claiming equivalence',()=>{
   const rows:Passage[]=[
-    {role:'original',page:1,ordinal:1,text:'Application due date: 10 December'},
-    {role:'original',page:1,ordinal:2,text:'Application cutoff date: 12 December'},
-    {role:'revised',page:1,ordinal:1,text:'Application due date: 20 December'},
+    {role:'original',page:1,ordinal:1,text:'Eligibility: Class 12'},
+    {role:'original',page:1,ordinal:2,text:'Educational qualification: Class 10'},
+    {role:'revised',page:1,ordinal:1,text:'Eligibility: Degree'},
   ];
-  const index=buildIndex(rows),words=queryTerms('application cutoff date'),field=knownQuestionField(words);
+  const index=buildIndex(rows),words=queryTerms('educational qualification'),field=knownQuestionField(words);
   const ranked=rankedMatchDetails(index,words,'original',field);
   expect(ranked.map(row=>row.passage)).toEqual(rankedMatches(index,words,'original',field));
   expect(ranked.every(row=>row.knownField)).toBe(true);
@@ -76,6 +76,7 @@ test('forged, missing and other-document citation identities reject',async()=>{
   const trace=explainCollectionRanking(docs,a.id,part,false);
   expect(()=>explainCollectionRanking(docs,b.id,part,false)).toThrow();
   expect(()=>explainCollectionRanking(docs,a.id,{...part,answer:{...part.answer,citations:[]}},false)).toThrow();
+  expect(()=>explainCollectionRanking(docs,a.id,{...part,answer:{...part.answer,citations:part.answer.citations.map(row=>({...row}))}},false)).toThrow();
   expect(()=>collectionRankingTermScores(trace,{...trace.rows[0]})).toThrow();
   expect(()=>inspectCollectionRanking(docs,trace,{...trace.rows[0]})).toThrow();
   expect(()=>filterCollectionRanking(trace,{mode:'fake' as never,display:'all',query:''})).toThrow();
