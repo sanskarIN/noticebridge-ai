@@ -280,3 +280,7 @@ The collection reference index groups explicit clause, section, paragraph, rule,
 ## Independently scoped question plan
 
 The scoped planner allows different explicit document selections and nearby-line settings for each draft question. Rows can be reordered or removed and are checked individually before execution. A bounded complete run is previewed before appending; changed history, draft edits or source sets invalidate the staged result. Canonical question-plan exchange contains questions and fingerprints only, and an imported plan replaces the draft only after confirmation. The existing saved history is not replaced.
+
+## Explicit browser-local checkpoint
+
+A single optional IndexedDB checkpoint can store the current actual PDF bytes, private filenames, full native snapshot, question plan and personal review annotations. Saving and replacement require explicit consent; no automatic persistence is enabled. This is browser-profile storage, not encrypted storage, cloud sync or a durable backup. Do not use it on shared devices or for sensitive documents. Restoration freshly hashes and re-extracts each PDF, matches the canonical snapshot and replays saved work before offering an atomic replacement preview. Deletion requires confirmation and compare-and-swap transactions reject stale revisions from another tab. Browser site-data deletion can remove the stored checkpoint.

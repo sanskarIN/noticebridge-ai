@@ -5,6 +5,7 @@ import { admitCollectionDocument, collectionCitation, collectionStats, runCollec
   MAX_COLLECTION_DOCUMENTS, MAX_COLLECTION_BYTES, MAX_COLLECTION_PASSAGES, MAX_COLLECTION_CHARS,
   MAX_COLLECTION_TURNS, CollectionError, type CollectionDocument, type CollectionPart, type CollectionTurn, type CollectionStep,
 } from './pdfChatCollection';
+import PdfChatCollectionCheckpoint from './PdfChatCollectionCheckpoint';
 import PdfChatCollectionExchange from './PdfChatCollectionExchange';
 import PdfChatCollectionReviewQueue from './PdfChatCollectionReviewQueue';
 import PdfChatCollectionReview from './PdfChatCollectionReview';
@@ -260,6 +261,14 @@ export default function PdfChatCollection() {
         models, or change your original/revised PDF conversation. Identical PDF bytes are deduplicated.</p>
       <PdfChatCollectionNavigation state={{documents:documents.length,selected:selected.length,turns:turns.length,
         preview:!!preview,busy}} onNavigate={id=>!!workspaceRoot.current&&focusCollectionDestination(workspaceRoot.current,id)} />
+      <div id={collectionToolAnchor('checkpoint')} tabIndex={-1} className="chat-collection-destination">
+        <PdfChatCollectionCheckpoint state={{documents,turns,reviews,selected}} disabled={busy} onRestore={value=>{
+          if(busy)return;
+          setDocuments(value.documents);setSelected(value.selected);setTurns(value.turns);setReviews(value.reviews);
+          setActiveTurn(value.turns.length?value.turns.length-1:null);setQuestion('');setPreview(null);
+          setError('');setBatch(null);setRemoveId(null);setConfirmClear(false);
+        }}/>
+      </div>
       <div className="chat-collection-budget" aria-label="Collection processing budget">
         <div><strong>{stats.documents} / {MAX_COLLECTION_DOCUMENTS}</strong><span>PDF documents</span></div>
         <div><strong>{formatBytes(stats.bytes)} / {formatBytes(MAX_COLLECTION_BYTES)}</strong><span>Local PDF bytes</span></div>

@@ -3,7 +3,7 @@
 export type CollectionToolGroup='ask'|'inspect'|'review'|'exchange'|'experiments';
 export type CollectionToolId=
   'sources'|'question'|'batch'|'scoped-plan'|'history'|'models'|'results'|'fields'|'literal'|'boolean-search'|'references'|
-  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'overlap'|'pages'|'preview'|'review'|'review-queue'|'workspace'|
+  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'overlap'|'pages'|'preview'|'review'|'review-queue'|'workspace'|'checkpoint'|
   'ocr'|'evaluation'|'packet'|'replay'|'exchange';
 export type CollectionToolState={documents:number;selected:number;turns:number;preview:boolean;busy:boolean};
 export type CollectionTool={
@@ -56,6 +56,8 @@ export const COLLECTION_TOOLS:readonly CollectionTool[]=[
     keywords:['gap','unanswered','ambiguity','coverage','followup'],requirement:'turns',blockedDuringIndexing:true},
   {id:'review',group:'review',title:'Review notebook',description:'Manage personal annotations on saved native fragments.',
     keywords:['note','pin','saved','evidence'],requirement:'documents',blockedDuringIndexing:true},
+  {id:'checkpoint',group:'exchange',title:'Browser-local checkpoint',description:'Explicitly save and replay private PDF files and saved work in this browser.',
+    keywords:['save','restore','local','storage','checkpoint'],requirement:'none',blockedDuringIndexing:true},
   {id:'workspace',group:'exchange',title:'Editable workspace',description:'Export or restore questions and review annotations.',
     keywords:['restore','import','export','json'],requirement:'documents',blockedDuringIndexing:true},
   {id:'packet',group:'exchange',title:'Evidence review packet',description:'Export a canonical review or static reading copy.',
