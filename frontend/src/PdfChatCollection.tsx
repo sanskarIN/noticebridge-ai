@@ -15,6 +15,7 @@ import PdfChatCollectionBatch from './PdfChatCollectionBatch';
 import PdfChatCollectionRecovery from './PdfChatCollectionRecovery';
 import PdfChatCollectionRequirements from './PdfChatCollectionRequirements';
 import PdfChatCollectionOutline from './PdfChatCollectionOutline';
+import PdfChatCollectionReplay from './PdfChatCollectionReplay';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -435,6 +436,7 @@ export default function PdfChatCollection() {
           setActiveTurn(workspace.turns.length ? workspace.turns.length - 1 : null);
           setQuestion(''); setPreview(null); setError('');
         }} />}
+      {!busy && <PdfChatCollectionReplay key={'replay:' + documents.map(doc => doc.id).join(':')} documents={documents} />}
       {documents.length > 0 && <PdfChatCollectionExchange key={'exchange:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} disabled={busy}
         onApply={restored => {

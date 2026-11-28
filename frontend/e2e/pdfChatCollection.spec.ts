@@ -552,3 +552,24 @@ test('collection outline requires explicit physical section candidates before al
   await expect(result).toContainText('Age 18');
   await expect(result).toContainText('Age 21');
 });
+
+test('collection snapshot export and independent replay bind to exact real PDF bytes',async({page})=>{
+  const root=await open(page);
+  const original=fixture('original.pdf',[['Application fee: INR 500']]);
+  await attach(page,[original],1);
+  await root.getByText('Export native collection snapshot or independently replay sources',{exact:true}).click();
+  const panel=root.getByRole('group',{name:'Independent collection source replay',exact:true});
+  const exportButton=panel.getByRole('button',{name:'Export native collection snapshot'});
+  await expect(exportButton).toBeDisabled();
+  await panel.getByLabel('I approve exporting the private native collection text.').check();
+  const event=page.waitForEvent('download');await exportButton.click();
+  const bytes=await readFile((await (await event).path())!);
+  await panel.getByLabel('Collection replay snapshot file').setInputFiles({name:'snapshot.json',mimeType:'application/json',buffer:bytes});
+  await panel.getByLabel('Collection replay source PDFs').setInputFiles({...original,name:'renamed.pdf'});
+  await panel.getByRole('button',{name:'Run independent collection source replay'}).click();
+  const result=panel.getByRole('region',{name:'Collection source replay results'});
+  await expect(result).toContainText('All native extractions exactly reproduced');
+  await panel.getByRole('button',{name:'Clear replay PDFs'}).click();
+  await panel.getByRole('button',{name:'Run independent collection source replay'}).click();
+  await expect(result).toContainText('Expected PDF not selected');
+});

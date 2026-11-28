@@ -124,3 +124,7 @@ Inspect mandatory, prohibited, exception, permission and recommendation cues sep
 ## Collection outline candidates and exact section alignment
 
 Explore recognized heading candidates, repeated heading keys and native fragments in candidate spans. Users explicitly select two physical section candidates from different PDFs before bounded exact sequence alignment. Matching headings and unpaired fragments never imply equivalent rules or a revision direction. Repeated wording and incomplete extraction are reported separately.
+
+## Independent collection source replay
+
+Export a private canonical snapshot of the bounded native extraction, with explicit consent. Replay uses separately selected PDFs, identifies them by SHA-256 (not names or order), rejects duplicate bytes, and never extracts unexpected files. Missing sources, changed extraction and extraction failures remain distinct. A deterministic report contains fingerprints, coverage and fragment counts, not source quotations. Saved reports must be reproduced independently before acceptance. Neither the snapshot nor replay certifies authority, extraction completeness or answer accuracy.
