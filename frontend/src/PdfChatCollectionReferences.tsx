@@ -21,7 +21,7 @@ function Occurrences({documents,names,onInspect,index,group,items}:Props&{index:
     {current.pages>1&&<div className="chat-toolbar">
       <button className="chat-button" type="button" disabled={page===1} onClick={()=>setPage(page-1)}>Previous reference occurrences</button>
       <span>{current.first}–{current.last} of {items.length}</span>
-      <button className="chat-button" type="button" disabled={page===current.pages} onClick={()=>setPage(page+1)}>Next reference occurrences</button>
+      <button className="chat-button" type="button" disabled={page>=current.pages} onClick={()=>setPage(page+1)}>Next reference occurrences</button>
     </div>}
   </>;
 }
@@ -43,7 +43,8 @@ export default function PdfChatCollectionReferences({documents,names,onInspect,s
   const [filter,setFilter]=useState<ReferenceFilter>({kind:'all',state:'all',documentId:'all',text:'',sharedOnly:false});
   const [page,setPage]=useState(1);
   const index=useMemo(()=>open&&selected.length?collectionReferenceIndex(documents,selected):null,[open,documents,selected]);
-  const rows=index?filterReferenceIndex(index,filter):[];
+  const effectiveFilter=filter.documentId==='all'||selected.includes(filter.documentId)?filter:{...filter,documentId:'all'};
+  const rows=index?filterReferenceIndex(index,effectiveFilter):[];
   const current=referenceIndexPage(rows,Math.min(page,Math.max(1,Math.ceil(rows.length/COLLECTION_REFERENCE_PAGE_SIZE))));
   function change(update:Partial<ReferenceFilter>){setFilter(old=>({...old,...update}));setPage(1);}
   return <details className="chat-collection-inspection" aria-label="Collection reference index" onToggle={event=>setOpen(event.currentTarget.open)}>
@@ -69,7 +70,7 @@ export default function PdfChatCollectionReferences({documents,names,onInspect,s
         <label>Reference candidate state<select value={filter.state} onChange={event=>change({state:event.target.value as ReferenceFilter['state']})}>
           <option value="all">All states</option>{(Object.keys(states) as (keyof typeof states)[]).map(state=><option key={state} value={state}>{states[state]}</option>)}
         </select></label>
-        <label>Reference source PDF<select value={filter.documentId} onChange={event=>change({documentId:event.target.value})}>
+        <label>Reference source PDF<select value={effectiveFilter.documentId} onChange={event=>change({documentId:event.target.value})}>
           <option value="all">All selected PDFs</option>{selected.map(id=><option key={id} value={id}>{names.get(id)}</option>)}
         </select></label>
         <label>Find reference identifier<input value={filter.text} maxLength={100} onChange={event=>change({text:event.target.value})}/></label>

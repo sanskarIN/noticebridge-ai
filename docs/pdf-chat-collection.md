@@ -312,3 +312,7 @@ The independent Python auditor (`python -m noticebridge.chat_collection_snapshot
 ## Native extraction quality inspection
 
 Inspect retained native fragments for exact repeats on the same or different physical pages, absent geometry, replacement characters, private-use characters, format/control characters and symbol-only lines. The diagnostic counts UTF-16 units, overlapping signals and processed pages separately; unprocessed pages are counted without materializing them. All signals are manual inspection cues, not OCR confidence or proof of errors. The coordinate-only report is bound to a canonical native snapshot and can be recomputed without PDF bytes.
+
+## Reverse citation usage index
+
+Recompute saved independent question steps to see which native source fragments were returned, how many distinct turns reused each one, and whether they have personal review annotations. Strict and nearby-line citations remain separate. The index also includes manually pinned fragments that no saved question cited. Export contains private question steps, coordinates, annotation status and snapshot hash, but no source excerpts or note text. Citation frequency is not relevance or importance.

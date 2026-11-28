@@ -1,3 +1,4 @@
+import PdfChatEvidenceUsage from './PdfChatEvidenceUsage';
 import PdfChatCollectionQuality from './PdfChatCollectionQuality';
 import PdfChatCollectionComposer from './PdfChatCollectionComposer';
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
@@ -492,6 +493,10 @@ export default function PdfChatCollection() {
           disabled={busy} draftDisabled={!!question.trim()} onInspect={inspect}
           onTurn={index=>{setActiveTurn(index);setPreview(null);workspaceRoot.current?.querySelector<HTMLElement>('#'+collectionToolAnchor('history'))?.focus();}}
           onDraft={step=>{setQuestion(step.question);setSelected(step.documentIds);setIncludeContext(step.includeContext);questionRef.current?.focus();}}/>
+      </div>}
+      {documents.length>0&&!busy&&<div id={collectionToolAnchor('usage')} tabIndex={-1} className="chat-collection-destination">
+        <PdfChatEvidenceUsage documents={documents} turns={turns} reviews={reviews} names={names} onInspect={inspect}
+          onTurn={index=>{setActiveTurn(index);setPreview(null);workspaceRoot.current?.querySelector<HTMLElement>('#'+collectionToolAnchor('history'))?.focus();}}/>
       </div>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('review' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionReview key={'review:' + documents.map(doc => doc.id).join(':')}
         documents={documents} entries={reviews} names={names} onChange={setReviews} onInspect={inspect} /></div>}
