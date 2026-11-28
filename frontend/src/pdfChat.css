@@ -504,3 +504,7 @@
 .chat-collection-review-entry label{display:grid;gap:6px;min-width:0}
 .chat-collection-review-entry :is(select,textarea){background:#071325;color:#e8edf7;border:1px solid #50627d;border-radius:8px;padding:10px;max-width:100%;min-width:0;font:inherit}
 .chat-collection-review-entry textarea{width:100%;resize:vertical}
+
+.chat-collection-inspection .chat-table-scroll{max-width:100%;overflow:auto}
+.chat-collection-inspection .chat-table-evidence>div{display:grid;gap:4px;min-width:0}
+.chat-collection-inspection .chat-table-evidence dd{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}

@@ -7,6 +7,8 @@ import { admitCollectionDocument, collectionCitation, collectionStats, runCollec
 } from './pdfChatCollection';
 import PdfChatCollectionExchange from './PdfChatCollectionExchange';
 import PdfChatCollectionReview from './PdfChatCollectionReview';
+import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
+import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
 import { CollectionEvidenceExplorer, CollectionFieldOverview, CollectionQuestionMatches } from './PdfChatCollectionTools';
 
@@ -55,6 +57,7 @@ function CollectionAnswer({ part, documents, documentId, onInspect }: {
       </div>)}
       <CollectionQuestionMatches documents={documents} documentId={documentId} answer={answer} onInspect={onInspect} />
     </>}
+    <CollectionTableCandidates documents={documents} documentId={documentId} answer={answer} onInspect={onInspect} />
   </div>;
 }
 
@@ -192,6 +195,13 @@ export default function PdfChatCollection() {
       collectionCitation(documents, documentId, source);
       returnFocus.current = target;
       setPreview({ documentId, page: source.page, source });
+    } catch (cause) { setError(errorText(cause)); }
+  }
+  function inspectPage(documentId: string, page: number, target: HTMLElement) {
+    try {
+      const selectedPage = resolveCollectionPage(documents, documentId, String(page));
+      returnFocus.current = target;
+      setPreview({ documentId: selectedPage.documentId, page: selectedPage.page });
     } catch (cause) { setError(errorText(cause)); }
   }
   function closePreview() {
@@ -354,7 +364,11 @@ export default function PdfChatCollection() {
         <CollectionFieldOverview documents={documents} selected={selected} names={names} onInspect={inspect}
           onAsk={value => { setQuestion(value); questionRef.current?.focus(); }} />
         <CollectionEvidenceExplorer documents={documents} selected={selected} names={names} onInspect={inspect} />
+        <CollectionTableExplorer documents={documents} selected={selected} names={names} onInspect={inspect}
+          onAsk={(documentId, value) => { setSelected([documentId]); setQuestion(value); questionRef.current?.focus(); }} />
       </div>}
+      {documents.length > 0 && !busy && <CollectionPageNavigator key={documents.map(doc => doc.id).join(':')}
+        documents={documents} names={names} onInspect={inspectPage} />}
       {preview && previewDoc && <section className="chat-panel chat-collection-preview" aria-label="Collection source inspection">
         <div className="chat-toolbar">
           <h4 ref={previewHeading} tabIndex={-1}>{names.get(previewDoc.id)} · physical page {preview.page}</h4>

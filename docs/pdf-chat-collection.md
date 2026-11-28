@@ -57,3 +57,19 @@ complete replacement only after the current attachment set and every saved
 text hash match. Changed extraction, malformed encoding, duplicate entries
 and noncanonical JSON fail closed. User confirmation is required to apply.
 Review flags do not establish official authority or answer correctness.
+
+## Physical page and table inspection
+
+The collection page navigator can open every physical page of an attached
+document, including image-only pages or pages beyond the 80-page indexing
+limit. The coverage list is bounded and paginated; the manual jump validates
+against that particular PDF's physical page count. Manual inspection never
+creates a saved native fragment or adds a chat turn.
+
+The aligned category table explorer operates independently on each selected
+document. It uses the existing conservative native geometry rules and lists
+skipped pages and candidate limits. Table cells can prefill a question scoped
+to their exact document and page. Candidate answers remain optional layout
+inspection leads, separate from the native lexical answer and its private
+replay. No cells are joined across PDFs, and no table structure or official
+applicability is certified.

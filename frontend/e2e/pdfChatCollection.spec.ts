@@ -323,3 +323,24 @@ test('collection private review export and restore require approval and exact so
   await notebook.getByRole('button', { name: 'Apply saved collection review' }).click();
   await expect(notebook.getByLabel('Collection review note')).toHaveValue('Private note');
 });
+
+test('collection can inspect a blank physical page without creating native evidence or a question', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [fixture('blank-page.pdf', [['Application fee: INR 500'], []])], 1);
+  await root.getByText('Inspect collection PDF page coverage', { exact: true }).click();
+  const coverage = root.getByRole('group', { name: 'Collection page coverage', exact: true });
+  await coverage.getByRole('button', { name: 'Inspect collection physical page 2: No indexed text' }).click();
+  const inspection = root.getByRole('region', { name: 'Collection source inspection' });
+  await expect(inspection.getByRole('heading', { name: /blank-page.pdf.*physical page 2/ })).toBeVisible();
+  await expect(inspection.locator('blockquote')).toHaveCount(0);
+  await expect(inspection.getByRole('button', { name: 'Save collection evidence', exact: true })).toHaveCount(0);
+  await expect(inspection.locator('canvas')).toBeVisible();
+  await inspection.getByRole('button', { name: 'Close collection source' }).click();
+  await coverage.getByLabel('Collection physical page to inspect').fill('3');
+  await coverage.getByRole('button', { name: 'Inspect selected collection page' }).click();
+  await expect(coverage.getByRole('alert')).toBeVisible();
+  await coverage.getByLabel('Collection physical page to inspect').fill('1');
+  await coverage.getByRole('button', { name: 'Inspect selected collection page' }).click();
+  await expect(inspection.getByRole('heading', { name: /blank-page.pdf.*physical page 1/ })).toBeVisible();
+  await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+});
