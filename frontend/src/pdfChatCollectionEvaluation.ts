@@ -5,7 +5,7 @@ import { MAX_QUESTION, type Passage } from './pdfChatCore';
 import { collectionStats, collectionCitation, normalizeCollectionStep, runCollectionStep,
   type CollectionDocument, type CollectionTurn, type CollectionPart } from './pdfChatCollection';
 import { requestHash } from './pdfChatEmbeddingBridge';
-import { planQuestions } from './pdfChatInsights';
+import { planQuestions, parseSearchQuestion } from './pdfChatInsights';
 
 export const MAX_COLLECTION_EVAL_CASES=64;
 export const MAX_COLLECTION_EVAL_EXPECTED=24;
@@ -89,8 +89,7 @@ export function validateCollectionEvalCase(documents:readonly CollectionDocument
       target.expected.length>MAX_COLLECTION_EVAL_EXPECTED||
       (target.label==='evidence')!==Boolean(target.expected.length)||planQuestions(target.question).length!==1)invalid();
   normalizeCollectionStep({question:target.question,documentIds:[target.documentId],includeContext:target.includeContext},ids(documents));
-  const evaluated=runCollectionStep(documents,{question:target.question,documentIds:[target.documentId],includeContext:target.includeContext});
-  const page=evaluated.results[0].parts[0].answer.pageFilter;
+  const page=parseSearchQuestion(target.question).page;
   const seen=new Set<string>();
   const expected=target.expected.map(row=>{
     if(!row?.source)invalid();
@@ -126,6 +125,11 @@ export function evaluateCollectionCase(documents:readonly CollectionDocument[],i
   const target=validateCollectionEvalCase(documents,input);
   const turn=runCollectionStep(documents,{question:target.question,documentIds:[target.documentId],includeContext:target.includeContext});
   const part=turn.results[0].parts[0];
+  return scoreCollectionObservation(target,part);
+}
+/** Score a recorded or live retrieval against independently authored labels.
+ * This function does not authenticate the origin of recorded results. */
+export function scoreCollectionObservation(target:CollectionEvalCase,part:CollectionPart):CollectionEvalObservation{
   const expected=target.expected.map(row=>row.source);
   const wanted=new Set(expected.map(key));
   const retrieved=part.answer.citations;
@@ -144,7 +148,9 @@ export function evaluateCollectionCase(documents:readonly CollectionDocument[],i
     reciprocalRank:expected.length?(rank<0?0:1/(rank+1)):null,outcome};
 }
 export function evaluateCollection(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[]):CollectionEvaluation{
-  const observations=normalizeCases(documents,cases).map(row=>evaluateCollectionCase(documents,row));
+  return summarizeCollectionEvaluation(normalizeCases(documents,cases).map(row=>evaluateCollectionCase(documents,row)));
+}
+export function summarizeCollectionEvaluation(observations:CollectionEvalObservation[]):CollectionEvaluation{
   const expectedFragments=observations.reduce((sum,row)=>sum+row.expectedCount,0);
   const retrievedFragments=observations.reduce((sum,row)=>sum+row.retrievedCount,0);
   const correctFragments=observations.reduce((sum,row)=>sum+row.correctCount,0);
@@ -160,6 +166,24 @@ export function evaluateCollection(documents:readonly CollectionDocument[],cases
     unexpectedMatches:abstentions.filter(row=>row.outcome==='unexpected_match').length,
     incompleteCoverageCases:observations.filter(row=>row.part.coverage!=='some_text').length,
   }};
+}
+/** Yield between bounded cases so cancellation and browser input can run.
+ * Never expose partial evaluation as a completed result. */
+export async function evaluateCollectionAsync(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[],
+  signal:AbortSignal,onProgress?:(completed:number,total:number)=>void,
+  yieldControl:()=>Promise<void>=()=>new Promise(resolve=>setTimeout(resolve,0))):Promise<CollectionEvaluation>{
+  signal.throwIfAborted();
+  const targets=normalizeCases(documents,cases);
+  const observations:CollectionEvalObservation[]=[];
+  onProgress?.(0,targets.length);
+  for(const target of targets){
+    await yieldControl();
+    signal.throwIfAborted();
+    observations.push(evaluateCollectionCase(documents,target));
+    onProgress?.(observations.length,targets.length);
+    signal.throwIfAborted();
+  }
+  return summarizeCollectionEvaluation(observations);
 }
 export function collectionEvalPage<T>(rows:readonly T[],page:number){
   const pages=Math.max(1,Math.ceil(rows.length/COLLECTION_EVAL_PAGE_SIZE));

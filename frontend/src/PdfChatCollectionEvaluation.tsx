@@ -2,10 +2,12 @@ import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react';
 import type {Passage} from './pdfChatCore';
 import type {CollectionDocument,CollectionTurn} from './pdfChatCollection';
 import {collectionEvalTarget,collectionEvalCaseKey,upsertCollectionEvalCase,removeCollectionEvalCase,
-  resolveCollectionEvalFragment,evaluateCollection,collectionEvalPage,COLLECTION_EVAL_PAGE_SIZE,
+  resolveCollectionEvalFragment,evaluateCollection,evaluateCollectionAsync,collectionEvalPage,COLLECTION_EVAL_PAGE_SIZE,
   MAX_COLLECTION_EVAL_CASES,MAX_COLLECTION_EVAL_EXPECTED,MAX_COLLECTION_EVAL_NOTE,
   serializeCollectionEvalLabels,parseCollectionEvalLabels,serializeCollectionEvalReport,verifyCollectionEvalReport,
   readCollectionEvalFile,type CollectionEvalCase,type CollectionEvalObservation} from './pdfChatCollectionEvaluation';
+
+import PdfChatCollectionRegression from './PdfChatCollectionRegression';
 
 type Inspect=(id:string,source:Passage,target:HTMLElement)=>void;
 function save(text:string,name:string){
@@ -50,6 +52,7 @@ export default function PdfChatCollectionEvaluation({documents,turns,names,onIns
   const [filter,setFilter]=useState<'all'|'missed'|'abstention'>('all');
   const [page,setPage]=useState(1);
   const [busy,setBusy]=useState(false);
+  const [progress,setProgress]=useState('');
   const [error,setError]=useState('');
   const [feedback,setFeedback]=useState('');
   const [approval,setApproval]=useState<readonly CollectionEvalCase[]|null>(null);
@@ -90,9 +93,22 @@ export default function PdfChatCollectionEvaluation({documents,turns,names,onIns
     try{changed(upsertCollectionEvalCase(documents,cases,draft));setDraft(null);}
     catch{setError('The label is invalid, outside the question scope, duplicated or exceeds the budget.');}
   }
-  function run(){
-    try{setResult(evaluateCollection(documents,cases));setFilter('all');setPage(1);setError('');}
-    catch{setResult(null);setError('Unable to evaluate the source-bound labels.');}
+  async function run(){
+    if(controller.current)return;
+    const operation=new AbortController();controller.current=operation;
+    const token=++generation.current;setBusy(true);setProgress('Preparing evaluation');setResult(null);setError('');setFeedback('');
+    try{
+      const value=await evaluateCollectionAsync(documents,cases,operation.signal,(done,total)=>{
+        if(token===generation.current)setProgress('Evaluated '+done+' of '+total+' labelled cases');
+      });
+      if(token===generation.current&&latest.current===cases){
+        setResult(value);setFilter('all');setPage(1);
+      }
+    }catch{
+      if(token===generation.current&&!operation.signal.aborted)setError('Unable to evaluate the source-bound labels.');
+    }finally{
+      if(token===generation.current){controller.current=null;setBusy(false);setProgress('');}
+    }
   }
   async function exchange(action:'labels'|'report'|'import'|'verify',file?:File){
     if(controller.current)return;
@@ -188,7 +204,7 @@ export default function PdfChatCollectionEvaluation({documents,turns,names,onIns
       <button type="button" className="chat-button" disabled={busy} onClick={()=>setDraft({...row,expected:[...row.expected]})}>Edit saved retrieval label</button>
       <button type="button" className="chat-button" disabled={busy} onClick={()=>changed(removeCollectionEvalCase(cases,collectionEvalCaseKey(row)))}>Remove saved retrieval label</button>
     </div>)}
-    <button type="button" className="chat-button" disabled={busy||!cases.length} onClick={run}>Run labelled collection retrieval evaluation</button>
+    <button type="button" className="chat-button" disabled={busy||!cases.length} onClick={()=>void run()}>Run labelled collection retrieval evaluation</button>
     {result&&<section aria-label="Collection retrieval evaluation results">
       <div className="chat-collection-budget">
         <div><strong>{percent(result.metrics.microPrecision)}</strong><span>Micro precision</span></div>
@@ -229,6 +245,8 @@ export default function PdfChatCollectionEvaluation({documents,turns,names,onIns
       }}>Apply imported collection retrieval labels</button>
       <button type="button" className="chat-button" onClick={()=>setPending(null)}>Discard imported retrieval labels</button>
     </section>}
+    {progress&&<p role="status">{progress}</p>}
+    <PdfChatCollectionRegression documents={documents} cases={cases} names={names} onInspect={onInspect}/>
     {busy&&<button type="button" className="chat-button" onClick={()=>controller.current?.abort()}>Cancel collection evaluation file operation</button>}
     {error&&<p role="alert" className="chat-error">{error}</p>}
     {feedback&&<p role="status" className="chat-note">{feedback}</p>}

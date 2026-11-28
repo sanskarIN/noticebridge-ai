@@ -1,7 +1,7 @@
 /** A review packet is a portable, private reading and verification artifact.
  * It is deliberately distinct from an editable question plan, and never
  * imports saved answers into the current collection. */
-import { pageCoverage, type Passage } from './pdfChatCore';
+import { pageCoverage } from './pdfChatCore';
 import { collectionStats, collectionSteps, collectionCitation, serializeCollectionEvidence, verifyCollectionEvidence,
   type CollectionDocument, type CollectionTurn } from './pdfChatCollection';
 import { serializeCollectionWorkspace, parseCollectionWorkspace, type CollectionWorkspace } from './pdfChatCollectionWorkspace';
