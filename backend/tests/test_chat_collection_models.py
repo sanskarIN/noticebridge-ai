@@ -66,7 +66,7 @@ def test_manifest_and_requests_are_admitted_in_exact_order(prepared, tmp_path):
 @pytest.mark.parametrize("changes", [
     {"version": True}, {"authority_verified": True}, {"part": True}, {"part": 4},
     {"mode": "unknown"}, {"requests": []}, {"skipped": "bad"}, {"policy": "verified"},
-    {"extra": "data"}, {"question": "\\ud800"}, {"question": ""},
+    {"extra": "data"}, {"question": "\ud800"}, {"question": ""},
 ])
 def test_manifest_rejects_bad_outer_fields(changes):
     value = manifest_value([request("A"), request("B")])
@@ -318,3 +318,22 @@ def test_total_timeout_discards_batch(prepared, tmp_path, monkeypatch):
     monkeypatch.setattr(collection, "TIMEOUT_SECONDS", 0.001)
     with pytest.raises(EmbeddingError, match="timed out"):
         asyncio.run(collection.run_collection(manifest, admitted, **CONFIG))
+
+
+def test_manifest_rejects_unpaired_surrogate_in_raw_json():
+    raw = chat_pipeline.encode(manifest_value([request("A"), request("B")]))
+    malformed = raw.replace(b'"question": "Application fee?"', b'"question": "\\ud800"')
+    assert malformed != raw
+    with pytest.raises(EmbeddingError):
+        collection.parse_manifest(malformed)
+
+
+def test_manifest_accepts_literal_backslash_text_without_confusing_it_with_unicode():
+    question = r"Check the literal \ud800 identifier"
+    requests = [request("A", question), request("B", question)]
+    value = manifest_value(requests)
+    value["question"] = question
+    manifest = collection.parse_manifest(chat_pipeline.encode(value))
+    assert manifest.question == question
+    for entry, raw in zip(manifest.requests, requests, strict=True):
+        assert collection.admit_request(manifest, entry, raw).request.embedding.question == question
