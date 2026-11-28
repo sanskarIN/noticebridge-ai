@@ -120,3 +120,7 @@ Each answer part can explain normalized term coverage, partial lexical leads and
 ## Collection requirement wording
 
 Inspect mandatory, prohibited, exception, permission and recommendation cues separately by physical page and literal keyword. Exact counterpart counts include only distinct selected documents, never duplicate fragments within one PDF. A missing counterpart does not imply removal, change or applicability. Each source can be inspected and saved in the review notebook.
+
+## Collection outline candidates and exact section alignment
+
+Explore recognized heading candidates, repeated heading keys and native fragments in candidate spans. Users explicitly select two physical section candidates from different PDFs before bounded exact sequence alignment. Matching headings and unpaired fragments never imply equivalent rules or a revision direction. Repeated wording and incomplete extraction are reported separately.

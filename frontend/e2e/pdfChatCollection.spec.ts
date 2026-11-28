@@ -534,3 +534,21 @@ test('collection requirement cues keep exact counterparts separate from inferred
   await panel.getByRole('button',{name:'Inspect collection requirement source',exact:true}).click();
   await expect(root.getByRole('region',{name:'Collection source inspection'}).locator('blockquote')).toHaveText('Do not pay cash');
 });
+
+test('collection outline requires explicit physical section candidates before alignment',async({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Eligibility criteria','Class 12','Age 18']]),fixture('b.pdf',[['Eligibility criteria','Class 12','Age 21']])],2);
+  await root.getByText('Explore collection document structure',{exact:true}).click();
+  const panel=root.getByRole('group',{name:'Collection candidate outline',exact:true});
+  await expect(panel.getByRole('status')).toContainText('2 matching collection heading candidate(s)');
+  await panel.getByRole('button',{name:'Browse collection section',exact:true}).first().click();
+  const align=panel.getByRole('button',{name:'Align selected collection sections'});
+  await expect(align).toBeDisabled();
+  await panel.getByLabel('Choose second collection section').selectOption({index:1});
+  await align.click();
+  const result=panel.getByRole('region',{name:'Collection section exact alignment'});
+  await expect(result).toContainText('2 matching fragments');
+  await result.getByLabel('Only unpaired collection fragments').check();
+  await expect(result).toContainText('Age 18');
+  await expect(result).toContainText('Age 21');
+});
