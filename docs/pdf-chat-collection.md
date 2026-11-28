@@ -292,3 +292,7 @@ From the frontend directory with Node.js 22 and installed dependencies, run `npm
 ## Guarded collection scalar comparison
 
 For a saved recognized amount or calendar-date question, open the at-a-glance overview and explicitly expand its scalar comparison. Each selected PDF must supply exactly one supported printed value within the requested physical scope, without detected additional matching or nearby qualifications. Incomplete extraction, competing values, unsupported values and mismatched printed currency notation withhold arithmetic. Pairwise differences use the saved document selection order; they do not identify versions, changes, eligibility or official authority. Dates are differences between calendar days, not inclusive periods or time-zone calculations.
+
+## Broad question source-linked overview
+
+Explicit broad questions such as `Summarize this notice?`, `List the requirements?` or `Show Clause 4?` expose a separate source-linked inspection view beneath each independent PDF answer. The overview reports recognized printed fields, heading candidates, requirement cues and an explicitly labeled opening-fragment sample. Requirement questions preserve the requested cue category; reference questions preserve the exact printed identifier and page scope. This is not generated summary prose or an applicability decision, and never expands saved strict citations. A field can be used to draft a scoped follow-up only after user selection.

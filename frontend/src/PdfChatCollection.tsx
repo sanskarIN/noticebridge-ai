@@ -15,6 +15,7 @@ import PdfChatCollectionDates from './PdfChatCollectionDates';
 import PdfChatCollectionFragments from './PdfChatCollectionFragments';
 import PdfChatScopedPlan from './PdfChatScopedPlan';
 import PdfChatCollectionBatch from './PdfChatCollectionBatch';
+import PdfChatCollectionBrief from './PdfChatCollectionBrief';
 import PdfChatCollectionRanking from './PdfChatCollectionRanking';
 import PdfChatCollectionRecovery from './PdfChatCollectionRecovery';
 import PdfChatCollectionRequirements from './PdfChatCollectionRequirements';
@@ -83,6 +84,8 @@ function CollectionAnswer({ part, documents, documentId, onInspect, includeConte
       </div>)}
       <CollectionQuestionMatches documents={documents} documentId={documentId} answer={answer} onInspect={onInspect} />
     </>}
+    <PdfChatCollectionBrief documents={documents} documentId={documentId} part={part} includeContext={includeContext}
+      draftDisabled={draftDisabled} onDraft={onDraft} onInspect={onInspect}/>
     <PdfChatCollectionRanking documents={documents} documentId={documentId} part={part}
       includeContext={includeContext} onInspect={onInspect} />
     <CollectionTableCandidates documents={documents} documentId={documentId} answer={answer} onInspect={onInspect} />
