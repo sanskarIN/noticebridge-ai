@@ -4,7 +4,7 @@
 import {collectionCitation,type CollectionDocument} from './pdfChatCollection';
 import {selectedCollectionDocuments} from './pdfChatCollectionTools';
 import {referencesIn,parseReference,type Reference,type ReferenceKind,type TextRange} from './pdfChatEvidenceExplorer';
-import type {Passage} from './pdfChatCore';
+import type {Corpus,Passage} from './pdfChatCore';
 
 export const REFERENCE_KINDS:readonly ReferenceKind[]=['clause','section','paragraph','rule','article','annexure','schedule'];
 export const COLLECTION_REFERENCE_PAGE_SIZE=10;
@@ -24,7 +24,11 @@ export function referenceKey(reference:Reference){
   return parsed.kind+':'+parsed.identifier;
 }
 export function collectionReferenceIndex(documents:readonly CollectionDocument[],selection:readonly string[]):CollectionReferenceIndex{
-  const selected=selectedCollectionDocuments(documents,selection);
+  return referenceIndexForSources(selectedCollectionDocuments(documents,selection));
+}
+/** Internal diagnostic over already validated native source corpora. No fake
+ * attached PDFs or indexes are created by the offline report workflow. */
+export function referenceIndexForSources(selected:readonly {id:string;corpus:Corpus}[]):CollectionReferenceIndex{
   const groups=new Map<string,{reference:Reference;byDocument:Map<string,ReferenceDocumentSide>}>();
   let totalOccurrences=0,examinedFragments=0,limited=false;
   outer:for(const doc of selected){

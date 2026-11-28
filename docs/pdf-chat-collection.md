@@ -342,3 +342,5 @@ Run `python -m noticebridge.chat_collection_usage_audit_cli usage.json packet.js
 ### Independent native-quality audit
 
 Use `python -m noticebridge.chat_collection_quality_audit_cli quality.json snapshot.json --output quality-audit.json` to independently recompute coordinate-level flags, UTF-16 counts, duplicate signals, and per-source coverage. Python reports its Unicode database version and rejects differences rather than asserting equivalence between different Unicode versions. Neither extraction completeness nor publisher authority is verified.
+
+Native quality and printed reference diagnostics now support a shared private report exchange and offline exact replay. Run `npm run diagnostics:collection -- --kind references --snapshot snapshot.json --output references.json` (or `--kind quality`). Use repeatable `--source SHA256` options for explicit order, or `--verify-report report.json` to reproduce its saved selection. Reference reports include identifiers and UTF-16 occurrence offsets but not whole source lines. Exact reproduction does not establish clause equivalence or completeness.

@@ -1,3 +1,4 @@
+import PdfChatDiagnosticExchange from './PdfChatDiagnosticExchange';
 import {useMemo,useState} from 'react';
 import type {CollectionDocument} from './pdfChatCollection';
 import type {Passage} from './pdfChatCore';
@@ -63,6 +64,7 @@ export default function PdfChatCollectionReferences({documents,names,onInspect,s
         {index.documentCoverage.map(doc=><p key={doc.documentId}>{names.get(doc.documentId)}: {doc.processedPages}/{doc.pageCount} pages processed,
           {' '}{doc.missingPages.length} without indexed text{doc.limited?', extraction limited':''}.</p>)}
       </details>
+      <PdfChatDiagnosticExchange mode="references" documents={documents} selected={selected}/>
       <div className="chat-collection-filter-grid">
         <label>Reference kind<select value={filter.kind} onChange={event=>change({kind:event.target.value as ReferenceFilter['kind']})}>
           <option value="all">All kinds</option>{REFERENCE_KINDS.map(kind=><option key={kind} value={kind}>{kind}</option>)}
@@ -81,7 +83,7 @@ export default function PdfChatCollectionReferences({documents,names,onInspect,s
       {current.pages>1&&<div className="chat-toolbar">
         <button className="chat-button" type="button" disabled={page===1} onClick={()=>setPage(page-1)}>Previous reference identifiers</button>
         <span>{current.first}–{current.last} of {rows.length}</span>
-        <button className="chat-button" type="button" disabled={page===current.pages} onClick={()=>setPage(page+1)}>Next reference identifiers</button>
+        <button className="chat-button" type="button" disabled={page>=current.pages} onClick={()=>setPage(page+1)}>Next reference identifiers</button>
       </div>}
     </>}
   </details>;

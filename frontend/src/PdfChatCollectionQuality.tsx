@@ -1,8 +1,9 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {useMemo,useState} from 'react';
+import PdfChatDiagnosticExchange from './PdfChatDiagnosticExchange';
 import type {CollectionDocument} from './pdfChatCollection';
 import type {Passage} from './pdfChatCore';
 import {QUALITY_FLAGS,QUALITY_PAGE_SIZE,QUALITY_FRAGMENT_SIZE,collectionQuality,filterQualityPages,filterQualityFragments,
-  qualityPage,inspectQualityFragment,exportCollectionQuality,type CollectionQuality,type SourceQuality,type QualityFlag,type QualityPage,type QualityFilter} from './pdfChatCollectionQuality';
+  qualityPage,inspectQualityFragment,type CollectionQuality,type SourceQuality,type QualityFlag,type QualityPage,type QualityFilter} from './pdfChatCollectionQuality';
 
 const labels:Record<QualityFlag,string>={replacement:'Unicode replacement character',private_use:'Private-use character',control:'Control or format character',
   no_letters_or_digits:'No letters or digits',missing_geometry:'No retained geometry',duplicate_on_page:'Exact text repeated on this page',
@@ -78,26 +79,9 @@ function SourceDetails({source,result,documents,names,onInspect,onPage}:Pick<Pro
     </>}
   </details>;
 }
-function save(text:string){
-  const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));
-  const link=document.createElement('a');link.href=url;link.download='noticebridge-native-quality.json';
-  document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
 export default function PdfChatCollectionQuality({documents,selected,names,onInspect,onPage}:Props){
-  const [open,setOpen]=useState(false),[consent,setConsent]=useState<CollectionQuality|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  const active=useRef<AbortController|null>(null);
+  const [open,setOpen]=useState(false);
   const result=useMemo(()=>open&&selected.length?collectionQuality(documents,selected):null,[open,documents,selected]);
-  useEffect(()=>{active.current?.abort();setConsent(null);setError('');},[result]);
-  useEffect(()=>()=>active.current?.abort(),[]);
-  async function exportReport(){
-    if(!result||consent!==result||active.current)return;
-    const operation=new AbortController();active.current=operation;setBusy(true);setConsent(null);setError('');
-    try{
-      const text=await exportCollectionQuality(documents,selected,true,operation.signal);
-      operation.signal.throwIfAborted();save(text);
-    }catch{if(!operation.signal.aborted)setError('Unable to export native quality diagnostics.');}
-    finally{if(active.current===operation){active.current=null;setBusy(false);}}
-  }
   return <details className="chat-collection-inspection" aria-label="Native extraction quality signals" onToggle={event=>setOpen(event.currentTarget.open)}>
     <summary>Inspect native extraction quality signals</summary>
     <p className="chat-note">Repeated text, symbols, control characters and missing geometry may be intentional. This inspection never
@@ -107,11 +91,7 @@ export default function PdfChatCollectionQuality({documents,selected,names,onIns
       <p>{result.fragments} native fragments · {result.flaggedFragments} with one or more signals · {result.characters} UTF-16 units. Counts overlap.</p>
       <Counts counts={result.counts}/>
       {result.sources.map(source=><SourceDetails key={source.id} source={source} result={result} documents={documents} names={names} onInspect={onInspect} onPage={onPage}/>)}
-      <label className="chat-checkbox"><input type="checkbox" checked={consent===result} disabled={busy}
-        onChange={event=>setConsent(event.target.checked?result:null)}/> I approve exporting private source fingerprints and diagnostic coordinates (no text).</label>
-      <button type="button" className="chat-button" disabled={busy||consent!==result} onClick={()=>void exportReport()}>Export native quality report</button>
-      {busy&&<button type="button" className="chat-button" onClick={()=>active.current?.abort()}>Cancel quality export</button>}
-      {error&&<p role="alert" className="chat-error">{error}</p>}
+      <PdfChatDiagnosticExchange mode="quality" documents={documents} selected={selected}/>
     </>}
   </details>;
 }
