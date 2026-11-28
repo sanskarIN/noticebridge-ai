@@ -5,7 +5,6 @@ import { selectedCollectionDocuments } from './pdfChatCollectionTools';
 import { preparePipeline, reviewPipeline, MAX_PIPELINE_RESULT_BYTES, type PipelineRequest, type PipelineReview } from './pdfChatPipeline';
 import { requestHash } from './pdfChatEmbeddingBridge';
 import { requestLocalPipeline, validLocalPipelineConfig, type LocalPipelineConfig } from './pdfChatLocalPipeline';
-import type { Passage } from './pdfChatCore';
 
 export const MAX_COLLECTION_MODEL_REQUESTS=6;
 export const MAX_COLLECTION_MODEL_BYTES=6*1024*1024;

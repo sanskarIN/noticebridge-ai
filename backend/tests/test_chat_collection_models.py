@@ -205,3 +205,116 @@ def test_collection_cli_preserves_existing_output_on_failure(
     assert cli.main(args) == 2
     assert output.read_bytes() == b"existing"
     assert "private source text" not in capsys.readouterr().err
+
+
+
+def test_preflight_has_candidate_counts_and_no_private_text(prepared, tmp_path):
+    manifest, _, _ = prepared
+    admitted = collection.read_requests(manifest, tmp_path)
+    raw = collection.preflight_collection(manifest, admitted)
+    result = json.loads(raw)
+    assert result["authority_verified"] is False
+    assert result["manifest_sha256"] == manifest.sha256
+    assert result["total_candidate_fragments"] == 2
+    assert result["total_baseline_fragments"] == 2
+    assert result["total_request_bytes"] == sum(item.entry.bytes for item in admitted)
+    assert result["skipped_document_ids"] == ["3" * 64]
+    assert [row["document_id"] for row in result["requests"]] == IDS
+    assert all(row["physical_pages"] == [{"page": 1, "candidate_fragments": 1}]
+               for row in result["requests"])
+    assert b"INR 500" not in raw
+    assert b"INR 350" not in raw
+    assert b"Application fee" not in raw
+    assert raw == collection.preflight_collection(manifest, admitted)
+
+
+def test_preflight_refuses_incomplete_or_reordered_admission(prepared, tmp_path):
+    manifest, _, _ = prepared
+    admitted = collection.read_requests(manifest, tmp_path)
+    for items in ((), admitted[:1], tuple(reversed(admitted))):
+        with pytest.raises(EmbeddingError):
+            collection.preflight_collection(manifest, items)
+
+
+def test_preflight_cli_never_invokes_model(prepared, tmp_path, monkeypatch, capsys):
+    manifest, source, _ = prepared
+    output = tmp_path / "preflight.json"
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail("model processing was invoked during preflight")
+
+    monkeypatch.setattr(cli, "run_collection", forbidden)
+    args = [str(source), "--request-directory", str(tmp_path),
+            "--output", str(output), "--preflight-only"]
+    assert cli.main(args) == 0
+    assert output.read_bytes() == collection.preflight_collection(
+        manifest, collection.read_requests(manifest, tmp_path),
+    )
+    assert "No model was invoked" in capsys.readouterr().out
+    # An existing result may never be overwritten.
+    before = output.read_bytes()
+    assert cli.main(args) == 2
+    assert output.read_bytes() == before
+
+
+@pytest.mark.parametrize("extra", [
+    ["--allow-local-processing"],
+    ["--embedding-model", "embedding:latest"],
+    ["--answer-digest", "b" * 64],
+])
+def test_preflight_rejects_processing_options(prepared, tmp_path, extra):
+    _, source, _ = prepared
+    output = tmp_path / "invalid.json"
+    assert cli.main([
+        str(source), "--request-directory", str(tmp_path),
+        "--output", str(output), "--preflight-only", *extra,
+    ]) == 2
+    assert not output.exists()
+
+
+def test_cli_processing_requires_complete_config_and_consent(prepared, tmp_path):
+    _, source, _ = prepared
+    output = tmp_path / "invalid.json"
+    common = [str(source), "--request-directory", str(tmp_path), "--output", str(output)]
+    assert cli.main(common) == 2
+    assert cli.main([*common, "--allow-local-processing"]) == 2
+    assert not output.exists()
+
+
+def test_processing_failure_after_first_model_never_returns_partial_bundle(
+    prepared, tmp_path, monkeypatch,
+):
+    manifest, _, _ = prepared
+    admitted = collection.read_requests(manifest, tmp_path)
+    calls = []
+
+    async def fail_second(request, **kwargs):
+        calls.append(request.sha256)
+        if len(calls) == 2:
+            raise EmbeddingError("second request failed")
+        return {
+            "request_sha256": request.sha256,
+            "authority_verified": False,
+            "ranking": {"model": CONFIG["embedding_model"],
+                        "model_digest": CONFIG["embedding_digest"]},
+            "extractive": {"model": CONFIG["answer_model"],
+                           "model_digest": CONFIG["answer_digest"]},
+        }
+
+    monkeypatch.setattr(chat_pipeline, "run_pipeline", fail_second)
+    with pytest.raises(EmbeddingError):
+        asyncio.run(collection.run_collection(manifest, admitted, **CONFIG))
+    assert calls == [item.request.sha256 for item in admitted]
+
+
+def test_total_timeout_discards_batch(prepared, tmp_path, monkeypatch):
+    manifest, _, _ = prepared
+    admitted = collection.read_requests(manifest, tmp_path)
+
+    async def slow(*args, **kwargs):
+        await asyncio.sleep(1)
+
+    monkeypatch.setattr(chat_pipeline, "run_pipeline", slow)
+    monkeypatch.setattr(collection, "TIMEOUT_SECONDS", 0.001)
+    with pytest.raises(EmbeddingError, match="timed out"):
+        asyncio.run(collection.run_collection(manifest, admitted, **CONFIG))

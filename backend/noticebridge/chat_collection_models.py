@@ -6,6 +6,7 @@ and size contract, not an attestation of the underlying documents or models.
 
 import asyncio
 import hashlib
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,7 @@ MAX_MANIFEST_BYTES = 32 * 1024
 MAX_COLLECTION_REQUESTS = 6
 MAX_COLLECTION_BYTES = 6 * 1024 * 1024
 MAX_RESULT_BYTES = 800 * 1024
+MAX_PREFLIGHT_BYTES = 32 * 1024
 TIMEOUT_SECONDS = 500
 
 
@@ -171,6 +173,48 @@ def validate_admitted(manifest: Manifest, requests: tuple[Admitted, ...]) -> Non
             or any(not row.id.startswith("original:") for row in item.request.embedding.passages)
         ):
             invalid()
+
+
+def preflight_collection(manifest: Manifest, requests: tuple[Admitted, ...]) -> bytes:
+    """Describe admitted requests without invoking any model or emitting text.
+
+    Counts describe bounded input candidates, not all pages or complete
+    extraction. This report is useful for inspecting a private batch before
+    approving network access to the configured local runtime.
+    """
+    validate_admitted(manifest, requests)
+    rows = []
+    for item in requests:
+        pages = Counter(int(row.id.split(":")[1]) for row in item.request.embedding.passages)
+        rows.append({
+            "document_id": item.entry.document_id,
+            "request_sha256": item.entry.request_sha256,
+            "request_bytes": item.entry.bytes,
+            "candidate_fragments": len(item.request.embedding.passages),
+            "baseline_fragments": len(item.request.baseline),
+            "physical_pages": [
+                {"page": page, "candidate_fragments": count}
+                for page, count in sorted(pages.items())
+            ],
+        })
+    result = chat_pipeline.encode({
+        "format": "noticebridge-collection-model-preflight",
+        "version": 1,
+        "policy": "Candidate inventory only; no model was invoked by preflight.",
+        "authority_verified": False,
+        "manifest_sha256": manifest.sha256,
+        "mode": manifest.mode,
+        "part": manifest.part,
+        "request_count": len(rows),
+        "total_request_bytes": sum(item.entry.bytes for item in requests),
+        "total_candidate_fragments": sum(row["candidate_fragments"] for row in rows),
+        "total_baseline_fragments": sum(row["baseline_fragments"] for row in rows),
+        "requests": rows,
+        "skipped_document_ids": list(manifest.skipped),
+    })
+    if len(result) > MAX_PREFLIGHT_BYTES:
+        raise EmbeddingError("Collection preflight exceeds its output budget.")
+    return result
 
 
 async def run_collection(
