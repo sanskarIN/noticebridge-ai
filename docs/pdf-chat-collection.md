@@ -308,3 +308,7 @@ Compare two canonical collection snapshots from independent extraction runs. The
 The same comparison runs offline with `npm run compare:collection-snapshots -- --left left.json --right right.json --output difference.json`. Optional `--verify-report existing.json` exactly reproduces a saved report. `--require-exact` returns status 3 when the canonical snapshots differ, while still writing the diagnostic. No output file is overwritten.
 
 The independent Python auditor (`python -m noticebridge.chat_collection_snapshot_difference_cli difference.json left.json right.json --output audit.json`) recomputes every coverage field, fragment classification, page count and changed coordinate. It checks structural equality, not canonical JavaScript encoding or actual PDF bytes. Optional `--require-exact` returns status 3 when validated snapshots differ.
+
+## Native extraction quality inspection
+
+Inspect retained native fragments for exact repeats on the same or different physical pages, absent geometry, replacement characters, private-use characters, format/control characters and symbol-only lines. The diagnostic counts UTF-16 units, overlapping signals and processed pages separately; unprocessed pages are counted without materializing them. All signals are manual inspection cues, not OCR confidence or proof of errors. The coordinate-only report is bound to a canonical native snapshot and can be recomputed without PDF bytes.

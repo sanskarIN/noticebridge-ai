@@ -1,3 +1,4 @@
+import PdfChatCollectionQuality from './PdfChatCollectionQuality';
 import PdfChatCollectionComposer from './PdfChatCollectionComposer';
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { MAX_QUESTION, pageCoverage, type Passage } from './pdfChatCore';
@@ -443,6 +444,9 @@ export default function PdfChatCollection() {
           onAsk={(documentId, value) => { setSelected([documentId]); setQuestion(value); questionRef.current?.focus(); }} /></div>
         <div id={collectionToolAnchor('overlap')} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionOverlap documents={documents} selected={selected} names={names} onInspect={inspect}/></div>
         <div id={collectionToolAnchor('table-comparison')} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionTableComparison documents={documents} selected={selected} names={names} onInspect={inspect}/></div>
+      </div>}
+      {documents.length>0&&!busy&&<div id={collectionToolAnchor('quality')} tabIndex={-1} className="chat-collection-destination">
+        <PdfChatCollectionQuality documents={documents} selected={selected} names={names} onInspect={inspect} onPage={inspectPage}/>
       </div>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('pages' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionPageNavigator key={'coverage:' + documents.map(doc => doc.id).join(':')}
         documents={documents} names={names} onInspect={inspectPage} /></div>}

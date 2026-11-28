@@ -3,7 +3,7 @@
 export type CollectionToolGroup='ask'|'inspect'|'review'|'exchange'|'experiments';
 export type CollectionToolId=
   'sources'|'question'|'batch'|'scoped-plan'|'history'|'models'|'results'|'fields'|'literal'|'boolean-search'|'references'|
-  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'overlap'|'pages'|'preview'|'review'|'review-queue'|'workspace'|'checkpoint'|
+  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'overlap'|'pages'|'quality'|'preview'|'review'|'review-queue'|'workspace'|'checkpoint'|
   'ocr'|'evaluation'|'packet'|'replay'|'exchange';
 export type CollectionToolState={documents:number;selected:number;turns:number;preview:boolean;busy:boolean};
 export type CollectionTool={
@@ -48,6 +48,8 @@ export const COLLECTION_TOOLS:readonly CollectionTool[]=[
     keywords:['duplicate','shared','exclusive','identical','compare'],requirement:'two-selected',blockedDuringIndexing:true},
   {id:'table-comparison',group:'inspect',title:'Compare selected tables',description:'Align category and field cells from explicitly selected independent tables.',
     keywords:['table','compare','matrix','cell','category'],requirement:'two-selected',blockedDuringIndexing:true},
+  {id:'quality',group:'inspect',title:'Native extraction quality signals',description:'Inspect missing geometry, repeated text and suspicious character cues.',
+    keywords:['quality','extraction','geometry','duplicate','unicode'],requirement:'selection',blockedDuringIndexing:true},
   {id:'pages',group:'inspect',title:'Page coverage',description:'Open physical pages and inspect native coverage.',
     keywords:['missing','page','native','coverage','viewer'],requirement:'documents',blockedDuringIndexing:true},
   {id:'preview',group:'review',title:'Open source inspection',description:'Return to the rendered page and selected quotation.',
