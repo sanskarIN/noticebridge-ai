@@ -56,7 +56,11 @@ def references(text: str):
     """Yield kind, normalized identifier, exact range and leading flag."""
     offsets = utf16_offsets(text)
     for match in PATTERN.finditer(text.translate(FOLD_VIEW)):
-        kind = match.group(1).lower()
+        # The browser's later exact kind validation rejects non-ASCII
+        # spellings even when /iu originally matched the keyword.
+        kind = text[match.start(1):match.end(1)].lower()
+        if kind not in KINDS:
+            continue
         original_id = text[match.start(2):match.end(2)]
         if not ID_PATTERN.fullmatch(original_id):
             continue

@@ -27,7 +27,7 @@ from noticebridge import chat_collection_reference_audit_cli as cli
     ("Section 1é", []),
     ("Section 1Ⅳ", []),
     ("Annexure abcdef", []),
-    ("ſection 2", [("section", "2")]),
+    ("ſection 2", []),
     ("Annexure K", []),
     ("😀 Clause 7", [("clause", "7")]),
 ])
