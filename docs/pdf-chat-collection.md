@@ -348,3 +348,5 @@ Native quality and printed reference diagnostics now support a shared private re
 ### Focused question evidence brief
 
 Prepare one saved question part for local inspection, separately from the full conversation review packet. Each independently selected PDF preserves coverage, strict-match counts, literal printed candidates, nearby-line groups, exact citation ranks and SHA-256 hashes of native excerpts. Export consent is required for either the replayable JSON or the inert plain-text reading copy. Verification independently reruns the native ranker against the exact snapshot and never imports a conversation. No PDF bytes or authority are certified by this artifact.
+
+Independently audit either a focused evidence brief or saved question-part comparison using `python -m noticebridge.chat_collection_question_audit_cli report.json packet.json snapshot.json --output audit.json`. The verifier first checks the review packet, then reconstructs all recorded citation channels, hashes, scope, ordering and common-source counts. It checks consistency against recorded evidence, not whether retrieval actually ran or the answer is true.
