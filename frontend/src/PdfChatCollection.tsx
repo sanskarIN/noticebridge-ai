@@ -19,6 +19,7 @@ import PdfChatCollectionReplay from './PdfChatCollectionReplay';
 import PdfChatCollectionModels from './PdfChatCollectionModels';
 import PdfChatCollectionEvaluation from './PdfChatCollectionEvaluation';
 import PdfChatCollectionOcr from './PdfChatCollectionOcr';
+import PdfChatCollectionPacket from './PdfChatCollectionPacket';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -445,6 +446,8 @@ export default function PdfChatCollection() {
         documents={documents} turn={currentTurn} onInspect={inspectPage} />}
       {documents.length > 0 && !busy && <PdfChatCollectionEvaluation key={'evaluation:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} names={names} onInspect={inspect} />}
+      {documents.length > 0 && !busy && <PdfChatCollectionPacket key={'packet:' + documents.map(doc => doc.id).join(':')}
+        documents={documents} turns={turns} reviews={reviews} />}
       {!busy && <PdfChatCollectionReplay key={'replay:' + documents.map(doc => doc.id).join(':')} documents={documents} />}
       {documents.length > 0 && <PdfChatCollectionExchange key={'exchange:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} disabled={busy}

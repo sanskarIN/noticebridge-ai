@@ -144,3 +144,7 @@ The evaluation lab lets a reviewer explicitly label native fragments for a saved
 ## Collection scanned PDF review
 
 Optional OCR reports bind the exact PDF fingerprint and original-role physical pages. Import and direct loopback processing stage a review before replacing only that document's previous OCR report. Separate collection budgets bound retained machine transcription. OCR search reuses the saved question and physical page scope independently for each document, reports missing or unreviewed pages, and opens the rendered PDF for inspection. Native retrieval, native evidence exports and review annotations never incorporate machine-transcribed lines.
+
+## Portable collection evidence review packet
+
+The canonical review packet combines the native snapshot hash, canonical editable workspace, replayed question evidence, source coverage and exact reviewed quotations. Verification requires the complete current native extraction to match, including unquoted fragments. It never restores history or treats a saved review status as a factual verdict. A separate escaped, script-free, print-friendly HTML reading copy contains the source inventory, question excerpts and annotations. Both exports require explicit consent for the exact current workspace; the HTML copy is not itself a replay artifact.

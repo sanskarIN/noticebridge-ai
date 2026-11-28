@@ -637,3 +637,21 @@ test('collection OCR review binds exact PDF bytes and does not enter native cita
   await panel.getByRole('button',{name:'Inspect collection OCR match page 1'}).click();
   await expect(root.getByRole('region',{name:'Collection source inspection'}).locator('blockquote')).toHaveCount(0);
 });
+
+test('collection review packet is independently verified without replacing current questions',async({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Application fee: INR 500']])],1);
+  await ask(page,'Application fee?');
+  await root.getByText('Export or verify collection evidence review packet',{exact:true}).click();
+  const panel=root.getByRole('group',{name:'Private collection review packet',exact:true});
+  const button=panel.getByRole('button',{name:'Export canonical collection review packet'});
+  await expect(button).toBeDisabled();
+  await panel.getByLabel('I approve exporting these private collection excerpts, questions and review notes.').check();
+  const event=page.waitForEvent('download');await button.click();
+  const bytes=await readFile((await (await event).path())!);
+  await expect(button).toBeDisabled();
+  await root.getByRole('button',{name:'Clear collection questions'}).click();
+  await panel.getByLabel('Verify collection review packet').setInputFiles({name:'packet.json',mimeType:'application/json',buffer:bytes});
+  await expect(panel.getByRole('region',{name:'Verified collection packet details'})).toContainText('Exact collection packet replay matched');
+  await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+});
