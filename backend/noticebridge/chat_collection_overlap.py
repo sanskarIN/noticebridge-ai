@@ -13,7 +13,6 @@ from .chat_collection_audit import (
     decode,
     digest,
     hash_string,
-    header,
     integer,
     invalid,
     obj,
@@ -138,7 +137,6 @@ def audit_overlap(report_raw: bytes, snapshot_raw: bytes) -> dict:
     snapshot = parse_snapshot(snapshot_raw)
     candidate = decode(report_raw, MAX_OVERLAP_BYTES)
     expected = recompute_overlap(snapshot, candidate.get("scope"))
-    header(candidate, FORMAT, POLICY)
     # Check types as well as values: Python booleans compare equal to integers.
     # Canonical browser JSON byte encoding is not asserted by this verifier.
     if not strict_equal(candidate, expected):

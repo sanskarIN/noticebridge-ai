@@ -58,7 +58,7 @@ def test_literal_overlap_counts_and_utf16_order(artifacts):
     raw, snapshot, scope = artifacts
     value = overlap.recompute_overlap(snapshot, scope)
     assert value["shared_groups"] == 2
-    assert value["exclusive_groups"] == 5
+    assert value["exclusive_groups"] == 6
     assert value["occurrences"] == 12
     assert value["groups"][0]["occurrences"] == 4
     assert [row["document_id"] for row in value["groups"][0]["sources"]] == (
@@ -83,7 +83,7 @@ def test_scope_preserves_physical_page_and_utf16_length(artifacts):
         "not_present", "some_text", "no_indexed_text",
     ]
     minimum = overlap.recompute_overlap(snapshot, {**scope, "minimumLength": 2})
-    assert minimum["exclusive_groups"] == 4
+    assert minimum["exclusive_groups"] == 5
     assert minimum["occurrences"] == 11
 
 

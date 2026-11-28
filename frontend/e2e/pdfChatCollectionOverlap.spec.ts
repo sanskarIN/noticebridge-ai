@@ -1,4 +1,6 @@
 import {expect,test} from '@playwright/test';
+import {execFileSync} from 'node:child_process';
+import {serializeCollectionSnapshot} from '../src/pdfChatCollectionReplay';
 import {admitCollectionDocument,type CollectionDocument} from '../src/pdfChatCollection';
 import {collectionOverlap,filterCollectionOverlap,inspectOverlapSource,overlapPage,serializeCollectionOverlap,
   verifyCollectionOverlap,readOverlapFile,normalizeOverlapScope} from '../src/pdfChatCollectionOverlap';
@@ -69,4 +71,25 @@ test('canonical overlap report binds full snapshot, exact counts and all occurre
   await expect(verifyCollectionOverlap(text,[f.a,f.b],signal())).rejects.toThrow();
   expect(await readOverlapFile(new File([text],'overlap.json'),signal())).toBe(text);
   await expect(readOverlapFile(new File([new Uint8Array([255])],'bad.json'),signal())).rejects.toThrow();
+});
+
+test('Python independently recomputes actual browser overlap artifacts with UTF-16 ordering',async()=>{
+  const a=await add([],'a',[['Common','Common','𐀀','\uE000','Private clause']]);
+  const b=await add([a],'b',[['Common','Different clause'],[]]);
+  const docs=[a,b],scope={documentIds:[b.id,a.id],minimumLength:1,physicalPage:null};
+  const snapshot=serializeCollectionSnapshot(docs);
+  const report=await serializeCollectionOverlap(docs,scope,true,signal());
+  const python=[
+    'import json, sys',
+    'from noticebridge.chat_collection_overlap import audit_overlap',
+    'from noticebridge.chat_collection_audit import encode_audit',
+    'value = json.load(sys.stdin)',
+    'sys.stdout.buffer.write(encode_audit(audit_overlap(value["report"].encode(), value["snapshot"].encode())))',
+  ].join('\n');
+  const result=JSON.parse(execFileSync(process.env.PYTHON||'python',['-c',python],{
+    input:JSON.stringify({report,snapshot}),timeout:20000,maxBuffer:128*1024,
+  }).toString('utf8'));
+  expect(result).toMatchObject({literal_overlap_recomputed:true,pdf_bytes_verified:false,native_extraction_replayed:false,
+    authority_verified:false,counts:{documents:2,pairs:1,shared_groups:1,exclusive_groups:4,occurrences:7}});
+  expect(JSON.stringify(result)).not.toContain('Private clause');
 });
