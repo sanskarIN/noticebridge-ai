@@ -183,3 +183,7 @@ establishes factual correctness, completeness, or official notice authority.
 The historical run is unsigned and cannot establish that the recorded software
 actually executed. Evaluation and comparison can be cancelled between cases.
 
+
+## Workspace tool directory
+
+Use the searchable, grouped directory to jump directly to a collection tool. Availability reflects attached documents, saved question turns, source inspection and active indexing. Opening a destination preserves other tool state and never changes the selected PDFs or submits a question.

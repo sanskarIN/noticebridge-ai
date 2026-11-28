@@ -508,3 +508,12 @@
 .chat-collection-inspection .chat-table-scroll{max-width:100%;overflow:auto}
 .chat-collection-inspection .chat-table-evidence>div{display:grid;gap:4px;min-width:0}
 .chat-collection-inspection .chat-table-evidence dd{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+
+/* Workspace directory: retain all tool instances and avoid horizontal scrolling. */
+.chat-collection-navigation-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.chat-collection-navigation-grid article{display:grid;align-content:start;gap:6px;min-width:0}
+.chat-collection-navigation-grid article button{justify-self:start}
+.chat-collection-destination{min-width:0;scroll-margin-block-start:16px}
+.chat-collection [id^="collection-tool-"]{scroll-margin-block-start:16px}
+.chat-collection [id^="collection-tool-"]:focus{outline:2px solid #82e2c6;outline-offset:3px;border-radius:8px}
+@media(max-width:640px){.chat-collection-navigation-grid{grid-template-columns:minmax(0,1fr)}}

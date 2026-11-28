@@ -655,3 +655,21 @@ test('collection review packet is independently verified without replacing curre
   await expect(panel.getByRole('region',{name:'Verified collection packet details'})).toContainText('Exact collection packet replay matched');
   await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
 });
+
+test('collection tool directory opens the actual destination and preserves question state',async({page})=>{
+  const root=await open(page);
+  const directory=root.getByRole('group',{name:'Collection workspace navigation',exact:true});
+  await directory.getByText('Find a collection workspace tool',{exact:true}).click();
+  await directory.getByLabel('Find collection tool').fill('OCR');
+  await expect(directory.getByRole('button',{name:'Open Scanned PDF review'})).toBeDisabled();
+  await attach(page,[fixture('a.pdf',[['Application fee: INR 500']])],1);
+  await root.getByLabel('Collection question',{exact:true}).fill('Application fee?');
+  await directory.getByRole('button',{name:'Open Scanned PDF review'}).click();
+  const ocr=root.getByRole('group',{name:'Collection scanned PDF review',exact:true});
+  await expect(ocr.getByLabel('Collection OCR source PDF')).toBeVisible();
+  await expect(root.getByLabel('Collection question',{exact:true})).toHaveValue('Application fee?');
+  await expect(ocr.locator('summary')).toBeFocused();
+  await directory.getByLabel('Find collection tool').fill('regression');
+  await directory.getByRole('button',{name:'Open Retrieval evaluation'}).click();
+  await expect(root.getByRole('group',{name:'Collection retrieval evaluation lab',exact:true})).toHaveAttribute('open','');
+});

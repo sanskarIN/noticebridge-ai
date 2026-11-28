@@ -25,6 +25,9 @@ import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
 import { CollectionEvidenceExplorer, CollectionFieldOverview, CollectionQuestionMatches } from './PdfChatCollectionTools';
 
+import PdfChatCollectionNavigation, { focusCollectionDestination } from './PdfChatCollectionNavigation';
+import { collectionToolAnchor, type CollectionToolId } from './pdfChatCollectionNavigation';
+
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
 type Preview = { documentId: string; page: number; source?: Passage };
 type BatchFeedback = { accepted: number; errors: string[]; cancelled: boolean };
@@ -94,6 +97,7 @@ export default function PdfChatCollection() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const generation = useRef(0);
   const controller = useRef<AbortController | null>(null);
+  const workspaceRoot = useRef<HTMLElement>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
   const previewHeading = useRef<HTMLHeadingElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
@@ -236,19 +240,21 @@ export default function PdfChatCollection() {
 
   return <details className="chat-session chat-collection" id="chat-collection">
     <summary>Search an independent PDF collection (up to six documents)</summary>
-    <section aria-label="Independent PDF collection" className="chat-collection-body">
+    <section ref={workspaceRoot} aria-label="Independent PDF collection" className="chat-collection-body">
       <h3>Search across multiple PDFs</h3>
       <p>Attach unrelated notices or reference PDFs, choose which documents to search, and inspect each matching source.
         Results are grouped by document; no version order, amendment or official applicability is inferred.</p>
       <p className="chat-note">This is a separate browser-local workspace. It does not upload files, automatically invoke AI
         models, or change your original/revised PDF conversation. Identical PDF bytes are deduplicated.</p>
+      <PdfChatCollectionNavigation state={{documents:documents.length,selected:selected.length,turns:turns.length,
+        preview:!!preview,busy}} onNavigate={id=>!!workspaceRoot.current&&focusCollectionDestination(workspaceRoot.current,id)} />
       <div className="chat-collection-budget" aria-label="Collection processing budget">
         <div><strong>{stats.documents} / {MAX_COLLECTION_DOCUMENTS}</strong><span>PDF documents</span></div>
         <div><strong>{formatBytes(stats.bytes)} / {formatBytes(MAX_COLLECTION_BYTES)}</strong><span>Local PDF bytes</span></div>
         <div><strong>{stats.passages} / {MAX_COLLECTION_PASSAGES}</strong><span>Native fragments</span></div>
         <div><strong>{stats.chars} / {MAX_COLLECTION_CHARS}</strong><span>Retained text units</span></div>
       </div>
-      <div className="chat-file chat-collection-upload">
+      <div className="chat-file chat-collection-upload" id={collectionToolAnchor('sources')} tabIndex={-1}>
         <label>Attach collection PDFs
           <input type="file" accept=".pdf,application/pdf" multiple
             disabled={busy || documents.length >= MAX_COLLECTION_DOCUMENTS || stats.bytes >= MAX_COLLECTION_BYTES}
@@ -324,7 +330,7 @@ export default function PdfChatCollection() {
           </div>
         </div>}
       </>}
-      <form className="chat-form" onSubmit={submit}>
+      <form className="chat-form" onSubmit={submit} id={collectionToolAnchor('question')} tabIndex={-1}>
         <label>Collection question
           <textarea aria-label="Collection question" ref={questionRef} value={question} maxLength={MAX_QUESTION}
             rows={3} placeholder="What is the application fee?" onChange={event => setQuestion(event.target.value)}
@@ -347,10 +353,10 @@ export default function PdfChatCollection() {
           or clear the questions before continuing.</p>}
         {error && <p role="alert" className="chat-error">{error}</p>}
       </form>
-      {documents.length > 0 && !busy && <PdfChatCollectionBatch key={'batch:' + documents.map(doc => doc.id).join(':')}
+      {documents.length > 0 && !busy && <div id={collectionToolAnchor('batch' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionBatch key={'batch:' + documents.map(doc => doc.id).join(':')}
         documents={documents} selected={selected} turns={turns} names={names} onInspect={inspect}
-        onApply={next => { setTurns(next); setActiveTurn(next.length - 1); setPreview(null); setError(''); }} />}
-      {turns.length > 0 && <section className="chat-collection-history" aria-label="Collection conversation">
+        onApply={next => { setTurns(next); setActiveTurn(next.length - 1); setPreview(null); setError(''); }} /></div>}
+      {turns.length > 0 && <section className="chat-collection-history" aria-label="Collection conversation" id={collectionToolAnchor('history')} tabIndex={-1}>
         <div className="chat-toolbar">
           <h4>Collection question history</h4>
           <button type="button" className="chat-button" disabled={busy} onClick={clearHistory}>Clear collection questions</button>
@@ -376,9 +382,9 @@ export default function PdfChatCollection() {
             }} onChange={(next, active) => {
               setTurns(next); setActiveTurn(active); setPreview(null); setError('');
             }} />
-          <PdfChatCollectionModels key={'models:' + activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}
-            documents={documents} turn={currentTurn} names={names} onInspect={inspect} />
-          <div className="chat-collection-results" aria-label="Collection results" key={activeTurn + ':' + turns.length + ':' +
+          <div id={collectionToolAnchor('models' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionModels key={'models:' + activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}
+            documents={documents} turn={currentTurn} names={names} onInspect={inspect} /></div>
+          <div className="chat-collection-results" aria-label="Collection results" id={collectionToolAnchor('results')} tabIndex={-1} key={activeTurn + ':' + turns.length + ':' +
             currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}>
             {currentTurn.results.map(result => <section key={result.documentId} className="chat-answer"
               aria-label={'Collection result: ' + names.get(result.documentId)}>
@@ -392,18 +398,18 @@ export default function PdfChatCollection() {
       </section>}
       {documents.length > 0 && !busy && <div className="chat-collection-tools"
         key={'tools:' + documents.map(doc => doc.id).join(':') + '/' + selected.join(':')}>
-        <CollectionFieldOverview documents={documents} selected={selected} names={names} onInspect={inspect}
-          onAsk={value => { setQuestion(value); questionRef.current?.focus(); }} />
-        <CollectionEvidenceExplorer documents={documents} selected={selected} names={names} onInspect={inspect} />
-        <PdfChatCollectionDates documents={documents} selected={selected} names={names} onInspect={inspect} />
-        <PdfChatCollectionRequirements documents={documents} selected={selected} names={names} onInspect={inspect} />
-        <PdfChatCollectionOutline documents={documents} selected={selected} names={names} onInspect={inspect} />
-        <CollectionTableExplorer documents={documents} selected={selected} names={names} onInspect={inspect}
-          onAsk={(documentId, value) => { setSelected([documentId]); setQuestion(value); questionRef.current?.focus(); }} />
+        <div id={collectionToolAnchor('fields' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionFieldOverview documents={documents} selected={selected} names={names} onInspect={inspect}
+          onAsk={value => { setQuestion(value); questionRef.current?.focus(); }} /></div>
+        <div id={collectionToolAnchor('literal' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionEvidenceExplorer documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
+        <div id={collectionToolAnchor('dates' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionDates documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
+        <div id={collectionToolAnchor('requirements' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionRequirements documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
+        <div id={collectionToolAnchor('outline' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionOutline documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
+        <div id={collectionToolAnchor('tables' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionTableExplorer documents={documents} selected={selected} names={names} onInspect={inspect}
+          onAsk={(documentId, value) => { setSelected([documentId]); setQuestion(value); questionRef.current?.focus(); }} /></div>
       </div>}
-      {documents.length > 0 && !busy && <CollectionPageNavigator key={'coverage:' + documents.map(doc => doc.id).join(':')}
-        documents={documents} names={names} onInspect={inspectPage} />}
-      {preview && previewDoc && <section className="chat-panel chat-collection-preview" aria-label="Collection source inspection">
+      {documents.length > 0 && !busy && <div id={collectionToolAnchor('pages' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionPageNavigator key={'coverage:' + documents.map(doc => doc.id).join(':')}
+        documents={documents} names={names} onInspect={inspectPage} /></div>}
+      {preview && previewDoc && <section className="chat-panel chat-collection-preview" aria-label="Collection source inspection" id={collectionToolAnchor('preview')} tabIndex={-1}>
         <div className="chat-toolbar">
           <h4 ref={previewHeading} tabIndex={-1}>{names.get(previewDoc.id)} · physical page {preview.page}</h4>
           <button type="button" className="chat-button" onClick={closePreview}>Close collection source</button>
@@ -434,26 +440,26 @@ export default function PdfChatCollection() {
           <PdfEvidencePreview file={previewDoc.file} pageNumber={preview.page} inspectionOnly />
         </Suspense>
       </section>}
-      {documents.length > 0 && !busy && <PdfChatCollectionReview key={'review:' + documents.map(doc => doc.id).join(':')}
-        documents={documents} entries={reviews} names={names} onChange={setReviews} onInspect={inspect} />}
-      {documents.length > 0 && !busy && <PdfChatCollectionWorkspace key={'workspace:' + documents.map(doc => doc.id).join(':')}
+      {documents.length > 0 && !busy && <div id={collectionToolAnchor('review' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionReview key={'review:' + documents.map(doc => doc.id).join(':')}
+        documents={documents} entries={reviews} names={names} onChange={setReviews} onInspect={inspect} /></div>}
+      {documents.length > 0 && !busy && <div id={collectionToolAnchor('workspace' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionWorkspace key={'workspace:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} reviews={reviews} onApply={workspace => {
           setTurns(workspace.turns); setReviews(workspace.reviews);
           setActiveTurn(workspace.turns.length ? workspace.turns.length - 1 : null);
           setQuestion(''); setPreview(null); setError('');
-        }} />}
-      {documents.length > 0 && !busy && <PdfChatCollectionOcr key={'ocr:' + documents.map(doc => doc.id).join(':')}
-        documents={documents} turn={currentTurn} onInspect={inspectPage} />}
-      {documents.length > 0 && !busy && <PdfChatCollectionEvaluation key={'evaluation:' + documents.map(doc => doc.id).join(':')}
-        documents={documents} turns={turns} names={names} onInspect={inspect} />}
-      {documents.length > 0 && !busy && <PdfChatCollectionPacket key={'packet:' + documents.map(doc => doc.id).join(':')}
-        documents={documents} turns={turns} reviews={reviews} />}
-      {!busy && <PdfChatCollectionReplay key={'replay:' + documents.map(doc => doc.id).join(':')} documents={documents} />}
-      {documents.length > 0 && <PdfChatCollectionExchange key={'exchange:' + documents.map(doc => doc.id).join(':')}
+        }} /></div>}
+      {documents.length > 0 && !busy && <div id={collectionToolAnchor('ocr' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionOcr key={'ocr:' + documents.map(doc => doc.id).join(':')}
+        documents={documents} turn={currentTurn} onInspect={inspectPage} /></div>}
+      {documents.length > 0 && !busy && <div id={collectionToolAnchor('evaluation' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionEvaluation key={'evaluation:' + documents.map(doc => doc.id).join(':')}
+        documents={documents} turns={turns} names={names} onInspect={inspect} /></div>}
+      {documents.length > 0 && !busy && <div id={collectionToolAnchor('packet' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionPacket key={'packet:' + documents.map(doc => doc.id).join(':')}
+        documents={documents} turns={turns} reviews={reviews} /></div>}
+      {!busy && <div id={collectionToolAnchor('replay' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionReplay key={'replay:' + documents.map(doc => doc.id).join(':')} documents={documents} /></div>}
+      {documents.length > 0 && <div id={collectionToolAnchor('exchange' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionExchange key={'exchange:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} disabled={busy}
         onApply={restored => {
           setTurns(restored); setActiveTurn(restored.length - 1); setQuestion(''); setPreview(null); setError('');
-        }} />}
+        }} /></div>}
     </section>
   </details>;
 }
