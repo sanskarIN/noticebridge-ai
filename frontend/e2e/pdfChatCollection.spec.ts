@@ -506,3 +506,18 @@ test('collection batch stages independent questions and appends only on confirma
   await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveText('Eligibility: Class 12');
   await expect(staged).toHaveCount(0);
 });
+
+test('collection diagnostics do not replace insufficient answers or automatically broaden document scope',async({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Registration certificate required']]),fixture('b.pdf',[['Registration certifacate required']])],2);
+  const results=await ask(page,'Registration certifacate?');
+  const first=results.getByRole('region',{name:/Collection result: Document 1/});
+  await first.getByText('Diagnose collection search coverage',{exact:true}).click();
+  await expect(first).toContainText('One or more normalized search terms');
+  await first.getByRole('button',{name:'Draft collection alternative: certificate',exact:true}).click();
+  await expect(root.getByLabel('Collection question',{exact:true})).toHaveValue('Registration certificate?');
+  await expect(root.getByLabel('Search document 1',{exact:true})).toBeChecked();
+  await expect(root.getByLabel('Search document 2',{exact:true})).not.toBeChecked();
+  await expect(first).toContainText('No matching indexed evidence');
+  await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
+});

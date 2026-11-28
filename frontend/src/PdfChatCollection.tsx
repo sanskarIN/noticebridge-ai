@@ -3,7 +3,7 @@ import { MAX_QUESTION, pageCoverage, type Passage } from './pdfChatCore';
 import { readPdf } from './pdfChatExtract';
 import { admitCollectionDocument, collectionCitation, collectionStats, runCollectionStep,
   MAX_COLLECTION_DOCUMENTS, MAX_COLLECTION_BYTES, MAX_COLLECTION_PASSAGES, MAX_COLLECTION_CHARS,
-  MAX_COLLECTION_TURNS, CollectionError, type CollectionDocument, type CollectionPart, type CollectionTurn,
+  MAX_COLLECTION_TURNS, CollectionError, type CollectionDocument, type CollectionPart, type CollectionTurn, type CollectionStep,
 } from './pdfChatCollection';
 import PdfChatCollectionExchange from './PdfChatCollectionExchange';
 import PdfChatCollectionReview from './PdfChatCollectionReview';
@@ -12,6 +12,7 @@ import PdfChatCollectionHistory from './PdfChatCollectionHistory';
 import PdfChatCollectionDates from './PdfChatCollectionDates';
 import PdfChatCollectionFragments from './PdfChatCollectionFragments';
 import PdfChatCollectionBatch from './PdfChatCollectionBatch';
+import PdfChatCollectionRecovery from './PdfChatCollectionRecovery';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -36,8 +37,9 @@ const coverageText: Record<CollectionPart['coverage'], string> = {
   not_indexed: 'This physical page was not indexed within the local limits.',
 };
 
-function CollectionAnswer({ part, documents, documentId, onInspect }: {
+function CollectionAnswer({ part, documents, documentId, onInspect, includeContext, onDraft, draftDisabled }: {
   part: CollectionPart; documents: readonly CollectionDocument[]; documentId: string;
+  includeContext: boolean; onDraft: (step: CollectionStep) => void; draftDisabled: boolean;
   onInspect: (documentId: string, source: Passage, target: HTMLElement) => void;
 }) {
   const { answer } = part;
@@ -63,6 +65,8 @@ function CollectionAnswer({ part, documents, documentId, onInspect }: {
       <CollectionQuestionMatches documents={documents} documentId={documentId} answer={answer} onInspect={onInspect} />
     </>}
     <CollectionTableCandidates documents={documents} documentId={documentId} answer={answer} onInspect={onInspect} />
+    <PdfChatCollectionRecovery documents={documents} documentId={documentId} part={part} includeContext={includeContext}
+      onInspect={onInspect} onDraft={onDraft} draftDisabled={draftDisabled} />
   </div>;
 }
 
@@ -371,7 +375,8 @@ export default function PdfChatCollection() {
               aria-label={'Collection result: ' + names.get(result.documentId)}>
               <h4>{names.get(result.documentId)}</h4>
               {result.parts.map((part, index) => <CollectionAnswer key={index} part={part} documents={documents} documentId={result.documentId}
-                onInspect={inspect} />)}
+                onInspect={inspect} includeContext={currentTurn.step.includeContext} draftDisabled={busy || !!question.trim()}
+                onDraft={step => { setQuestion(step.question); setSelected(step.documentIds); setIncludeContext(step.includeContext); questionRef.current?.focus(); }} />)}
             </section>)}
           </div>
         </>}

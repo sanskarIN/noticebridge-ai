@@ -112,3 +112,7 @@ The source viewer offers a paginated native fragment list for the selected physi
 ## Collection batch question workbench
 
 Prepare up to twelve independent question turns with an explicit PDF selection and a bounded total of 144 document/question-part searches. The workbench yields between turns for cancellation and stages all results before any history change. It reports matching versus nonmatching native fragments and incomplete coverage separately. Applying requires the same document and history snapshot, verifies source identity, and recomputes the entire batch. Results append to the ordinary replay-compatible conversation; no assistant-generated text becomes context.
+
+## Collection retrieval diagnostics
+
+Each answer part can explain normalized term coverage, partial lexical leads and bounded one-edit spelling alternatives within its exact document and physical page scope. An alternative explicitly prefills a standalone question scoped to the PDF that supplied its vocabulary. It never submits automatically or overwrites an existing draft. Diagnostic leads are separate from answer citations and portable evidence replay.
