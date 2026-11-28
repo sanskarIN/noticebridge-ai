@@ -6,6 +6,7 @@ import { admitCollectionDocument, collectionCitation, collectionStats, runCollec
   MAX_COLLECTION_TURNS, CollectionError, type CollectionDocument, type CollectionPart, type CollectionTurn, type CollectionStep,
 } from './pdfChatCollection';
 import PdfChatCollectionExchange from './PdfChatCollectionExchange';
+import PdfChatCollectionReviewQueue from './PdfChatCollectionReviewQueue';
 import PdfChatCollectionReview from './PdfChatCollectionReview';
 import PdfChatCollectionWorkspace from './PdfChatCollectionWorkspace';
 import PdfChatCollectionHistory from './PdfChatCollectionHistory';
@@ -455,6 +456,12 @@ export default function PdfChatCollection() {
           <PdfEvidencePreview file={previewDoc.file} pageNumber={preview.page} inspectionOnly nativeSource={showNativeLocation ? preview.source : undefined} />
         </Suspense>
       </section>}
+      {turns.length>0 && !busy && <div id={collectionToolAnchor('review-queue')} tabIndex={-1} className="chat-collection-destination">
+        <PdfChatCollectionReviewQueue documents={documents} turns={turns} reviews={reviews} names={names}
+          disabled={busy} draftDisabled={!!question.trim()} onInspect={inspect}
+          onTurn={index=>{setActiveTurn(index);setPreview(null);workspaceRoot.current?.querySelector<HTMLElement>('#'+collectionToolAnchor('history'))?.focus();}}
+          onDraft={step=>{setQuestion(step.question);setSelected(step.documentIds);setIncludeContext(step.includeContext);questionRef.current?.focus();}}/>
+      </div>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('review' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionReview key={'review:' + documents.map(doc => doc.id).join(':')}
         documents={documents} entries={reviews} names={names} onChange={setReviews} onInspect={inspect} /></div>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('workspace' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionWorkspace key={'workspace:' + documents.map(doc => doc.id).join(':')}

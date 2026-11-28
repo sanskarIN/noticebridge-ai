@@ -258,3 +258,7 @@ retain whole-PDF statistics under a physical-page filter. Weights are not
 probabilities and must not be compared between unrelated PDFs. The
 adjacent-line fallback is separately identified when no strict match exists.
 Inspection never changes the saved answer.
+
+## Collection question review queue
+
+Build a bounded diagnostic queue from all saved turns, keeping each question part and PDF independent. Coverage gaps, absent matches, adjacent-line-only results, ambiguous or different printed values and omitted matches are distinct cues. Inspect actual candidate sources or explicitly draft a question scoped to a single PDF. Saved and manually reviewed annotations are counts only, not proof of resolution. A private queue export binds the native snapshot and exact question history; replay recomputes all diagnostics and rejects changed counts or source references. Current work must be rebuilt after changes; export contains question text and source coordinates but no automatic quotations or private annotation notes.

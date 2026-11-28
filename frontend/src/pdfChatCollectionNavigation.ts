@@ -3,7 +3,7 @@
 export type CollectionToolGroup='ask'|'inspect'|'review'|'exchange'|'experiments';
 export type CollectionToolId=
   'sources'|'question'|'batch'|'history'|'models'|'results'|'fields'|'literal'|
-  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'pages'|'preview'|'review'|'workspace'|
+  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'pages'|'preview'|'review'|'review-queue'|'workspace'|
   'ocr'|'evaluation'|'packet'|'replay'|'exchange';
 export type CollectionToolState={documents:number;selected:number;turns:number;preview:boolean;busy:boolean};
 export type CollectionTool={
@@ -44,6 +44,8 @@ export const COLLECTION_TOOLS:readonly CollectionTool[]=[
     keywords:['missing','page','native','coverage','viewer'],requirement:'documents',blockedDuringIndexing:true},
   {id:'preview',group:'review',title:'Open source inspection',description:'Return to the rendered page and selected quotation.',
     keywords:['pdf','preview','source','citation'],requirement:'preview',blockedDuringIndexing:false},
+  {id:'review-queue',group:'review',title:'Question review queue',description:'Review unanswered, ambiguous and incomplete saved question searches.',
+    keywords:['gap','unanswered','ambiguity','coverage','followup'],requirement:'turns',blockedDuringIndexing:true},
   {id:'review',group:'review',title:'Review notebook',description:'Manage personal annotations on saved native fragments.',
     keywords:['note','pin','saved','evidence'],requirement:'documents',blockedDuringIndexing:true},
   {id:'workspace',group:'exchange',title:'Editable workspace',description:'Export or restore questions and review annotations.',
