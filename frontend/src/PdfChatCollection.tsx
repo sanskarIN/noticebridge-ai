@@ -7,6 +7,7 @@ import { admitCollectionDocument, collectionCitation, collectionStats, runCollec
 } from './pdfChatCollection';
 import PdfChatCollectionExchange from './PdfChatCollectionExchange';
 import PdfChatCollectionReview from './PdfChatCollectionReview';
+import PdfChatCollectionWorkspace from './PdfChatCollectionWorkspace';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -400,6 +401,12 @@ export default function PdfChatCollection() {
       </section>}
       {documents.length > 0 && !busy && <PdfChatCollectionReview key={documents.map(doc => doc.id).join(':')}
         documents={documents} entries={reviews} names={names} onChange={setReviews} onInspect={inspect} />}
+      {documents.length > 0 && !busy && <PdfChatCollectionWorkspace key={documents.map(doc => doc.id).join(':')}
+        documents={documents} turns={turns} reviews={reviews} onApply={workspace => {
+          setTurns(workspace.turns); setReviews(workspace.reviews);
+          setActiveTurn(workspace.turns.length ? workspace.turns.length - 1 : null);
+          setQuestion(''); setPreview(null); setError('');
+        }} />}
       {documents.length > 0 && <PdfChatCollectionExchange key={documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} disabled={busy}
         onApply={restored => {

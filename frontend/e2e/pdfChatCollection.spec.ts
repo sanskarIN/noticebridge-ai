@@ -344,3 +344,37 @@ test('collection can inspect a blank physical page without creating native evide
   await expect(inspection.getByRole('heading', { name: /blank-page.pdf.*physical page 1/ })).toBeVisible();
   await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
 });
+
+test('complete collection workspace stages and restores questions and annotations together', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [fixture('private.pdf', [['Application fee: INR 500']])], 1);
+  const answer = await ask(page, 'Application fee?');
+  await answer.getByRole('button', { name: 'Inspect collection source [1]' }).click();
+  await root.getByRole('button', { name: 'Save collection evidence', exact: true }).click();
+  await root.getByRole('button', { name: 'Close collection source' }).click();
+  await root.getByText('Review saved collection evidence', { exact: true }).click();
+  const notebook = root.getByRole('group', { name: 'Collection evidence review notebook' });
+  await notebook.getByLabel('Collection review note').fill('Private follow-up');
+  await root.getByText('Save or restore complete collection workspace', { exact: true }).click();
+  const workspace = root.getByRole('group', { name: 'Complete private collection workspace', exact: true });
+  const button = workspace.getByRole('button', { name: 'Export complete collection workspace' });
+  await expect(button).toBeDisabled();
+  await workspace.getByLabel('I approve exporting private collection questions and review notes together.').check();
+  const event = page.waitForEvent('download');
+  await button.click();
+  const bytes = await readFile((await (await event).path())!);
+  expect(bytes.toString()).toContain('Private follow-up');
+  expect(bytes.toString()).not.toContain('INR 500');
+  await root.getByRole('button', { name: 'Clear collection questions' }).click();
+  await notebook.getByRole('button', { name: 'Clear collection review notes' }).click();
+  await notebook.getByRole('button', { name: 'Confirm clear collection review' }).click();
+  await workspace.getByLabel('Import complete collection workspace').setInputFiles({
+    name: 'workspace.json', mimeType: 'application/json', buffer: bytes,
+  });
+  await expect(workspace.getByRole('region', { name: 'Complete collection workspace restore confirmation' })).toBeVisible();
+  await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+  await expect(notebook.getByLabel('Collection review note')).toHaveCount(0);
+  await workspace.getByRole('button', { name: 'Apply complete collection workspace' }).click();
+  await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveText('Application fee: INR 500');
+  await expect(notebook.getByLabel('Collection review note')).toHaveValue('Private follow-up');
+});

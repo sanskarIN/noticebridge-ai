@@ -73,3 +73,15 @@ to their exact document and page. Candidate answers remain optional layout
 inspection leads, separate from the native lexical answer and its private
 replay. No cells are joined across PDFs, and no table structure or official
 applicability is certified.
+
+## Complete collection workspace
+
+A complete workspace combines the canonical question plan and review notebook
+under the exact attached PDF fingerprint set. Question-only and review-only
+workspaces are supported; an empty workspace is not. Import validates both
+nested formats and recomputes answers before staging a single replacement.
+The user must confirm the replacement, and any intervening change to questions
+or review annotations invalidates that confirmation. Export requires a fresh
+approval for the current workspace and does not include saved answers, source
+quotes, filenames, PDF bytes or optional table proposals. Personal questions
+and notes may still be sensitive.
