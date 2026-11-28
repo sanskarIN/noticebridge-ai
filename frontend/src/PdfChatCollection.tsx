@@ -27,6 +27,7 @@ import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
 import { CollectionEvidenceExplorer, CollectionFieldOverview, CollectionQuestionMatches } from './PdfChatCollectionTools';
 
+import PdfChatCollectionReferences, {PdfChatCollectionReferenceTrail} from './PdfChatCollectionReferences';
 import PdfChatBooleanEvidence from './PdfChatBooleanEvidence';
 import PdfChatCollectionOverlap from './PdfChatCollectionOverlap';
 import PdfChatCollectionTableComparison from './PdfChatCollectionTableComparison';
@@ -415,6 +416,7 @@ export default function PdfChatCollection() {
           onAsk={value => { setQuestion(value); questionRef.current?.focus(); }} /></div>
         <div id={collectionToolAnchor('literal' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionEvidenceExplorer documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
         <div id={collectionToolAnchor('boolean-search')} tabIndex={-1} className="chat-collection-destination"><PdfChatBooleanEvidence documents={documents} selected={selected} names={names} onInspect={inspect}/></div>
+        <div id={collectionToolAnchor('references')} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionReferences documents={documents} selected={selected} names={names} onInspect={inspect}/></div>
         <div id={collectionToolAnchor('dates' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionDates documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
         <div id={collectionToolAnchor('requirements' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionRequirements documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
         <div id={collectionToolAnchor('outline' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionOutline documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
@@ -451,6 +453,8 @@ export default function PdfChatCollection() {
         </div>
         <PdfChatCollectionFragments key={preview.documentId + ':' + preview.page + ':' + (preview.source?.ordinal ?? 'page')}
           documents={documents} documentId={preview.documentId} physicalPage={preview.page} selected={preview.source} onInspect={inspect} />
+        {preview.source&&<PdfChatCollectionReferenceTrail key={preview.documentId+':'+preview.source.page+':'+preview.source.ordinal}
+          documents={documents} names={names} documentId={preview.documentId} source={preview.source} onInspect={inspect}/>}
         <p className="chat-note">Manual source inspection. Native fragment positions do not establish verified highlight geometry.</p>
         {preview.source?.position && <label className="chat-checkbox">
           <input type="checkbox" checked={showNativeLocation} onChange={event=>setShowNativeLocation(event.target.checked)}/>

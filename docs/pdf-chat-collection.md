@@ -272,3 +272,7 @@ The Python verifier independently recomputes the literal overlap counts, group o
 ## Boolean native evidence search
 
 Use quoted literal phrases and explicit uppercase AND, OR and NOT operators to inspect native fragments. Parentheses group expressions; NOT binds before AND, then OR. Every potentially matching alternative must require a positive phrase. Evaluation stays within a single native fragment, so exclusions do not establish document-wide absence and phrases on separate lines are never combined. Optional ASCII-only case folding preserves UTF-16 text offsets. The inspector does not modify the saved chat history.
+
+## Printed reference index and one-hop trails
+
+The collection reference index groups explicit clause, section, paragraph, rule, article, annexure and schedule identifiers across selected native PDFs. Each occurrence retains its physical source and exact UTF-16 text range; repeated mentions within one fragment remain distinct. Leading identifiers are candidate headings, not verified definitions. The source inspector can follow an explicit reference within the same PDF and, only after an opt-in, show independent occurrences in other attached PDFs. No trail extends saved chat citations or establishes official applicability. A bounded occurrence inventory reports truncation explicitly.
