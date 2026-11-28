@@ -3,6 +3,8 @@ import type {CollectionDocument,CollectionTurn} from './pdfChatCollection';
 import type {CollectionReviewEntry} from './pdfChatCollectionReview';
 import {serializeCollectionPacket,collectionPacketReadingCopy,loadCollectionPacket,type VerifiedCollectionPacket} from './pdfChatCollectionPacket';
 
+import PdfChatCollectionAudit from './PdfChatCollectionAudit';
+
 type Props={documents:readonly CollectionDocument[];turns:CollectionTurn[];reviews:CollectionReviewEntry[]};
 function save(text:string,name:string,type:string){
   const url=URL.createObjectURL(new Blob([text],{type}));
@@ -78,6 +80,7 @@ export default function PdfChatCollectionPacket({documents,turns,reviews}:Props)
       <button type="button" className="chat-button" onClick={()=>{controller.current?.abort();setFeedback('Collection packet operation cancelled.');}}>Cancel collection packet operation</button></div>}
     {error&&<p role="alert" className="chat-error">{error}</p>}
     {feedback&&<p role="status" className="chat-note">{feedback}</p>}
+    <PdfChatCollectionAudit documents={documents}/>
     {verified&&<section aria-label="Verified collection packet details" className="chat-answer">
       <h4>Exact collection packet replay matched</h4>
       <p>{verified.workspace.turns.length} saved question turn(s), {verified.workspace.reviews.length} review annotation(s),

@@ -205,3 +205,5 @@ python -m noticebridge.chat_collection_audit_cli packet.json snapshot.json --pdf
 ```
 
 The audit report contains only hashes, counts and explicit status fields. It does not execute the browser's extraction, question planning or ranking, and does not authenticate historical runs or certify source accuracy. Exit code 3 indicates that the packet is structurally consistent but the supplied PDF byte set differs; exit code 2 indicates a rejected artifact or output failure. Use browser source replay and packet verification for the independent native extraction and retrieval checks.
+
+The collection review packet panel also accepts the original packet and an offline structural audit report. It independently replays the packet and reconstructs the audit counts and exact hashes; an optional positive PDF byte check is repeated from the attached local files. Reports with missing or unexpected source bytes cannot be reconstructed from the matching workspace alone. A matching report does not authenticate the prior process.
