@@ -18,6 +18,7 @@ import PdfChatCollectionOutline from './PdfChatCollectionOutline';
 import PdfChatCollectionReplay from './PdfChatCollectionReplay';
 import PdfChatCollectionModels from './PdfChatCollectionModels';
 import PdfChatCollectionEvaluation from './PdfChatCollectionEvaluation';
+import PdfChatCollectionOcr from './PdfChatCollectionOcr';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -440,6 +441,8 @@ export default function PdfChatCollection() {
           setActiveTurn(workspace.turns.length ? workspace.turns.length - 1 : null);
           setQuestion(''); setPreview(null); setError('');
         }} />}
+      {documents.length > 0 && !busy && <PdfChatCollectionOcr key={'ocr:' + documents.map(doc => doc.id).join(':')}
+        documents={documents} turn={currentTurn} onInspect={inspectPage} />}
       {documents.length > 0 && !busy && <PdfChatCollectionEvaluation key={'evaluation:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} names={names} onInspect={inspect} />}
       {!busy && <PdfChatCollectionReplay key={'replay:' + documents.map(doc => doc.id).join(':')} documents={documents} />}

@@ -617,3 +617,23 @@ test('collection evaluation uses explicit human source labels and reports retrie
   expect(bytes.toString()).not.toContain('INR 500');
   await expect(exportButton).toBeDisabled();
 });
+
+test('collection OCR review binds exact PDF bytes and does not enter native citations',async({page})=>{
+  const root=await open(page);
+  const input=fixture('notice.pdf',[['Application fee: INR 500']]);
+  await attach(page,[input],1);
+  const {createHash}=await import('node:crypto');
+  const id=createHash('sha256').update(input.buffer).digest('hex');
+  await ask(page,'Eligibility?');
+  await root.getByText('Review scanned collection PDFs with optional local OCR',{exact:true}).click();
+  const panel=root.getByRole('group',{name:'Collection scanned PDF review',exact:true});
+  const report=JSON.stringify({format:'noticebridge-chat-ocr-review',version:1,source_sha256:id,role:'original',
+    page_count:1,pages:[{page:1,status:'ok',lines:[{ordinal:1,text:'Eligibility: Class 12'}]}]},null,2)+'\n';
+  await panel.getByLabel('Import collection OCR review for selected PDF').setInputFiles({name:'ocr.json',mimeType:'application/json',buffer:Buffer.from(report)});
+  await panel.getByRole('button',{name:'Apply unverified collection OCR review'}).click();
+  await panel.getByText('Search OCR review for the selected collection question',{exact:true}).click();
+  await expect(panel.getByRole('region',{name:/Collection OCR matches:/})).toContainText('Eligibility: Class 12');
+  await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveCount(0);
+  await panel.getByRole('button',{name:'Inspect collection OCR match page 1'}).click();
+  await expect(root.getByRole('region',{name:'Collection source inspection'}).locator('blockquote')).toHaveCount(0);
+});

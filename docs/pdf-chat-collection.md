@@ -140,3 +140,7 @@ The collection model CLI accepts the canonical manifest and a directory containi
 ## Human-labelled collection retrieval evaluation
 
 The evaluation lab lets a reviewer explicitly label native fragments for a saved question part and exact PDF, or record an expected abstention. It computes micro precision/recall, reciprocal rank, expected evidence retrieval, abstention agreement and incomplete coverage separately. Labels are not generated from baseline answers. Unlabelled retrieved fragments may still be relevant. Canonical labels bind exact PDF fingerprints and expected native text hashes; canonical reports can be independently recomputed. All metrics are agreement with personal annotations, not answer truth or verified authority.
+
+## Collection scanned PDF review
+
+Optional OCR reports bind the exact PDF fingerprint and original-role physical pages. Import and direct loopback processing stage a review before replacing only that document's previous OCR report. Separate collection budgets bound retained machine transcription. OCR search reuses the saved question and physical page scope independently for each document, reports missing or unreviewed pages, and opens the rendered PDF for inspection. Native retrieval, native evidence exports and review annotations never incorporate machine-transcribed lines.
