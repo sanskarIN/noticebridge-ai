@@ -100,3 +100,7 @@ prefix and require explicit approval before discarding later questions.
 Individual question removal keeps all other standalone turns. Neither action
 changes saved evidence-review notes. Question-plan and workspace formats
 remain compatible because they contain standalone steps only.
+
+## Collection printed-date inventory
+
+Recognized date labels can be inspected in document or calendar order. The date field comparison reports only unsigned calendar-day spans when every selected document has a single supported printed date without detected contextual leads. Window checks never combine opening and closing labels across different PDFs. Source links retain exact PDF identity. These are inspection aids, not official deadlines or reminders.

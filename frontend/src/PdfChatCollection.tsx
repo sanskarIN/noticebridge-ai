@@ -9,6 +9,7 @@ import PdfChatCollectionExchange from './PdfChatCollectionExchange';
 import PdfChatCollectionReview from './PdfChatCollectionReview';
 import PdfChatCollectionWorkspace from './PdfChatCollectionWorkspace';
 import PdfChatCollectionHistory from './PdfChatCollectionHistory';
+import PdfChatCollectionDates from './PdfChatCollectionDates';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -375,6 +376,7 @@ export default function PdfChatCollection() {
         <CollectionFieldOverview documents={documents} selected={selected} names={names} onInspect={inspect}
           onAsk={value => { setQuestion(value); questionRef.current?.focus(); }} />
         <CollectionEvidenceExplorer documents={documents} selected={selected} names={names} onInspect={inspect} />
+        <PdfChatCollectionDates documents={documents} selected={selected} names={names} onInspect={inspect} />
         <CollectionTableExplorer documents={documents} selected={selected} names={names} onInspect={inspect}
           onAsk={(documentId, value) => { setSelected([documentId]); setQuestion(value); questionRef.current?.focus(); }} />
       </div>}

@@ -439,3 +439,17 @@ test('collection sibling panels remain unique through question and selection cha
   }
   expect(warnings).toEqual([]);
 });
+
+test('collection date inventory retains independent sources and unsigned calendar spans', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [fixture('first.pdf', [['Application deadline: 20 December 2026']]),
+    fixture('second.pdf', [['Application deadline: 19 December 2026']])], 2);
+  await root.getByText('Inspect printed dates across collection PDFs', { exact: true }).click();
+  const dates = root.getByRole('group', { name: 'Collection printed dates', exact: true });
+  await expect(dates.getByRole('region', { name: /Collection date:/ })).toHaveCount(2);
+  await dates.getByRole('button', { name: 'Compare collection date labels' }).click();
+  await expect(dates.getByText('Printed calendar-day span: 1 day(s).')).toBeVisible();
+  await dates.getByRole('button', { name: 'Collection date occurrences' }).click();
+  await dates.getByRole('region', { name: /Collection date: Document 2/ }).getByRole('button', { name: 'Inspect collection date source' }).click();
+  await expect(root.getByRole('region', { name: 'Collection source inspection' }).locator('blockquote')).toHaveText('Application deadline: 19 December 2026');
+});
