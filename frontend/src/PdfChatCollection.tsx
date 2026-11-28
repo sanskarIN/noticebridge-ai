@@ -11,6 +11,7 @@ import PdfChatCollectionWorkspace from './PdfChatCollectionWorkspace';
 import PdfChatCollectionHistory from './PdfChatCollectionHistory';
 import PdfChatCollectionDates from './PdfChatCollectionDates';
 import PdfChatCollectionFragments from './PdfChatCollectionFragments';
+import PdfChatCollectionBatch from './PdfChatCollectionBatch';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -335,6 +336,9 @@ export default function PdfChatCollection() {
           or clear the questions before continuing.</p>}
         {error && <p role="alert" className="chat-error">{error}</p>}
       </form>
+      {documents.length > 0 && !busy && <PdfChatCollectionBatch key={'batch:' + documents.map(doc => doc.id).join(':')}
+        documents={documents} selected={selected} turns={turns} names={names} onInspect={inspect}
+        onApply={next => { setTurns(next); setActiveTurn(next.length - 1); setPreview(null); setError(''); }} />}
       {turns.length > 0 && <section className="chat-collection-history" aria-label="Collection conversation">
         <div className="chat-toolbar">
           <h4>Collection question history</h4>

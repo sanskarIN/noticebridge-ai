@@ -108,3 +108,7 @@ Recognized date labels can be inspected in document or calendar order. The date 
 ## Collection source fragments
 
 The source viewer offers a paginated native fragment list for the selected physical PDF page, with optional text filtering and immediate same-flow neighbors. The selected fragment remains an exact local source object. Empty native coverage is distinct from an absent physical page. Inspection does not add a chat turn or assert that adjacent text answers the question.
+
+## Collection batch question workbench
+
+Prepare up to twelve independent question turns with an explicit PDF selection and a bounded total of 144 document/question-part searches. The workbench yields between turns for cancellation and stages all results before any history change. It reports matching versus nonmatching native fragments and incomplete coverage separately. Applying requires the same document and history snapshot, verifies source identity, and recomputes the entire batch. Results append to the ordinary replay-compatible conversation; no assistant-generated text becomes context.

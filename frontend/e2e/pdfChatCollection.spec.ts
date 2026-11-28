@@ -490,3 +490,19 @@ test('collection export approvals are invalidated by a change to question histor
   await expect(root.getByLabel('I approve exporting private collection questions and fingerprints.')).not.toBeChecked();
   await expect(root.getByLabel('I approve exporting private collection excerpts and questions.')).not.toBeChecked();
 });
+
+test('collection batch stages independent questions and appends only on confirmation', async ({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Application fee: INR 500','Eligibility: Class 12']]),fixture('b.pdf',[['Application fee: INR 350']])],2);
+  await root.getByText('Prepare a collection question batch',{exact:true}).click();
+  const panel=root.getByRole('group',{name:'Collection batch question workbench',exact:true});
+  await panel.getByLabel('Collection batch questions').fill('Application fee?\nEligibility?');
+  await panel.getByRole('button',{name:'Run collection question batch'}).click();
+  const staged=panel.getByRole('region',{name:'Prepared collection batch'});
+  await expect(staged).toBeVisible();
+  await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+  await staged.getByRole('button',{name:'Append prepared collection questions'}).click();
+  await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(2);
+  await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveText('Eligibility: Class 12');
+  await expect(staged).toHaveCount(0);
+});
