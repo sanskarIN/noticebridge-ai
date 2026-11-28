@@ -107,6 +107,11 @@ async function identities(documents:readonly CollectionDocument[],cases:readonly
   signal.throwIfAborted();
   return {snapshotSha256,labelsSha256};
 }
+export function serializeCollectionRegressionRun(run:RegressionRun):string {
+  if(!SHA.test(run.snapshotSha256)||!SHA.test(run.labelsSha256)||
+      !run.evaluation.observations.length||run.evaluation.observations.length>MAX_REGRESSION_CASES)invalid();
+  return encode(wire(run));
+}
 function wire(run:RegressionRun):RunWire{
   return {
     format:FORMAT,version:1,policy:POLICY,authority_verified:false,
@@ -123,7 +128,7 @@ export async function captureCollectionRegressionRun(documents:readonly Collecti
   const identity=await identities(documents,cases,signal);
   const evaluation=await evaluateCollectionAsync(documents,cases,signal,onProgress);
   const run={...identity,evaluation};
-  return {run,text:encode(wire(run))};
+  return {run,text:serializeCollectionRegressionRun(run)};
 }
 /** A saved run may have been made by an earlier retrieval implementation.
  * Match the complete extraction and exact label set first, then resolve each

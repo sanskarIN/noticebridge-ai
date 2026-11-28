@@ -23,6 +23,25 @@ export type CollectionDocument = PreparedCollectionFile & {
   index: SearchIndex;
   chars: number;
 };
+/** An extracted index, not a claim that PDF bytes were inspected. */
+export type CollectionIndexedSource = Pick<CollectionDocument, 'id' | 'corpus' | 'index' | 'chars'>;
+
+export function indexedCollectionIds(sources: readonly CollectionIndexedSource[]): CollectionId[] {
+  if (!sources.length || sources.length > MAX_COLLECTION_DOCUMENTS) fail('source');
+  const ids = new Set<string>();
+  let passages = 0, chars = 0;
+  for (const source of sources) {
+    if (!validId(source.id) || ids.has(source.id) || !Array.isArray(source.corpus.passages) ||
+        source.index.rows.length !== source.corpus.passages.length ||
+        !Number.isSafeInteger(source.chars) || source.chars < 0) fail('source');
+    ids.add(source.id);
+    passages += source.corpus.passages.length;
+    chars += source.chars;
+  }
+  if (passages > MAX_COLLECTION_PASSAGES || chars > MAX_COLLECTION_CHARS) fail('budget');
+  return [...ids].sort();
+}
+
 export type CollectionExtractor = (file: File, role: 'original', signal: AbortSignal) => Promise<Corpus>;
 export type CollectionStep = { question: string; documentIds: CollectionId[]; includeContext: boolean };
 export type CollectionPart = {
@@ -182,7 +201,14 @@ function coverage(corpus: Corpus, page?: number): CollectionPart['coverage'] {
 }
 
 export function runCollectionStep(documents: readonly CollectionDocument[], step: CollectionStep): CollectionTurn {
-  const clean = normalizeCollectionStep(step, sourceIds(documents));
+  sourceIds(documents);
+  return runIndexedCollectionStep(documents, step);
+}
+
+/** Run the identical deterministic ranker against validated extraction
+ * indexes. Offline callers must not manufacture File objects. */
+export function runIndexedCollectionStep(documents: readonly CollectionIndexedSource[], step: CollectionStep): CollectionTurn {
+  const clean = normalizeCollectionStep(step, indexedCollectionIds(documents));
   const questions = prepareQuestion(clean.question);
   const byId = new Map(documents.map(doc => [doc.id, doc]));
   const results = clean.documentIds.map(documentId => {
@@ -221,10 +247,17 @@ export function collectionSteps(turns: readonly CollectionTurn[]): CollectionSte
 export function collectionCitation(documents: readonly CollectionDocument[], documentId: CollectionId,
   citation: Passage): { file: File; source: Passage } {
   const doc = documents.find(candidate => candidate.id === documentId);
+  if (!doc) fail('source');
+  return { file: doc.file, source: indexedCollectionCitation(documents, documentId, citation) };
+}
+
+export function indexedCollectionCitation(documents: readonly CollectionIndexedSource[], documentId: CollectionId,
+  citation: Passage): Passage {
+  const doc = documents.find(candidate => candidate.id === documentId);
   if (!doc || !citation || citation.role !== 'original') fail('source');
   const source = doc.corpus.passages.find(row => row.page === citation.page && row.ordinal === citation.ordinal);
   if (!source || source !== citation) fail('source');
-  return { file: doc.file, source };
+  return source;
 }
 
 const PLAN_FORMAT = 'noticebridge-collection-question-plan';
@@ -245,11 +278,11 @@ function decode(text: string, limit: number): Record<string, unknown> {
   checkText(text, limit);
   try { return object(JSON.parse(text)); } catch { return fail('plan'); }
 }
-function assertSourceSet(value: unknown, documents: readonly CollectionDocument[]): void {
+function assertSourceSet(value: unknown, ids: readonly CollectionId[]): void {
   if (!Array.isArray(value) || !value.length || value.length > MAX_COLLECTION_DOCUMENTS ||
       value.some(id => !validId(id)) || new Set(value).size !== value.length ||
       value.some((id, i) => i > 0 && value[i - 1] >= id)) fail('plan');
-  if (value.join(',') !== sourceIds(documents).join(',')) fail('different');
+  if (value.join(',') !== ids.join(',')) fail('different');
 }
 function wirePlan(documents: readonly CollectionDocument[], steps: readonly CollectionStep[]) {
   return { format: PLAN_FORMAT, version: 1, policy: PLAN_POLICY,
@@ -260,14 +293,19 @@ export function serializeCollectionPlan(documents: readonly CollectionDocument[]
   return encode(wirePlan(documents, steps), MAX_COLLECTION_PLAN_BYTES);
 }
 export function parseCollectionPlan(text: string, documents: readonly CollectionDocument[]): CollectionStep[] {
+  return parseIndexedCollectionPlan(text, sourceIds(documents));
+}
+
+export function parseIndexedCollectionPlan(text: string, ids: readonly CollectionId[]): CollectionStep[] {
   const raw = decode(text, MAX_COLLECTION_PLAN_BYTES);
   exact(raw, ['format', 'version', 'policy', 'source_ids', 'questions']);
   if (raw.format !== PLAN_FORMAT || raw.version !== 1 || raw.policy !== PLAN_POLICY ||
       !Array.isArray(raw.questions) || !raw.questions.length ||
       raw.questions.length > MAX_COLLECTION_TURNS) fail('plan');
-  assertSourceSet(raw.source_ids, documents);
-  const steps = raw.questions.map(value => normalizeCollectionStep(value, sourceIds(documents)));
-  if (text !== serializeCollectionPlan(documents, steps)) fail('plan');
+  assertSourceSet(raw.source_ids, ids);
+  const steps = raw.questions.map(value => normalizeCollectionStep(value, ids));
+  if (text !== encode({ format: PLAN_FORMAT, version: 1, policy: PLAN_POLICY,
+    source_ids: ids, questions: steps }, MAX_COLLECTION_PLAN_BYTES)) fail('plan');
   return steps;
 }
 
@@ -296,12 +334,14 @@ function wirePart(part: CollectionPart) {
     printed_fields: answer.printedFields.map(field => ({ citation: field.citation, label: field.label, value: field.value })),
   };
 }
-function wireReport(documents: readonly CollectionDocument[], steps: readonly CollectionStep[]) {
+function wireReport(documents: readonly CollectionIndexedSource[], steps: readonly CollectionStep[]) {
+  const ids = indexedCollectionIds(documents);
+  if (!Array.isArray(steps) || !steps.length || steps.length > MAX_COLLECTION_TURNS) fail('size');
   // Always recompute; never serialize an imported or cached answer object.
-  const turns = replayCollectionSteps(documents, steps);
+  const turns = steps.map(step => runIndexedCollectionStep(documents, step));
   return {
     format: REPORT_FORMAT, version: 1, policy: REPORT_POLICY, authority_verified: false,
-    source_ids: sourceIds(documents),
+    source_ids: ids,
     questions: turns.map(turn => ({
       step: turn.step,
       results: turn.results.map(result => ({ document_id: result.documentId, parts: result.parts.map(wirePart) })),
@@ -310,24 +350,35 @@ function wireReport(documents: readonly CollectionDocument[], steps: readonly Co
 }
 export function serializeCollectionEvidence(documents: readonly CollectionDocument[],
   steps: readonly CollectionStep[]): string {
+  sourceIds(documents);
+  return serializeIndexedCollectionEvidence(documents, steps);
+}
+export function serializeIndexedCollectionEvidence(documents: readonly CollectionIndexedSource[],
+  steps: readonly CollectionStep[]): string {
   return encode(wireReport(documents, steps), MAX_COLLECTION_REPORT_BYTES);
 }
 
 /** Verify exact canonical replay, not correctness of the source's claims.
  * The report never supplies answers to the current conversation. */
 export function verifyCollectionEvidence(text: string, documents: readonly CollectionDocument[]) {
+  sourceIds(documents);
+  return verifyIndexedCollectionEvidence(text, documents);
+}
+
+export function verifyIndexedCollectionEvidence(text: string, documents: readonly CollectionIndexedSource[]) {
+  const ids = indexedCollectionIds(documents);
   const raw = decode(text, MAX_COLLECTION_REPORT_BYTES);
   exact(raw, ['format', 'version', 'policy', 'authority_verified', 'source_ids', 'questions']);
   if (raw.format !== REPORT_FORMAT || raw.version !== 1 || raw.policy !== REPORT_POLICY ||
       raw.authority_verified !== false || !Array.isArray(raw.questions) ||
       !raw.questions.length || raw.questions.length > MAX_COLLECTION_TURNS) fail('plan');
-  assertSourceSet(raw.source_ids, documents);
+  assertSourceSet(raw.source_ids, ids);
   const steps = raw.questions.map(value => {
     const row = object(value);
     exact(row, ['step', 'results']);
-    return normalizeCollectionStep(row.step, sourceIds(documents));
+    return normalizeCollectionStep(row.step, ids);
   });
-  if (text !== serializeCollectionEvidence(documents, steps)) fail('plan');
+  if (text !== serializeIndexedCollectionEvidence(documents, steps)) fail('plan');
   return { questions: steps.length, documents: documents.length, authorityVerified: false as const };
 }
 

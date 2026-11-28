@@ -23,7 +23,8 @@
     "verify:alignment": "vite build --ssr evaluation/verifyAlignment.ts --outDir .evaluation-build && node .evaluation-build/verifyAlignment.js",
     "preflight:retrieval": "vite build --ssr evaluation/preflight.ts --outDir .evaluation-build && node .evaluation-build/preflight.js",
     "review:preflight": "vite build --ssr evaluation/reviewPreflight.ts --outDir .evaluation-build && node .evaluation-build/reviewPreflight.js",
-    "qualify:study": "vite build --ssr evaluation/qualifyStudy.ts --outDir .evaluation-build && node .evaluation-build/qualifyStudy.js"
+    "qualify:study": "vite build --ssr evaluation/qualifyStudy.ts --outDir .evaluation-build && node .evaluation-build/qualifyStudy.js",
+    "replay:collection": "vite build --ssr evaluation/replayCollection.ts --outDir .evaluation-build && node .evaluation-build/replayCollection.js"
   },
   "dependencies": {
     "react": "^19.0.0",

@@ -2,8 +2,8 @@
  * Metrics describe agreement with those labels, not answer truth or document
  * completeness. No gold labels are generated from the retrieval result. */
 import { MAX_QUESTION, type Passage } from './pdfChatCore';
-import { collectionStats, collectionCitation, normalizeCollectionStep, runCollectionStep,
-  type CollectionDocument, type CollectionTurn, type CollectionPart } from './pdfChatCollection';
+import { indexedCollectionIds, indexedCollectionCitation, normalizeCollectionStep, runIndexedCollectionStep,
+  type CollectionIndexedSource, type CollectionTurn, type CollectionPart } from './pdfChatCollection';
 import { requestHash } from './pdfChatEmbeddingBridge';
 import { planQuestions, parseSearchQuestion } from './pdfChatInsights';
 
@@ -57,32 +57,30 @@ function object(value:unknown,keys:readonly string[]):Record<string,unknown>{
   if(Object.keys(row).length!==keys.length||keys.some(key=>!Object.prototype.hasOwnProperty.call(row,key)))invalid();
   return row;
 }
-function ids(documents:readonly CollectionDocument[]){
-  collectionStats(documents);
-  if(!documents.length)invalid();
-  return documents.map(doc=>doc.id).sort();
+function ids(documents:readonly CollectionIndexedSource[]){
+  return indexedCollectionIds(documents);
 }
 function key(source:Passage){return source.page+':'+source.ordinal;}
 export function collectionEvalCaseKey(target:Pick<CollectionEvalCase,'documentId'|'question'|'includeContext'>){
   return JSON.stringify([target.documentId,target.question,target.includeContext]);
 }
-export function collectionEvalTarget(documents:readonly CollectionDocument[],turn:CollectionTurn,
+export function collectionEvalTarget(documents:readonly CollectionIndexedSource[],turn:CollectionTurn,
   documentId:string,part:number):Pick<CollectionEvalCase,'documentId'|'question'|'includeContext'>{
   if(!Number.isSafeInteger(part)||part<0||!turn.step.documentIds.includes(documentId))invalid();
-  const fresh=runCollectionStep(documents,turn.step);
+  const fresh=runIndexedCollectionStep(documents,turn.step);
   const answer=fresh.results.find(side=>side.documentId===documentId)?.parts[part]?.answer;
   if(!answer)invalid();
   return {documentId,question:answer.question,includeContext:turn.step.includeContext};
 }
-export function resolveCollectionEvalFragment(documents:readonly CollectionDocument[],documentId:string,
+export function resolveCollectionEvalFragment(documents:readonly CollectionIndexedSource[],documentId:string,
   page:number,ordinal:number):Passage{
   if(!Number.isSafeInteger(page)||page<1||page>80||!Number.isSafeInteger(ordinal)||ordinal<1||ordinal>999999)invalid();
   const doc=documents.find(doc=>doc.id===documentId);
   const source=doc?.corpus.passages.find(row=>row.page===page&&row.ordinal===ordinal);
   if(!source)invalid();
-  return collectionCitation(documents,documentId,source).source;
+  return indexedCollectionCitation(documents,documentId,source);
 }
-export function validateCollectionEvalCase(documents:readonly CollectionDocument[],target:CollectionEvalCase):CollectionEvalCase{
+export function validateCollectionEvalCase(documents:readonly CollectionIndexedSource[],target:CollectionEvalCase):CollectionEvalCase{
   if(!target||!text(target.question,MAX_QUESTION)||target.question.trim()!==target.question||
       typeof target.includeContext!=='boolean'||!text(target.note,MAX_COLLECTION_EVAL_NOTE,true)||
       !['evidence','no_expected_match'].includes(target.label)||!Array.isArray(target.expected)||
@@ -93,13 +91,13 @@ export function validateCollectionEvalCase(documents:readonly CollectionDocument
   const seen=new Set<string>();
   const expected=target.expected.map(row=>{
     if(!row?.source)invalid();
-    const source=collectionCitation(documents,target.documentId,row.source).source;
+    const source=indexedCollectionCitation(documents,target.documentId,row.source);
     if(seen.has(key(source))||(page!==undefined&&source.page!==page))invalid();
     seen.add(key(source));return {source};
   }).sort((a,b)=>a.source.page-b.source.page||a.source.ordinal-b.source.ordinal);
   return {...target,expected};
 }
-function normalizeCases(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[]){
+function normalizeCases(documents:readonly CollectionIndexedSource[],cases:readonly CollectionEvalCase[]){
   if(!Array.isArray(cases)||!cases.length||cases.length>MAX_COLLECTION_EVAL_CASES)invalid();
   const seen=new Set<string>();
   return cases.map(target=>{
@@ -109,7 +107,7 @@ function normalizeCases(documents:readonly CollectionDocument[],cases:readonly C
     seen.add(id);return row;
   });
 }
-export function upsertCollectionEvalCase(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[],
+export function upsertCollectionEvalCase(documents:readonly CollectionIndexedSource[],cases:readonly CollectionEvalCase[],
   target:CollectionEvalCase):CollectionEvalCase[]{
   const row=validateCollectionEvalCase(documents,target);
   const id=collectionEvalCaseKey(row);
@@ -121,9 +119,9 @@ export function removeCollectionEvalCase(cases:readonly CollectionEvalCase[],id:
   return cases.filter(row=>collectionEvalCaseKey(row)!==id);
 }
 function ratio(a:number,b:number){return b?a/b:null;}
-export function evaluateCollectionCase(documents:readonly CollectionDocument[],input:CollectionEvalCase):CollectionEvalObservation{
+export function evaluateCollectionCase(documents:readonly CollectionIndexedSource[],input:CollectionEvalCase):CollectionEvalObservation{
   const target=validateCollectionEvalCase(documents,input);
-  const turn=runCollectionStep(documents,{question:target.question,documentIds:[target.documentId],includeContext:target.includeContext});
+  const turn=runIndexedCollectionStep(documents,{question:target.question,documentIds:[target.documentId],includeContext:target.includeContext});
   const part=turn.results[0].parts[0];
   return scoreCollectionObservation(target,part);
 }
@@ -147,7 +145,7 @@ export function scoreCollectionObservation(target:CollectionEvalCase,part:Collec
     recall:ratio(expectedFound.length,expected.length),
     reciprocalRank:expected.length?(rank<0?0:1/(rank+1)):null,outcome};
 }
-export function evaluateCollection(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[]):CollectionEvaluation{
+export function evaluateCollection(documents:readonly CollectionIndexedSource[],cases:readonly CollectionEvalCase[]):CollectionEvaluation{
   return summarizeCollectionEvaluation(normalizeCases(documents,cases).map(row=>evaluateCollectionCase(documents,row)));
 }
 export function summarizeCollectionEvaluation(observations:CollectionEvalObservation[]):CollectionEvaluation{
@@ -169,7 +167,7 @@ export function summarizeCollectionEvaluation(observations:CollectionEvalObserva
 }
 /** Yield between bounded cases so cancellation and browser input can run.
  * Never expose partial evaluation as a completed result. */
-export async function evaluateCollectionAsync(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[],
+export async function evaluateCollectionAsync(documents:readonly CollectionIndexedSource[],cases:readonly CollectionEvalCase[],
   signal:AbortSignal,onProgress?:(completed:number,total:number)=>void,
   yieldControl:()=>Promise<void>=()=>new Promise(resolve=>setTimeout(resolve,0))):Promise<CollectionEvaluation>{
   signal.throwIfAborted();
@@ -199,7 +197,7 @@ function decode(text:string){
   if(!text||text.length>MAX_COLLECTION_EVAL_BYTES||new TextEncoder().encode(text).byteLength>MAX_COLLECTION_EVAL_BYTES)invalid();
   try{return JSON.parse(text) as unknown;}catch{return invalid();}
 }
-async function wireCases(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[],signal?:AbortSignal){
+async function wireCases(documents:readonly CollectionIndexedSource[],cases:readonly CollectionEvalCase[],signal?:AbortSignal){
   const rows=[];
   for(const target of normalizeCases(documents,cases)){
     signal?.throwIfAborted();
@@ -214,12 +212,12 @@ async function wireCases(documents:readonly CollectionDocument[],cases:readonly 
   signal?.throwIfAborted();
   return rows;
 }
-export async function serializeCollectionEvalLabels(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[],signal?:AbortSignal){
+export async function serializeCollectionEvalLabels(documents:readonly CollectionIndexedSource[],cases:readonly CollectionEvalCase[],signal?:AbortSignal){
   signal?.throwIfAborted();
   return encode({format:FORMAT,version:1,policy:POLICY,authority_verified:false,source_ids:ids(documents),
     cases:await wireCases(documents,cases,signal)});
 }
-export async function parseCollectionEvalLabels(textValue:string,documents:readonly CollectionDocument[],signal?:AbortSignal){
+export async function parseCollectionEvalLabels(textValue:string,documents:readonly CollectionIndexedSource[],signal?:AbortSignal){
   signal?.throwIfAborted();
   const raw=object(decode(textValue),['format','version','policy','authority_verified','source_ids','cases']);
   const current=ids(documents);
@@ -248,11 +246,16 @@ export async function parseCollectionEvalLabels(textValue:string,documents:reado
   if(await serializeCollectionEvalLabels(documents,cases,signal)!==textValue)invalid();
   return normalizeCases(documents,cases);
 }
-export async function serializeCollectionEvalReport(documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[],signal?:AbortSignal){
+export async function serializeCollectionEvalReport(documents:readonly CollectionIndexedSource[],cases:readonly CollectionEvalCase[],signal?:AbortSignal){
   const labels=await serializeCollectionEvalLabels(documents,cases,signal);
   const evaluated=evaluateCollection(documents,cases);
   const labelDigest=await requestHash(labels);
   signal?.throwIfAborted();
+  return serializeEvaluatedCollection(evaluated,labelDigest);
+}
+
+export function serializeEvaluatedCollection(evaluated:CollectionEvaluation,labelDigest:string){
+  if(!/^[a-f0-9]{64}$/.test(labelDigest))invalid();
   return encode({format:REPORT,version:1,policy:POLICY,authority_verified:false,labels_sha256:labelDigest,
     metrics:evaluated.metrics,observations:evaluated.observations.map(row=>({
       case_key:collectionEvalCaseKey(row.target),coverage:row.part.coverage,outcome:row.outcome,
@@ -261,7 +264,7 @@ export async function serializeCollectionEvalReport(documents:readonly Collectio
       precision:row.precision,recall:row.recall,reciprocal_rank:row.reciprocalRank,
     }))});
 }
-export async function verifyCollectionEvalReport(report:string,documents:readonly CollectionDocument[],cases:readonly CollectionEvalCase[],signal?:AbortSignal){
+export async function verifyCollectionEvalReport(report:string,documents:readonly CollectionIndexedSource[],cases:readonly CollectionEvalCase[],signal?:AbortSignal){
   decode(report);
   if(await serializeCollectionEvalReport(documents,cases,signal)!==report)invalid();
   return evaluateCollection(documents,cases).metrics;
