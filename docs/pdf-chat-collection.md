@@ -338,3 +338,7 @@ A confirmed paired plan can be separately exported and imported against its exac
 ### Independent citation usage audit
 
 Run `python -m noticebridge.chat_collection_usage_audit_cli usage.json packet.json snapshot.json --output usage-audit.json`. The Python audit first validates the review packet against its exact snapshot, then recomputes the reverse citation graph, annotation statuses, strict/nearby channels, printed-field indicators, ordering and every per-document count. It does not re-execute the ranker or reopen PDFs. The audit output contains no source quotations or personal note text.
+
+### Independent native-quality audit
+
+Use `python -m noticebridge.chat_collection_quality_audit_cli quality.json snapshot.json --output quality-audit.json` to independently recompute coordinate-level flags, UTF-16 counts, duplicate signals, and per-source coverage. Python reports its Unicode database version and rejects differences rather than asserting equivalence between different Unicode versions. Neither extraction completeness nor publisher authority is verified.

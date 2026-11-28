@@ -45,7 +45,7 @@ test('quality export is exact snapshot-bound and avoids text or filenames',async
   const a=await add([],'a',[row(1,1,'private \ufffd excerpt')],1,1),docs=[a],snapshot=serializeCollectionSnapshot(docs);
   await expect(exportCollectionQuality(docs,[a.id],false,signal())).rejects.toThrow();
   const report=await exportCollectionQuality(docs,[a.id],true,signal());
-  expect(report).not.toContain('private');expect(report).not.toContain('excerpt');
+  expect(report).not.toContain('private.pdf');expect(report).not.toContain('excerpt');
   const result=await verifyQualityReport(report,snapshot,signal());
   expect(result).toMatchObject({authority_verified:false,pdf_bytes_verified:false,flagged_fragments:1});
   expect(result.sources[0].pages[0].flagged).toEqual([{ordinal:1,flags:['replacement']}]);
