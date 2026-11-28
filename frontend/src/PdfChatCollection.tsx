@@ -12,6 +12,7 @@ import PdfChatCollectionWorkspace from './PdfChatCollectionWorkspace';
 import PdfChatCollectionHistory from './PdfChatCollectionHistory';
 import PdfChatCollectionDates from './PdfChatCollectionDates';
 import PdfChatCollectionFragments from './PdfChatCollectionFragments';
+import PdfChatScopedPlan from './PdfChatScopedPlan';
 import PdfChatCollectionBatch from './PdfChatCollectionBatch';
 import PdfChatCollectionRanking from './PdfChatCollectionRanking';
 import PdfChatCollectionRecovery from './PdfChatCollectionRecovery';
@@ -367,6 +368,10 @@ export default function PdfChatCollection() {
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('batch' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionBatch key={'batch:' + documents.map(doc => doc.id).join(':')}
         documents={documents} selected={selected} turns={turns} names={names} onInspect={inspect}
         onApply={next => { setTurns(next); setActiveTurn(next.length - 1); setPreview(null); setError(''); }} /></div>}
+      {documents.length>0&&!busy&&<div id={collectionToolAnchor('scoped-plan')} tabIndex={-1} className="chat-collection-destination">
+        <PdfChatScopedPlan key={'scoped:'+documents.map(doc=>doc.id).join(':')} documents={documents} selected={selected} turns={turns} names={names} onInspect={inspect}
+          onApply={next=>{setTurns(next);setActiveTurn(next.length-1);setPreview(null);setError('');}}/>
+      </div>}
       {turns.length > 0 && <section className="chat-collection-history" aria-label="Collection conversation" id={collectionToolAnchor('history')} tabIndex={-1}>
         <div className="chat-toolbar">
           <h4>Collection question history</h4>

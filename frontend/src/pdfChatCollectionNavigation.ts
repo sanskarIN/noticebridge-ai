@@ -2,7 +2,7 @@
  * Navigation only changes visibility/focus, never document scope or answers. */
 export type CollectionToolGroup='ask'|'inspect'|'review'|'exchange'|'experiments';
 export type CollectionToolId=
-  'sources'|'question'|'batch'|'history'|'models'|'results'|'fields'|'literal'|'boolean-search'|'references'|
+  'sources'|'question'|'batch'|'scoped-plan'|'history'|'models'|'results'|'fields'|'literal'|'boolean-search'|'references'|
   'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'overlap'|'pages'|'preview'|'review'|'review-queue'|'workspace'|
   'ocr'|'evaluation'|'packet'|'replay'|'exchange';
 export type CollectionToolState={documents:number;selected:number;turns:number;preview:boolean;busy:boolean};
@@ -22,6 +22,8 @@ export const COLLECTION_TOOLS:readonly CollectionTool[]=[
     keywords:['chat','query','answer','prompt'],requirement:'none',blockedDuringIndexing:false},
   {id:'batch',group:'ask',title:'Batch questions',description:'Stage multiple independent questions before appending.',
     keywords:['multiple','bulk','questions'],requirement:'documents',blockedDuringIndexing:true},
+  {id:'scoped-plan',group:'ask',title:'Independently scoped question plan',description:'Prepare mixed document selections and context options per question.',
+    keywords:['batch','plan','scope','multiple'],requirement:'documents',blockedDuringIndexing:true},
   {id:'history',group:'ask',title:'Question history',description:'Browse, edit or prepare a follow-up.',
     keywords:['conversation','previous','followup'],requirement:'turns',blockedDuringIndexing:false},
   {id:'results',group:'ask',title:'Current question evidence',description:'Inspect citations from the saved question.',

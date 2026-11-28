@@ -276,3 +276,7 @@ Use quoted literal phrases and explicit uppercase AND, OR and NOT operators to i
 ## Printed reference index and one-hop trails
 
 The collection reference index groups explicit clause, section, paragraph, rule, article, annexure and schedule identifiers across selected native PDFs. Each occurrence retains its physical source and exact UTF-16 text range; repeated mentions within one fragment remain distinct. Leading identifiers are candidate headings, not verified definitions. The source inspector can follow an explicit reference within the same PDF and, only after an opt-in, show independent occurrences in other attached PDFs. No trail extends saved chat citations or establishes official applicability. A bounded occurrence inventory reports truncation explicitly.
+
+## Independently scoped question plan
+
+The scoped planner allows different explicit document selections and nearby-line settings for each draft question. Rows can be reordered or removed and are checked individually before execution. A bounded complete run is previewed before appending; changed history, draft edits or source sets invalidate the staged result. Canonical question-plan exchange contains questions and fingerprints only, and an imported plan replaces the draft only after confirmation. The existing saved history is not replaced.
