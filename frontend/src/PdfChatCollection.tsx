@@ -8,6 +8,7 @@ import { admitCollectionDocument, collectionCitation, collectionStats, runCollec
 import PdfChatCollectionExchange from './PdfChatCollectionExchange';
 import PdfChatCollectionReview from './PdfChatCollectionReview';
 import PdfChatCollectionWorkspace from './PdfChatCollectionWorkspace';
+import PdfChatCollectionHistory from './PdfChatCollectionHistory';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -350,7 +351,16 @@ export default function PdfChatCollection() {
             <p className="chat-muted">{currentTurn.results.length} document result(s). Results are not a global ranking.</p>
             <button type="button" className="chat-button" disabled={busy} onClick={repeatQuestion}>Copy this collection question</button>
           </div>
-          <div className="chat-collection-results" aria-label="Collection results" key={activeTurn}>
+          <PdfChatCollectionHistory key={activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' +
+            currentTurn.step.documentIds.join(',')} documents={documents} names={names} turns={turns} at={activeTurn!}
+            disabled={busy} onDraft={step => {
+              setQuestion(step.question); setSelected(step.documentIds); setIncludeContext(step.includeContext);
+              questionRef.current?.focus();
+            }} onChange={(next, active) => {
+              setTurns(next); setActiveTurn(active); setPreview(null); setError('');
+            }} />
+          <div className="chat-collection-results" aria-label="Collection results" key={activeTurn + ':' + turns.length + ':' +
+            currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}>
             {currentTurn.results.map(result => <section key={result.documentId} className="chat-answer"
               aria-label={'Collection result: ' + names.get(result.documentId)}>
               <h4>{names.get(result.documentId)}</h4>

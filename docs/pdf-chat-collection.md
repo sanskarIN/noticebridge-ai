@@ -85,3 +85,18 @@ or review annotations invalidates that confirmation. Export requires a fresh
 approval for the current workspace and does not include saved answers, source
 quotes, filenames, PDF bytes or optional table proposals. Personal questions
 and notes may still be sensitive.
+
+## Independent collection conversation history
+
+Choose an earlier question part to prepare a deterministic follow-up draft.
+The draft retains the earlier document selection and search settings and is
+shown for editing before submission. A page-only follow-up replaces the
+earlier page constraint. No answer text is used as search context, and the
+user must explicitly select any different PDFs. The saved step is the
+standalone resolved question; replay does not need a prior answer.
+
+Historical question edits recompute the selected turn, retain the earlier
+prefix and require explicit approval before discarding later questions.
+Individual question removal keeps all other standalone turns. Neither action
+changes saved evidence-review notes. Question-plan and workspace formats
+remain compatible because they contain standalone steps only.

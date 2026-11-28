@@ -378,3 +378,43 @@ test('complete collection workspace stages and restores questions and annotation
   await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveText('Application fee: INR 500');
   await expect(notebook.getByLabel('Collection review note')).toHaveValue('Private follow-up');
 });
+
+test('collection follow-up uses an explicit earlier question part and previews a new standalone question', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [fixture('two.pdf', [['Application fee: INR 500'], ['Application fee: INR 250', 'Eligibility: Class 12']])], 1);
+  await ask(page, 'Application fee? Eligibility?');
+  const actions = root.getByRole('region', { name: 'Collection history actions' });
+  await actions.getByRole('button', { name: 'Prepare collection follow-up' }).click();
+  await actions.getByLabel('Earlier collection question part').selectOption('1');
+  await actions.getByLabel('Collection follow-up wording').fill('On page 2?');
+  await actions.getByRole('button', { name: 'Preview collection follow-up' }).click();
+  await expect(actions.getByLabel('Resolved collection follow-up')).toContainText('Eligibility on page 2?');
+  await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
+  await actions.getByRole('button', { name: 'Use this collection follow-up' }).click();
+  await expect(root.getByLabel('Collection question', { exact: true })).toHaveValue('Eligibility on page 2?');
+  await root.getByRole('button', { name: 'Ask collection', exact: true }).click();
+  await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveText('Eligibility: Class 12');
+  await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(2);
+});
+test('collection history revision requires explicit approval to discard later questions', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [fixture('fees.pdf', [['Application fee: INR 500'], ['Application fee: INR 250']])], 1);
+  await ask(page, 'Application fee on page 1?');
+  await ask(page, 'Application fee on page 2?');
+  await root.getByLabel('View collection question').selectOption('0');
+  const actions = root.getByRole('region', { name: 'Collection history actions' });
+  await actions.getByRole('button', { name: 'Edit collection question' }).click();
+  await actions.getByLabel('Revised collection question').fill('Application fee on page 2?');
+  const apply = actions.getByRole('button', { name: 'Apply revised collection question' });
+  await expect(apply).toBeDisabled();
+  await actions.getByLabel('I approve discarding 1 later collection question turn(s).').check();
+  await apply.click();
+  await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
+  await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveText('Application fee: INR 250');
+  await actions.getByRole('button', { name: 'Remove collection question', exact: true }).click();
+  await actions.getByRole('button', { name: 'Keep collection question' }).click();
+  await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
+  await actions.getByRole('button', { name: 'Remove collection question', exact: true }).click();
+  await actions.getByRole('button', { name: 'Confirm collection question removal' }).click();
+  await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+});
