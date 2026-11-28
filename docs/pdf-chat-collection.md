@@ -262,3 +262,7 @@ Inspection never changes the saved answer.
 ## Collection question review queue
 
 Build a bounded diagnostic queue from all saved turns, keeping each question part and PDF independent. Coverage gaps, absent matches, adjacent-line-only results, ambiguous or different printed values and omitted matches are distinct cues. Inspect actual candidate sources or explicitly draft a question scoped to a single PDF. Saved and manually reviewed annotations are counts only, not proof of resolution. A private queue export binds the native snapshot and exact question history; replay recomputes all diagnostics and rejects changed counts or source references. Current work must be rebuilt after changes; export contains question text and source coordinates but no automatic quotations or private annotation notes.
+
+## Literal native overlap across PDFs
+
+Select two or more PDFs, choose a minimum native fragment length and optionally one physical page. The overlap inspector groups identical extracted text across independent documents, retains repeated physical occurrences and shows pairwise distinct-text counts. No spelling, case, punctuation or whitespace normalization is used for grouping; the search filter is separate. Exclusive text is only an observation within the selected native scope, not an amendment or deletion. Exported coordinate reports bind the full native snapshot and are recomputed before acceptance.

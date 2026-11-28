@@ -27,6 +27,7 @@ import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
 import { CollectionEvidenceExplorer, CollectionFieldOverview, CollectionQuestionMatches } from './PdfChatCollectionTools';
 
+import PdfChatCollectionOverlap from './PdfChatCollectionOverlap';
 import PdfChatCollectionTableComparison from './PdfChatCollectionTableComparison';
 import PdfChatCollectionAnswerSummary from './PdfChatCollectionAnswerSummary';
 import PdfChatCollectionNavigation, { focusCollectionDestination } from './PdfChatCollectionNavigation';
@@ -417,6 +418,7 @@ export default function PdfChatCollection() {
         <div id={collectionToolAnchor('outline' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionOutline documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
         <div id={collectionToolAnchor('tables' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionTableExplorer documents={documents} selected={selected} names={names} onInspect={inspect}
           onAsk={(documentId, value) => { setSelected([documentId]); setQuestion(value); questionRef.current?.focus(); }} /></div>
+        <div id={collectionToolAnchor('overlap')} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionOverlap documents={documents} selected={selected} names={names} onInspect={inspect}/></div>
         <div id={collectionToolAnchor('table-comparison')} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionTableComparison documents={documents} selected={selected} names={names} onInspect={inspect}/></div>
       </div>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('pages' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionPageNavigator key={'coverage:' + documents.map(doc => doc.id).join(':')}

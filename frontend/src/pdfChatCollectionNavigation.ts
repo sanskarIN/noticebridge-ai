@@ -3,7 +3,7 @@
 export type CollectionToolGroup='ask'|'inspect'|'review'|'exchange'|'experiments';
 export type CollectionToolId=
   'sources'|'question'|'batch'|'history'|'models'|'results'|'fields'|'literal'|
-  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'pages'|'preview'|'review'|'review-queue'|'workspace'|
+  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'overlap'|'pages'|'preview'|'review'|'review-queue'|'workspace'|
   'ocr'|'evaluation'|'packet'|'replay'|'exchange';
 export type CollectionToolState={documents:number;selected:number;turns:number;preview:boolean;busy:boolean};
 export type CollectionTool={
@@ -38,6 +38,8 @@ export const COLLECTION_TOOLS:readonly CollectionTool[]=[
     keywords:['section','heading','outline','alignment'],requirement:'documents',blockedDuringIndexing:true},
   {id:'tables',group:'inspect',title:'Table candidates',description:'Inspect native rows and cell candidates.',
     keywords:['column','row','tabular','table'],requirement:'documents',blockedDuringIndexing:true},
+  {id:'overlap',group:'inspect',title:'Literal text overlap',description:'Find exact repeated native fragments across selected PDFs.',
+    keywords:['duplicate','shared','exclusive','identical','compare'],requirement:'two-selected',blockedDuringIndexing:true},
   {id:'table-comparison',group:'inspect',title:'Compare selected tables',description:'Align category and field cells from explicitly selected independent tables.',
     keywords:['table','compare','matrix','cell','category'],requirement:'two-selected',blockedDuringIndexing:true},
   {id:'pages',group:'inspect',title:'Page coverage',description:'Open physical pages and inspect native coverage.',
