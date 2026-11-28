@@ -234,3 +234,15 @@ open PDF files, prove extraction completeness, authenticate a source, or
 verify the truth of an answer. Use independent PDF source replay for checking
 the original bytes and native extraction. All artifacts may contain private
 document content; store them locally and do not commit them to a public repo.
+
+## Merge separately saved collection workspaces
+
+Import a complete workspace against the same attached PDF fingerprints and
+native review text. The confirmation panel offers replacement and a separate
+merge preview. Merging keeps existing question order, appends new exact
+question/selection/context combinations and preserves all nonconflicting
+annotations. Repeated imported questions are counted rather than appended.
+Review notes and statuses that differ for the same fragment require an
+explicit choice of the current or imported annotation; no status wins
+automatically. Combined limits are checked before applying. If the current
+conversation or review changes, discard the preview and import again.

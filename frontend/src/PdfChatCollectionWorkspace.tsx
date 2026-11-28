@@ -3,6 +3,8 @@ import type { CollectionDocument, CollectionTurn } from './pdfChatCollection';
 import type { CollectionReviewEntry } from './pdfChatCollectionReview';
 import { loadCollectionWorkspace, serializeCollectionWorkspace, type CollectionWorkspace } from './pdfChatCollectionWorkspace';
 
+import PdfChatCollectionWorkspaceMerge from './PdfChatCollectionWorkspaceMerge';
+
 type Feedback = { error: boolean; message: string };
 type Pending = { workspace: CollectionWorkspace; turns: CollectionTurn[]; reviews: CollectionReviewEntry[] };
 function download(text: string) {
@@ -105,7 +107,7 @@ export default function PdfChatCollectionWorkspace({ documents, turns, reviews, 
       }}>Cancel collection workspace operation</button></div>}
     {pending && <section className="chat-note" aria-label="Complete collection workspace restore confirmation">
       <p>Prepared {pending.workspace.turns.length} question turn(s) and {pending.workspace.reviews.length} review annotation(s).
-        Applying replaces the complete current collection conversation and review.</p>
+        Choose replacement below, or merge new work while retaining the current history and annotations.</p>
       {!unchanged && <p>Collection questions or review annotations changed during validation. Import again before applying.</p>}
       <div className="chat-toolbar">
         <button type="button" className="chat-button" disabled={!unchanged || busy} onClick={() => {
@@ -115,6 +117,12 @@ export default function PdfChatCollectionWorkspace({ documents, turns, reviews, 
         }}>Apply complete collection workspace</button>
         <button type="button" className="chat-button" onClick={() => setPending(null)}>Discard prepared collection workspace</button>
       </div>
+      <PdfChatCollectionWorkspaceMerge documents={documents} current={{turns:pending.turns,reviews:pending.reviews}}
+        imported={pending.workspace} unchanged={unchanged&&!busy} onApply={workspace=>{
+          if(!unchanged||busy)return;
+          onApply(workspace);setPending(null);
+          setFeedback({error:false,message:'Collection workspace merged after explicit conflict review.'});
+        }}/>
     </section>}
     {feedback && <p role={feedback.error ? 'alert' : 'status'} className={feedback.error ? 'chat-error' : 'chat-note'}>
       {feedback.message}</p>}
