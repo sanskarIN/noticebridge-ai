@@ -685,3 +685,18 @@ test('collection question overview keeps literal values separate and links each 
   await expect(root.getByRole('region',{name:'Collection source inspection'}).locator('blockquote')).toHaveText('Application fee: INR 350');
   await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveCount(2);
 });
+
+test('collection source location is opt-in and freshly reproduced on the rendered PDF',async({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('notice.pdf',[['Application fee: INR 500']])],1);
+  const results=await ask(page,'Application fee?');
+  await results.getByRole('button',{name:'Inspect collection source [1]'}).click();
+  const inspection=root.getByRole('region',{name:'Collection source inspection'});
+  await expect(inspection.locator('canvas')).toBeVisible();
+  await expect(inspection.locator('.native-location-marker')).toHaveCount(0);
+  await inspection.getByLabel('Show independently reproduced candidate line location').check();
+  await expect(inspection).toContainText('Candidate native line location reproduced');
+  await expect(inspection.locator('.native-location-marker')).toBeVisible();
+  await inspection.getByLabel('Show independently reproduced candidate line location').uncheck();
+  await expect(inspection.locator('.native-location-marker')).toHaveCount(0);
+});

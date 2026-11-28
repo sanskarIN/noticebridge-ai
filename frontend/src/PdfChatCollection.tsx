@@ -96,6 +96,7 @@ export default function PdfChatCollection() {
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [showNativeLocation, setShowNativeLocation] = useState(false);
   const generation = useRef(0);
   const controller = useRef<AbortController | null>(null);
   const workspaceRoot = useRef<HTMLElement>(null);
@@ -107,6 +108,7 @@ export default function PdfChatCollection() {
     controller.current?.abort();
   }, []);
   useEffect(() => {
+    setShowNativeLocation(false);
     if (preview) previewHeading.current?.focus();
   }, [preview]);
 
@@ -440,8 +442,12 @@ export default function PdfChatCollection() {
         <PdfChatCollectionFragments key={preview.documentId + ':' + preview.page + ':' + (preview.source?.ordinal ?? 'page')}
           documents={documents} documentId={preview.documentId} physicalPage={preview.page} selected={preview.source} onInspect={inspect} />
         <p className="chat-note">Manual source inspection. Native fragment positions do not establish verified highlight geometry.</p>
+        {preview.source?.position && <label className="chat-checkbox">
+          <input type="checkbox" checked={showNativeLocation} onChange={event=>setShowNativeLocation(event.target.checked)}/>
+          Show independently reproduced candidate line location
+        </label>}
         <Suspense fallback={<p role="status">Preparing collection PDF viewer…</p>}>
-          <PdfEvidencePreview file={previewDoc.file} pageNumber={preview.page} inspectionOnly />
+          <PdfEvidencePreview file={previewDoc.file} pageNumber={preview.page} inspectionOnly nativeSource={showNativeLocation ? preview.source : undefined} />
         </Suspense>
       </section>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('review' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionReview key={'review:' + documents.map(doc => doc.id).join(':')}

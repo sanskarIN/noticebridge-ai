@@ -517,3 +517,5 @@
 .chat-collection [id^="collection-tool-"]{scroll-margin-block-start:16px}
 .chat-collection [id^="collection-tool-"]:focus{outline:2px solid #82e2c6;outline-offset:3px;border-radius:8px}
 @media(max-width:640px){.chat-collection-navigation-grid{grid-template-columns:minmax(0,1fr)}}
+
+.native-location-marker{position:absolute;box-sizing:border-box;border:2px dashed #1d6998;background:rgba(75,176,222,.16);pointer-events:none;z-index:2}

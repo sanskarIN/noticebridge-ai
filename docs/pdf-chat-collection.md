@@ -191,3 +191,7 @@ Use the searchable, grouped directory to jump directly to a collection tool. Ava
 ## Question-centred answer overview
 
 The at-a-glance view groups saved results by question part, keeps each PDF's printed values and native coverage distinct, and exposes multiple values or missing matches without treating them as amendments. Bare recognized field questions can show literal values and nearby review candidates. Qualified questions remain ordinary evidence retrieval. Shared quotations are grouped by exact text across distinct PDFs and retain each source identity.
+
+## Optional native line location
+
+The source viewer can show an opt-in dashed location cue. It independently streams the same physical PDF page through the bounded native assembler, requiring exact fragment ordinal, text and geometry before transforming a conservative line area into the rendered viewport. No approximate substitute is shown for a mismatch. The marker is not verified glyph geometry, a certified transcription or an official source verdict. Navigation resets the opt-in selection.
