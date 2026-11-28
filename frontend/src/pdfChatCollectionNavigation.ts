@@ -3,12 +3,12 @@
 export type CollectionToolGroup='ask'|'inspect'|'review'|'exchange'|'experiments';
 export type CollectionToolId=
   'sources'|'question'|'batch'|'history'|'models'|'results'|'fields'|'literal'|
-  'dates'|'requirements'|'outline'|'tables'|'pages'|'preview'|'review'|'workspace'|
+  'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'pages'|'preview'|'review'|'workspace'|
   'ocr'|'evaluation'|'packet'|'replay'|'exchange';
 export type CollectionToolState={documents:number;selected:number;turns:number;preview:boolean;busy:boolean};
 export type CollectionTool={
   id:CollectionToolId;group:CollectionToolGroup;title:string;description:string;keywords:string[];
-  requirement:'none'|'documents'|'selection'|'turns'|'preview';blockedDuringIndexing:boolean;
+  requirement:'none'|'documents'|'selection'|'two-selected'|'turns'|'preview';blockedDuringIndexing:boolean;
 };
 export const COLLECTION_TOOL_SEARCH_LIMIT=100;
 export const COLLECTION_TOOL_GROUPS:Record<CollectionToolGroup,string>={
@@ -38,6 +38,8 @@ export const COLLECTION_TOOLS:readonly CollectionTool[]=[
     keywords:['section','heading','outline','alignment'],requirement:'documents',blockedDuringIndexing:true},
   {id:'tables',group:'inspect',title:'Table candidates',description:'Inspect native rows and cell candidates.',
     keywords:['column','row','tabular','table'],requirement:'documents',blockedDuringIndexing:true},
+  {id:'table-comparison',group:'inspect',title:'Compare selected tables',description:'Align category and field cells from explicitly selected independent tables.',
+    keywords:['table','compare','matrix','cell','category'],requirement:'two-selected',blockedDuringIndexing:true},
   {id:'pages',group:'inspect',title:'Page coverage',description:'Open physical pages and inspect native coverage.',
     keywords:['missing','page','native','coverage','viewer'],requirement:'documents',blockedDuringIndexing:true},
   {id:'preview',group:'review',title:'Open source inspection',description:'Return to the rendered page and selected quotation.',
@@ -71,6 +73,7 @@ export function collectionToolAvailability(tool:CollectionTool,state:CollectionT
   if(tool.blockedDuringIndexing&&state.busy)return 'Available after indexing finishes.';
   if(tool.requirement==='documents'&&!state.documents)return 'Attach a PDF first.';
   if(tool.requirement==='selection'&&!state.selected)return 'Select at least one attached PDF.';
+  if(tool.requirement==='two-selected'&&state.selected<2)return 'Select at least two attached PDFs.';
   if(tool.requirement==='turns'&&!state.turns)return 'Ask a collection question first.';
   if(tool.requirement==='preview'&&!state.preview)return 'Open a source or physical page first.';
   return null;

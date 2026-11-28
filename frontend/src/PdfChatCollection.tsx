@@ -413,7 +413,7 @@ export default function PdfChatCollection() {
         <div id={collectionToolAnchor('outline' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionOutline documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
         <div id={collectionToolAnchor('tables' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionTableExplorer documents={documents} selected={selected} names={names} onInspect={inspect}
           onAsk={(documentId, value) => { setSelected([documentId]); setQuestion(value); questionRef.current?.focus(); }} /></div>
-        <PdfChatCollectionTableComparison documents={documents} selected={selected} names={names} onInspect={inspect}/>
+        <div id={collectionToolAnchor('table-comparison')} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionTableComparison documents={documents} selected={selected} names={names} onInspect={inspect}/></div>
       </div>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('pages' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionPageNavigator key={'coverage:' + documents.map(doc => doc.id).join(':')}
         documents={documents} names={names} onInspect={inspectPage} /></div>}

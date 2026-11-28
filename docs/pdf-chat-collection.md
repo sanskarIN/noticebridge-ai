@@ -211,3 +211,26 @@ The collection review packet panel also accepts the original packet and an offli
 ## Explicit table candidate comparison
 
 Choose one physical aligned native table from each of at least two selected PDFs. Compare recognized field keys and complete normalized printed category keys, including rows on different physical pages. Missing category, missing field and missing both remain separate, and every present cell can be inspected with its actual category and column headers. Literal equality is not proof of equivalent eligibility or an official amendment. The private comparison report binds the full native extraction snapshot and is recomputed before acceptance.
+
+## Offline collection snapshot retrieval
+
+Export a native collection snapshot and either a question plan or a manually
+labelled retrieval evaluation from the browser. On Node.js 22, run from the
+frontend directory:
+
+```sh
+npm run replay:collection -- --mode questions --snapshot snapshot.json --input plan.json --output evidence.json
+npm run replay:collection -- --mode labels --snapshot snapshot.json --input labels.json --output evaluation.json
+npm run replay:collection -- --mode regression --snapshot snapshot.json --input labels.json --output run.json
+npm run replay:collection -- --mode verify-evidence --snapshot snapshot.json --input evidence.json --output verified.json
+npm run replay:collection -- --mode verify-evaluation --snapshot snapshot.json --input evaluation.json --labels labels.json --output verified-evaluation.json
+```
+
+The CLI builds the same independent retrieval indexes as the browser, checks
+canonical source sets, expected-fragment hashes, scope and output limits, and
+refuses to overwrite an existing artifact. Verification requires exact replay,
+not merely matching a saved digest or accepting stored scores. It does not
+open PDF files, prove extraction completeness, authenticate a source, or
+verify the truth of an answer. Use independent PDF source replay for checking
+the original bytes and native extraction. All artifacts may contain private
+document content; store them locally and do not commit them to a public repo.

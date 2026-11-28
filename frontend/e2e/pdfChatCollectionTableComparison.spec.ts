@@ -20,15 +20,15 @@ async function fixture(){
 test('explicit table comparison separates missing categories and fields from literal differences',async()=>{
   const {a,b,docs,choices}=await fixture();
   const result=compareCollectionTables(docs,choices);
-  const general=result.rows.find(row=>row.categoryKey==='general'&&row.field==='fee')!;
+  const general=result.rows.find(row=>row.categoryKey==='general'&&row.field==='application_fee')!;
   expect(general.state).toBe('different_text');
   expect(general.differentCategoryLabels).toBe(true);
   expect(general.cells.map(cell=>cell.value?.text)).toEqual(['INR 500','INR 350']);
   expect(general.cells.map(cell=>cell.value?.page)).toEqual([1,2]);
   expect(result.rows.find(row=>row.categoryKey==='general'&&row.field==='eligibility')?.cells[1].state).toBe('missing_field');
-  expect(result.rows.find(row=>row.categoryKey==='rural'&&row.field==='fee')?.cells[1].state).toBe('missing_category');
+  expect(result.rows.find(row=>row.categoryKey==='rural'&&row.field==='application_fee')?.cells[1].state).toBe('missing_category');
   expect(result.rows.find(row=>row.categoryKey==='rural'&&row.field==='eligibility')?.cells[1].state).toBe('missing_both');
-  expect(result.rows.find(row=>row.categoryKey==='urban'&&row.field==='fee')?.cells[0].state).toBe('missing_category');
+  expect(result.rows.find(row=>row.categoryKey==='urban'&&row.field==='application_fee')?.cells[0].state).toBe('missing_category');
   expect(result.limited).toBe(true);
   expect(inspectTableComparisonCell(docs,result,general,general.cells[0],general.cells[0].value!)).toBe(a.corpus.passages[4]);
   expect(()=>inspectTableComparisonCell(docs,result,general,general.cells[0],b.corpus.passages[3])).toThrow();

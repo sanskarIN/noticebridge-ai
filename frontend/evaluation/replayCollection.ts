@@ -113,5 +113,5 @@ export async function main(args:readonly string[]):Promise<number>{
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
-  process.exitCode=await main(process.argv.slice(2));
+  void main(process.argv.slice(2)).then(code=>{process.exitCode=code;});
 }
