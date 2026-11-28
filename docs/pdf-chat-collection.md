@@ -104,3 +104,7 @@ remain compatible because they contain standalone steps only.
 ## Collection printed-date inventory
 
 Recognized date labels can be inspected in document or calendar order. The date field comparison reports only unsigned calendar-day spans when every selected document has a single supported printed date without detected contextual leads. Window checks never combine opening and closing labels across different PDFs. Source links retain exact PDF identity. These are inspection aids, not official deadlines or reminders.
+
+## Collection source fragments
+
+The source viewer offers a paginated native fragment list for the selected physical PDF page, with optional text filtering and immediate same-flow neighbors. The selected fragment remains an exact local source object. Empty native coverage is distinct from an absent physical page. Inspection does not add a chat turn or assert that adjacent text answers the question.

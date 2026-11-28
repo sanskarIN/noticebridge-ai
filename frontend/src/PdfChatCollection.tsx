@@ -10,6 +10,7 @@ import PdfChatCollectionReview from './PdfChatCollectionReview';
 import PdfChatCollectionWorkspace from './PdfChatCollectionWorkspace';
 import PdfChatCollectionHistory from './PdfChatCollectionHistory';
 import PdfChatCollectionDates from './PdfChatCollectionDates';
+import PdfChatCollectionFragments from './PdfChatCollectionFragments';
 import { CollectionPageNavigator, CollectionTableExplorer, CollectionTableCandidates } from './PdfChatCollectionLayout';
 import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
@@ -406,6 +407,8 @@ export default function PdfChatCollection() {
           <button type="button" className="chat-button" disabled={preview.page >= previewDoc.corpus.pageCount}
             onClick={() => setPreview({ documentId: preview.documentId, page: preview.page + 1 })}>Next collection page</button>
         </div>
+        <PdfChatCollectionFragments key={preview.documentId + ':' + preview.page + ':' + (preview.source?.ordinal ?? 'page')}
+          documents={documents} documentId={preview.documentId} physicalPage={preview.page} selected={preview.source} onInspect={inspect} />
         <p className="chat-note">Manual source inspection. Native fragment positions do not establish verified highlight geometry.</p>
         <Suspense fallback={<p role="status">Preparing collection PDF viewer…</p>}>
           <PdfEvidencePreview file={previewDoc.file} pageNumber={preview.page} inspectionOnly />

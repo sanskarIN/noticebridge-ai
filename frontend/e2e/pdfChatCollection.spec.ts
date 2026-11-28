@@ -453,3 +453,22 @@ test('collection date inventory retains independent sources and unsigned calenda
   await dates.getByRole('region', { name: /Collection date: Document 2/ }).getByRole('button', { name: 'Inspect collection date source' }).click();
   await expect(root.getByRole('region', { name: 'Collection source inspection' }).locator('blockquote')).toHaveText('Application deadline: 19 December 2026');
 });
+
+test('collection source fragment browser keeps native inspection within the selected document and page', async ({ page }) => {
+  const root = await open(page);
+  await attach(page,[fixture('first.pdf',[['Application fee: INR 500','Payment instructions'],['Other page']]),
+    fixture('second.pdf',[['Application fee: INR 350','Different instructions']])],2);
+  const result = await ask(page,'Application fee?');
+  await result.getByRole('region',{name:/Collection result: Document 1/}).getByRole('button',{name:'Inspect collection source [1]'}).click();
+  const inspection = root.getByRole('region',{name:'Collection source inspection'});
+  await inspection.getByText('Browse native fragments on this collection page',{exact:true}).click();
+  const browser = inspection.getByRole('group',{name:'Collection page native fragments'});
+  await expect(browser).toContainText('Payment instructions');
+  await expect(browser).not.toContainText('Different instructions');
+  await expect(browser).not.toContainText('Other page');
+  await browser.getByLabel('Find text on this collection page').fill('Payment');
+  await expect(browser.getByRole('button',{name:/Inspect collection fragment/})).toHaveCount(1);
+  await browser.getByRole('button',{name:/Inspect collection fragment/}).click();
+  await expect(inspection.locator('blockquote')).toHaveText('Payment instructions');
+  await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
+});
