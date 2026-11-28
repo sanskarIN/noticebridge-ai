@@ -4,7 +4,7 @@ export type CollectionToolGroup='ask'|'inspect'|'review'|'exchange'|'experiments
 export type CollectionToolId=
   'sources'|'question'|'batch'|'scoped-plan'|'history'|'models'|'results'|'fields'|'literal'|'boolean-search'|'references'|
   'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'overlap'|'pages'|'quality'|'preview'|'review'|'usage'|'review-queue'|'workspace'|'checkpoint'|
-  'ocr'|'evaluation'|'packet'|'replay'|'exchange';
+  'ocr'|'evaluation'|'variants'|'packet'|'replay'|'exchange';
 export type CollectionToolState={documents:number;selected:number;turns:number;preview:boolean;busy:boolean};
 export type CollectionTool={
   id:CollectionToolId;group:CollectionToolGroup;title:string;description:string;keywords:string[];
@@ -74,6 +74,8 @@ export const COLLECTION_TOOLS:readonly CollectionTool[]=[
     keywords:['embedding','extractive','ollama','preflight','model'],requirement:'turns',blockedDuringIndexing:false},
   {id:'ocr',group:'experiments',title:'Scanned PDF review',description:'Review optional OCR separately from native answers.',
     keywords:['image','scan','transcription','tesseract'],requirement:'documents',blockedDuringIndexing:true},
+  {id:'variants',group:'experiments',title:'Paired question experiments',description:'Evaluate equivalent alternative wording or nearby-line mode against human labels.',
+    keywords:['evaluation','wording','context','experiment','recall'],requirement:'documents',blockedDuringIndexing:true},
   {id:'evaluation',group:'experiments',title:'Retrieval evaluation',description:'Measure labelled evidence retrieval and regressions.',
     keywords:['precision','recall','benchmark','regression','labels'],requirement:'documents',blockedDuringIndexing:true},
 ];

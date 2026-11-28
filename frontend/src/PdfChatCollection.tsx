@@ -1,3 +1,4 @@
+import PdfChatQuestionVariants from './PdfChatQuestionVariants';
 import PdfChatEvidenceUsage from './PdfChatEvidenceUsage';
 import PdfChatCollectionQuality from './PdfChatCollectionQuality';
 import PdfChatCollectionComposer from './PdfChatCollectionComposer';
@@ -510,6 +511,9 @@ export default function PdfChatCollection() {
         documents={documents} turn={currentTurn} onInspect={inspectPage} /></div>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('evaluation' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionEvaluation key={'evaluation:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} names={names} onInspect={inspect} /></div>}
+      {documents.length>0&&!busy&&<div id={collectionToolAnchor('variants')} tabIndex={-1} className="chat-collection-destination">
+        <PdfChatQuestionVariants key={'variants:'+documents.map(doc=>doc.id).join(':')} documents={documents} names={names} onInspect={inspect}/>
+      </div>}
       {documents.length > 0 && !busy && <div id={collectionToolAnchor('packet' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionPacket key={'packet:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} reviews={reviews} /></div>}
       {!busy && <div id={collectionToolAnchor('replay' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionReplay key={'replay:' + documents.map(doc => doc.id).join(':')} documents={documents} /></div>}

@@ -316,3 +316,7 @@ Inspect retained native fragments for exact repeats on the same or different phy
 ## Reverse citation usage index
 
 Recompute saved independent question steps to see which native source fragments were returned, how many distinct turns reused each one, and whether they have personal review annotations. Strict and nearby-line citations remain separate. The index also includes manually pinned fragments that no saved question cited. Export contains private question steps, coordinates, annotation status and snapshot hash, but no source excerpts or note text. Citation frequency is not relevance or importance.
+
+## Paired question experiments
+
+Import independently authored retrieval labels and compare the saved baseline wording/context with a user-entered alternative. Each pair must preserve the exact PDF and physical-page scope, and explicitly confirm that the alternative retains the same information need. Score both against the same labels, report gains, losses, tradeoffs and order-only changes, and inspect exact native sources. Unlabelled returns are not necessarily irrelevant. Exported results bind the original label artifact and can be exactly reproduced without model execution or automatic paraphrasing.
