@@ -266,3 +266,5 @@ Build a bounded diagnostic queue from all saved turns, keeping each question par
 ## Literal native overlap across PDFs
 
 Select two or more PDFs, choose a minimum native fragment length and optionally one physical page. The overlap inspector groups identical extracted text across independent documents, retains repeated physical occurrences and shows pairwise distinct-text counts. No spelling, case, punctuation or whitespace normalization is used for grouping; the search filter is separate. Exclusive text is only an observation within the selected native scope, not an amendment or deletion. Exported coordinate reports bind the full native snapshot and are recomputed before acceptance.
+
+The Python verifier independently recomputes the literal overlap counts, group ordering and every physical coordinate from the same native snapshot, including UTF-16 ordering and length semantics. Run `python -m noticebridge.chat_collection_overlap_cli overlap.json snapshot.json --output overlap-audit.json`. It checks structural equality rather than canonical browser byte encoding, and does not reopen the source PDFs or certify extraction completeness.
