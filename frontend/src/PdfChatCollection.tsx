@@ -1,3 +1,4 @@
+import PdfChatTurnDifference from './PdfChatTurnDifference';
 import PdfChatGuidedQuestions from './PdfChatGuidedQuestions';
 import PdfChatQuestionVariants from './PdfChatQuestionVariants';
 import PdfChatEvidenceUsage from './PdfChatEvidenceUsage';
@@ -421,6 +422,10 @@ export default function PdfChatCollection() {
             }} />
           <div id={collectionToolAnchor('models' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionModels key={'models:' + activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}
             documents={documents} turn={currentTurn} names={names} onInspect={inspect} /></div>
+          {turns.reduce((n,turn)=>n+turn.results[0].parts.length,0)>1&&<PdfChatTurnDifference
+            key={'turn-diff:'+documents.map(doc=>doc.id).join(':')+':'+JSON.stringify(turns.map(turn=>turn.step))}
+            documents={documents} turns={turns} names={names} onInspect={inspect}
+            onTurn={index=>{setActiveTurn(index);setPreview(null);workspaceRoot.current?.querySelector<HTMLElement>('#'+collectionToolAnchor('history'))?.focus();}}/>}
           <PdfChatCollectionAnswerSummary key={'summary:' + activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' +
             currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}
             documents={documents} turn={currentTurn} names={names} onInspect={inspect} />

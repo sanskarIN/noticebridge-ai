@@ -324,3 +324,7 @@ Import independently authored retrieval labels and compare the saved baseline wo
 ## Guided question composer
 
 Build editable question wording from fixed recognized notice topics or an explicit printed clause identifier. Each of up to four topics can have a distinct physical page restriction; PDF selection and nearby-line settings are explicit. Optional printed-label inventory counts are navigation hints, never proof of absence. The draft preview uses the real question planner and requires explicit replacement of an existing unsent draft. No question is automatically submitted.
+
+## Compare saved question searches
+
+Explicitly select two saved question parts, even parts from the same turn. Compare displayed citations by actual PDF identity and physical coordinates; show rank changes, strict/nearby channel changes, and one-sided retrieval. A PDF searched on one side only is reported separately and excluded from common-source gain/loss counts. Different wording or page restrictions are visible. The report omits native excerpts and can be reproduced against the exact saved history and native snapshot. This is a search comparison, not a notice amendment.
