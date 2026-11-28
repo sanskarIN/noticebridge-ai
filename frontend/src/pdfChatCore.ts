@@ -219,41 +219,61 @@ export function knownQuestionField(words: string[]): FieldId | null {
   return questionFields.get(fieldKey(words)) ?? null;
 }
 
-export function rankedMatches(index: SearchIndex, words: string[], role: Role, field: FieldId | null): Passage[] {
-  // Full query-term coverage prevents a result based solely on a generic
-  // shared word such as "application". This is intentionally conservative.
-  const scores = [];
-  const lookup = lookupFor(index);
-  const candidates = lookup ? candidateOrdinals(lookup.roles[role], words, field) : null;
-  const count = candidates?.length ?? index.rows.length;
-  const weighted = words.map(word => {
-    const df = index.df.get(word) ?? 0;
-    return { word, idf: Math.log(1 + (index.corpusSize - df + 0.5) / (df + 0.5)) };
+export type RankedMatch={passage:Passage;score:number;lexical:boolean;knownField:boolean;duplicates:number};
+export type MatchTermScore={term:string;tf:number;df:number;idf:number;contribution:number};
+function weightedTerms(index:SearchIndex,words:string[]){
+  return words.map(word=>{
+    const df=index.df.get(word)??0;
+    return {word,df,idf:Math.log(1+(index.corpusSize-df+0.5)/(df+0.5))};
   });
-  for (let i = 0; i < count; i++) {
-    const row = index.rows[candidates ? candidates[i] : i];
-    if (row.passage.role !== role) continue;
-    const lexical = words.every(word => row.counts.has(word));
-    const known = field !== null && row.field?.definition.id === field;
-    if (!lexical && !known) continue;
-    let score = 0;
-    for (const { word, idf } of weighted) {
-      const tf = row.counts.get(word) ?? 0;
-      score += idf * tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * row.length / index.average));
-    }
-    scores.push({ passage: row.passage, score });
+}
+function termContribution(index:SearchIndex,row:IndexedPassage,tf:number,idf:number){
+  return idf*tf*2.2/(tf+1.2*(0.25+0.75*row.length/index.average));
+}
+
+/** The diagnostic and displayed answer share the exact ranker. Duplicate
+ * occurrences on one page are counted, not ranked as separate evidence. */
+export function rankedMatchDetails(index:SearchIndex,words:string[],role:Role,field:FieldId|null):RankedMatch[]{
+  const scores:RankedMatch[]=[];
+  const lookup=lookupFor(index);
+  const candidates=lookup?candidateOrdinals(lookup.roles[role],words,field):null;
+  const count=candidates?.length??index.rows.length;
+  const weighted=weightedTerms(index,words);
+  for(let i=0;i<count;i++){
+    const row=index.rows[candidates?candidates[i]:i];
+    if(row.passage.role!==role)continue;
+    const lexical=words.every(word=>row.counts.has(word));
+    const knownField=field!==null&&row.field?.definition.id===field;
+    if(!lexical&&!knownField)continue;
+    let score=0;
+    for(const {word,idf} of weighted)score+=termContribution(index,row,row.counts.get(word)??0,idf);
+    scores.push({passage:row.passage,score,lexical,knownField,duplicates:0});
   }
-  scores.sort((a, b) => b.score - a.score || a.passage.page - b.passage.page ||
-    a.passage.ordinal - b.passage.ordinal);
-  // Keep repeated wording on distinct pages: it may be relevant to ambiguity.
-  const seen = new Set<string>();
-  const unique = scores.filter(({ passage }) => {
-    const key = passage.page + ':' + passage.text;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  scores.sort((a,b)=>b.score-a.score||a.passage.page-b.passage.page||
+    a.passage.ordinal-b.passage.ordinal);
+  const seen=new Map<string,RankedMatch>();
+  const unique:RankedMatch[]=[];
+  for(const row of scores){
+    const key=row.passage.page+':'+row.passage.text;
+    const earlier=seen.get(key);
+    if(earlier){earlier.duplicates++;continue;}
+    seen.set(key,row);unique.push(row);
+  }
+  return unique;
+}
+export function rankedMatches(index:SearchIndex,words:string[],role:Role,field:FieldId|null):Passage[]{
+  return rankedMatchDetails(index,words,role,field).map(row=>row.passage);
+}
+
+/** Explain one exact row using the same corpus statistics and scoring
+ * formula. The caller supplies an index row identity, not imported text. */
+export function matchTermScores(index:SearchIndex,source:Passage,words:string[]):MatchTermScore[]{
+  const row=index.rows.find(candidate=>candidate.passage===source);
+  if(!row||words.length>16||new Set(words).size!==words.length)throw new Error('Invalid retrieval explanation.');
+  return weightedTerms(index,words).map(({word,df,idf})=>{
+    const tf=row.counts.get(word)??0;
+    return {term:word,tf,df,idf,contribution:termContribution(index,row,tf,idf)};
   });
-  return unique.map(row => row.passage);
 }
 
 /** Geometry is optional. Where both hints exist, do not combine same-baseline

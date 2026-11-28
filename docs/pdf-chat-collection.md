@@ -246,3 +246,15 @@ Review notes and statuses that differ for the same fragment require an
 explicit choice of the current or imported annotation; no status wins
 automatically. Combined limits are checked before applying. If the current
 conversation or review changes, discard the preview and import again.
+
+## Retrieval ranking trace
+
+Expand the ranking trace under an individual saved question part to inspect
+the exact normalized query terms, recognized field, local search scope, all
+unique strict candidates and same-page duplicate counts. Filter by lexical
+match, field alias or whether a candidate was displayed. Individual BM25
+term contributions use the same calculation as the answer ranker and
+retain whole-PDF statistics under a physical-page filter. Weights are not
+probabilities and must not be compared between unrelated PDFs. The
+adjacent-line fallback is separately identified when no strict match exists.
+Inspection never changes the saved answer.

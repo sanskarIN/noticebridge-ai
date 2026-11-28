@@ -417,15 +417,10 @@ def question_page(question: str) -> int | None:
 
 
 def same_flow(left: Fragment, right: Fragment) -> bool:
-    # A weaker independent structural guard: both coordinates must exist,
-    # and they must be on consecutive fragments of the same physical page.
-    # Browser flow geometry heuristics are not reproduced by this auditor.
-    return (
-        left.page == right.page
-        and right.ordinal == left.ordinal + 1
-        and left.position is not None
-        and right.position is not None
-    )
+    # The browser permits adjacent native fragments without geometry.
+    # Do not reject a valid packet just because coordinates are unavailable.
+    # Structural audit does not reproduce the browser's flow heuristic.
+    return left.page == right.page and right.ordinal == left.ordinal + 1
 
 
 def audit_context(groups, citations: list[Fragment], strict: int, enabled: bool) -> set[int]:
