@@ -31,6 +31,7 @@ export async function requestLocalOcr(file: File, role: Role, pages: number[], p
   if (consent !== true || !['original', 'revised'].includes(role) || !file.size ||
       file.size > MAX_PDF_BYTES || !pins[role] || !pages.length ||
       pages.join(',') !== localOcrPages(pages.join(','), pageCount).join(',')) invalid();
+  signal.throwIfAborted();
   const body = new FormData();
   body.append('source', file, 'source.pdf');
   body.append('role', role);

@@ -10,36 +10,65 @@ const ENDPOINTS = {
 } as const;
 export type LocalChatService = keyof typeof ENDPOINTS;
 
-export async function readBoundedJson(response: Response, maximum: number): Promise<string> {
-  if (!response.ok || !response.body ||
+// Do not wait for an untrusted stream's underlying cancellation promise.
+// Cancellation is best effort; the caller must still receive its error.
+function discardBody(response: Response): void {
+  if (response.body && !response.body.locked) {
+    void response.body.cancel().catch(() => undefined);
+  }
+}
+
+export async function readBoundedJson(response: Response, maximum: number,
+  signal?: AbortSignal): Promise<string> {
+  if (signal?.aborted) {
+    discardBody(response);
+    signal.throwIfAborted();
+  }
+  if (!Number.isSafeInteger(maximum) || maximum <= 0 || !response.ok || !response.body ||
       !/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '')) {
-    throw new Error('Local service did not return a JSON result.');
+    discardBody(response);
+    throw new Error('Local service did not return a bounded JSON result.');
   }
   const declared = response.headers.get('content-length');
   if (declared !== null && (!/^\d{1,10}$/.test(declared) || Number(declared) > maximum)) {
+    discardBody(response);
     throw new Error('Local service result exceeds its size limit.');
   }
   const reader = response.body.getReader();
+  const cancel = () => { void reader.cancel().catch(() => undefined); };
   const chunks: Uint8Array[] = [];
   let total = 0;
+  // Fetch normally aborts its body itself. Explicitly cancel the reader as
+  // well, so a stalled or injected transport cannot keep this operation alive.
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
+    signal?.throwIfAborted();
     while (true) {
       const { value, done } = await reader.read();
+      signal?.throwIfAborted();
       if (done) break;
       if (!value || (total += value.byteLength) > maximum) {
         throw new Error('Local service result exceeds its size limit.');
       }
+      // A chunk must represent progress: reject a pathological stream that
+      // emits unlimited empty buffers without consuming the byte budget.
+      if (!value.byteLength) throw new Error('Local service returned an empty chunk.');
       chunks.push(value);
     }
+    if (!total) throw new Error('Empty local service result.');
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+    signal?.throwIfAborted();
+    return text;
   } catch (error) {
-    await reader.cancel().catch(() => undefined);
+    cancel();
     throw error;
-  } finally { reader.releaseLock(); }
-  if (!total) throw new Error('Empty local service result.');
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+    reader.releaseLock();
+  }
 }
 
 export async function localChatRequest(service: LocalChatService, body: FormData,
@@ -53,8 +82,13 @@ export async function localChatRequest(service: LocalChatService, body: FormData
     method: 'POST', body, signal, credentials: 'omit', redirect: 'error', cache: 'no-store',
     headers: { [endpoint.header]: '1' },
   });
+  if (signal.aborted) {
+    discardBody(response);
+    signal.throwIfAborted();
+  }
   if (response.redirected || (response.url && response.url !== origin + endpoint.path)) {
+    discardBody(response);
     throw new Error('Unexpected local service destination.');
   }
-  return readBoundedJson(response, endpoint.maxBytes);
+  return readBoundedJson(response, endpoint.maxBytes, signal);
 }

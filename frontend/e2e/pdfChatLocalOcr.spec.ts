@@ -94,3 +94,108 @@ test('no consent or malformed selection cannot invoke the transport', async () =
   await expect(requestLocalOcr(source, 'original', [3, 1], 4, { original: pin }, signal(), true, never))
     .rejects.toThrow('Invalid local OCR');
 });
+
+test('aborted or rejected responses cancel their body without reading it', async () => {
+  for (const reason of ['abort', 'status', 'type', 'length', 'maximum']) {
+    let cancelled = 0;
+    const controller = new AbortController();
+    const body = new ReadableStream<Uint8Array>({ cancel() { cancelled++; } });
+    const response = new Response(body, {
+      status: reason === 'status' ? 503 : 200,
+      headers: {
+        'Content-Type': reason === 'type' ? 'text/html' : 'application/json',
+        'Content-Length': reason === 'length' ? '101' : '1',
+      },
+    });
+    if (reason === 'abort') controller.abort();
+    await expect(readBoundedJson(response, reason === 'maximum' ? NaN : 100, controller.signal)).rejects.toThrow();
+    expect(cancelled).toBe(1);
+    expect(body.locked).toBe(false);
+  }
+});
+
+test('cancels a stalled response read even when the transport ignores the signal', async () => {
+  const controller = new AbortController();
+  let cancelled = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    start(writer) { writer.enqueue(new TextEncoder().encode('{')); },
+    cancel() { cancelled++; return new Promise<void>(() => {}); },
+  });
+  const result = readBoundedJson(new Response(stream, {
+    headers: { 'Content-Type': 'application/json' },
+  }), 100, controller.signal);
+  controller.abort();
+  await expect(result).rejects.toThrow('abort');
+  expect(cancelled).toBe(1);
+  expect(stream.locked).toBe(false);
+});
+
+test('does not wait for cancellation when the stream exceeds its byte limit', async () => {
+  let cancelled = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    start(writer) { writer.enqueue(new Uint8Array(101)); },
+    cancel() { cancelled++; return new Promise<void>(() => {}); },
+  });
+  await expect(readBoundedJson(new Response(stream, {
+    headers: { 'Content-Type': 'application/json' },
+  }), 100)).rejects.toThrow('size limit');
+  expect(cancelled).toBe(1);
+  expect(stream.locked).toBe(false);
+});
+
+test('handles split UTF-8 exactly at the byte budget and rejects empty chunks', async () => {
+  const expected = '{"text":"😀"}';
+  const bytes = new TextEncoder().encode(expected);
+  const stream = new ReadableStream<Uint8Array>({
+    start(writer) {
+      for (const byte of bytes) writer.enqueue(new Uint8Array([byte]));
+      writer.close();
+    },
+  });
+  expect(await readBoundedJson(new Response(stream, {
+    headers: { 'Content-Type': 'application/json' },
+  }), bytes.length)).toBe(expected);
+  const empty = new ReadableStream<Uint8Array>({
+    start(writer) { writer.enqueue(new Uint8Array(0)); writer.enqueue(bytes); writer.close(); },
+  });
+  await expect(readBoundedJson(new Response(empty, {
+    headers: { 'Content-Type': 'application/json' },
+  }), bytes.length)).rejects.toThrow('empty chunk');
+});
+
+test('late cancelled fetch response is discarded rather than parsed', async () => {
+  const controller = new AbortController();
+  let cancelled = 0;
+  const fetcher: typeof fetch = async () => {
+    controller.abort();
+    return new Response(new ReadableStream<Uint8Array>({ cancel() { cancelled++; } }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+  await expect(localChatRequest('pipeline', new FormData(), controller.signal, ORIGIN, fetcher))
+    .rejects.toThrow('abort');
+  expect(cancelled).toBe(1);
+});
+
+test('rejects unexpected response destination and cancels the body', async () => {
+  let cancelled = 0;
+  const fetcher: typeof fetch = async () => {
+    const response = new Response(new ReadableStream<Uint8Array>({ cancel() { cancelled++; } }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+    Object.defineProperty(response, 'url', { value: 'http://localhost:5173/api/chat/ocr' });
+    return response;
+  };
+  await expect(localChatRequest('ocr', new FormData(), signal(), ORIGIN, fetcher))
+    .rejects.toThrow('destination');
+  expect(cancelled).toBe(1);
+});
+
+test('already cancelled OCR never invokes even an injected transport', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  await expect(requestLocalOcr(source, 'original', [1, 3], 4, { original: pin }, controller.signal, true,
+    async () => { calls++; return encode(report); })).rejects.toThrow('abort');
+  expect(calls).toBe(0);
+});
