@@ -162,3 +162,21 @@ test('constructor snapshots budgets and finish cannot be reused', () => {
   expect(() => assembler.finish()).toThrow();
   expect(() => assembler.push(item('More'))).toThrow();
 });
+
+test('standalone explicit PDF.js EOL markers with zero geometry preserve neighboring-line order', () => {
+  const marker = { str: '', transform: [0, 0, 0, 0, 0, 0], width: 0, height: 0, hasEOL: true };
+  const result = page([item('Rural applicants', 10, 200, 40), marker,
+    item('Residence certificate', 10, 185, 40), marker]);
+  expect(result.passages.map(x => x.ordinal)).toEqual([1, 2]);
+  const answer = answerQuestion(buildIndex(result.passages), 'rural residence certificate', 'original', true);
+  expect(answer.citations).toEqual(result.passages);
+  expect(answer.printedFields).toEqual([]);
+  expect(result.limited).toBe(false);
+});
+test('invalid but finite coordinates outside snapshot limits are isolated without false geometry', () => {
+  const result = page([item('First', 10, 200, 40, true),
+    item('Far away', 1e10, 190, 40, true), item('Last', 10, 180, 40, true)]);
+  expect(result.passages.map(x => x.ordinal)).toEqual([1, 3, 5]);
+  expect(result.passages[1].position).toBeUndefined();
+  expect(result.passages[1].text).toBe('Far away');
+});

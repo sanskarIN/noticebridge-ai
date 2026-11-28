@@ -40,6 +40,7 @@ export async function readPdf(file: File, role: Role, signal: AbortSignal): Prom
     for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, MAX_PAGES); pageNumber++) {
       active();
       const page = await pdf.getPage(pageNumber);
+      active();
       const assembler = new NativePageAssembler(role, pageNumber, {
         chars: MAX_NATIVE_DOCUMENT_CHARS - chars,
         passages: MAX_NATIVE_DOCUMENT_PASSAGES - passages.length,

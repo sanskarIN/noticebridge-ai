@@ -31,7 +31,8 @@ function geometry(item: NativeTextItem): Geometry | null {
   const [a, b, c, d, x, y] = item.transform;
   if (![a, b, c, d, x, y, item.width, item.height, x + item.width].every(Number.isFinite) ||
       a <= 0 || d <= 0 || Math.abs(b) > 0.01 || Math.abs(c) > 0.01 ||
-      item.width < 0 || item.height <= 0) return null;
+      item.width < 0 || item.height <= 0 ||
+      [x, y, x + item.width, item.height].some(value => Math.abs(value) > 1e9)) return null;
   return { x, y, width: item.width, height: Math.max(1, Math.abs(item.height)) };
 }
 
@@ -132,6 +133,13 @@ export class NativePageAssembler {
       return this.full() ? this.stop() : true;
     }
     const blank = !source.str.trim();
+    // PDF.js can emit a standalone empty end-of-line marker with a
+    // zero-height transform. The explicit delimiter does not need geometry
+    // to finish the preceding line. Do not create a false ordinal gap.
+    if (blank && source.hasEOL === true) {
+      this.flush();
+      return this.full() ? this.stop() : true;
+    }
     const g = geometry(source);
     if (!g || (!blank && g.width <= 0)) {
       if (blank) {
@@ -145,8 +153,7 @@ export class NativePageAssembler {
     if (blank) {
       // Synthetic whitespace can span the entire gap between text cells.
       // Never replace previous nonblank geometry with a whitespace item.
-      if (source.hasEOL) this.flush();
-      else if (previous && (
+      if (previous && (
         Math.abs(g.y - previous.y) > Math.max(g.height, previous.height) * 0.55 ||
         g.x + g.width - (previous.x + previous.width) > previous.height * 4
       )) this.flush();
@@ -172,7 +179,7 @@ export class NativePageAssembler {
         height: Math.max(this.position.height, g.height) };
     }
     this.previous = g;
-    if (source.hasEOL) this.flush();
+    if (source.hasEOL === true) this.flush();
     return this.full() ? this.stop() : true;
   }
 
