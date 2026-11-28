@@ -296,3 +296,7 @@ For a saved recognized amount or calendar-date question, open the at-a-glance ov
 ## Broad question source-linked overview
 
 Explicit broad questions such as `Summarize this notice?`, `List the requirements?` or `Show Clause 4?` expose a separate source-linked inspection view beneath each independent PDF answer. The overview reports recognized printed fields, heading candidates, requirement cues and an explicitly labeled opening-fragment sample. Requirement questions preserve the requested cue category; reference questions preserve the exact printed identifier and page scope. This is not generated summary prose or an applicability decision, and never expands saved strict citations. A field can be used to draft a scoped follow-up only after user selection.
+
+## Evaluate optional collection model proposals
+
+After independently validating local model results, import human-authored retrieval labels from the evaluation lab. Exact PDF identity, question wording and context settings determine paired cases; missing labels, missing results and native-empty scopes are reported separately. Compare the first four baseline and fused candidate fragments, and the unique extractive proposal fragments. Shortlist label recall distinguishes a missing candidate from a ranking failure. Fragment-level agreement is not substring-level answer correctness or historical execution authentication. Private evaluation exports contain model metadata, question text and coordinates, but not automatic source excerpts or label notes.

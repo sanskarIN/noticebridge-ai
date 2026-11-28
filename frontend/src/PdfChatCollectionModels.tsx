@@ -1,3 +1,4 @@
+import PdfChatCollectionModelEvaluation from './PdfChatCollectionModelEvaluation';
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import type {Passage} from './pdfChatCore';
 import type {CollectionDocument,CollectionTurn} from './pdfChatCollection';
@@ -204,6 +205,7 @@ export default function PdfChatCollectionModels({documents,turn,names,onInspect}
     {review.length>0&&<section aria-label="Collection model proposals">
       <p className="chat-note">Literal source offsets were checked against local fragments, not relevance or completeness.
         These proposals are not part of native answer replay.</p>
+      {plan&&<PdfChatCollectionModelEvaluation key={plan.manifestDigest} documents={documents} turn={turn} plan={plan} reviews={review} names={names} onInspect={onInspect}/>}
       {review.map(value=><ModelReview key={value.documentId} value={value} name={names.get(value.documentId)??value.documentId} onInspect={onInspect}/>)}
     </section>}
   </details>;
