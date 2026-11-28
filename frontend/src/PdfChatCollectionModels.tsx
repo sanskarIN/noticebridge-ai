@@ -6,6 +6,8 @@ import {isLocalChatOrigin} from './pdfChatLocalTransport';
 import {prepareCollectionModelPlan,reviewCollectionModelResult,bundleCollectionModelResults,runCollectionLocalModels,
   loadCollectionModelResultFile,reviewCollectionModelBundle,MAX_COLLECTION_MODEL_RESULT_BYTES,type CollectionModelPlan,type CollectionModelReview} from './pdfChatCollectionModels';
 
+import PdfChatCollectionModelPreflight from './PdfChatCollectionModelPreflight';
+
 function save(text:string,name:string){
   const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));
   const link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);
@@ -173,6 +175,7 @@ export default function PdfChatCollectionModels({documents,turn,names,onInspect}
       <p className="chat-muted">For offline batch processing, save the manifest and all request files to a private directory.
         Run the collection model CLI using the exact installed model tags and digests.</p>
       <pre>python -m noticebridge.chat_collection_models_cli noticebridge-collection-model-manifest.json --request-directory . --output collection-results.json --embedding-model MODEL:TAG --embedding-digest DIGEST --answer-model MODEL:TAG --answer-digest DIGEST --allow-local-processing</pre>
+      <PdfChatCollectionModelPreflight key={plan.manifestDigest} plan={plan} names={names}/>
       <label className="chat-session-file">Import complete collection model result bundle
         <input type="file" accept=".json,application/json" disabled={busy} onChange={event=>void importBundle(event)}/>
       </label>

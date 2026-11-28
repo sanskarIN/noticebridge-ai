@@ -148,3 +148,38 @@ Optional OCR reports bind the exact PDF fingerprint and original-role physical p
 ## Portable collection evidence review packet
 
 The canonical review packet combines the native snapshot hash, canonical editable workspace, replayed question evidence, source coverage and exact reviewed quotations. Verification requires the complete current native extraction to match, including unquoted fragments. It never restores history or treats a saved review status as a factual verdict. A separate escaped, script-free, print-friendly HTML reading copy contains the source inventory, question excerpts and annotations. Both exports require explicit consent for the exact current workspace; the HTML copy is not itself a replay artifact.
+
+### Offline model preflight
+
+Before approving local model processing, export the independent model plan and
+all request files into a private directory. Run:
+
+```bash
+python -m noticebridge.chat_collection_models_cli noticebridge-collection-model-manifest.json --request-directory . --output collection-preflight.json --preflight-only
+```
+
+No model names, digests, or processing consent are accepted in preflight mode.
+The command validates the complete request set before writing a new private
+report. Import the report into the plan's offline preflight panel to reproduce
+the exact manifest binding and candidate counts by physical page. Counts describe
+the selected candidate set, not complete native extraction. The report is not
+an authenticated statement about how it was produced.
+
+### Retrieval regression comparison
+
+The human-labelled evaluation lab can export a coordinate-only regression run.
+After changing the retrieval implementation, restore the same source collection
+and the exact original labels, and import the historical run. The complete
+native snapshot digest and canonical label digest must match, including text
+outside the labelled fragments. Historical coordinates must resolve to unique
+in-scope native fragments. Aggregate precision, recall, reciprocal rank,
+expected abstention and per-case differences are reconstructed from the
+recorded coordinates; the current retrieval is executed independently.
+
+A mixed change means some labelled metrics improve while others decline.
+A different retrieval with unchanged scores is also shown, rather than hidden
+by the aggregate metrics. Neither a recorded run nor a better label score
+establishes factual correctness, completeness, or official notice authority.
+The historical run is unsigned and cannot establish that the recorded software
+actually executed. Evaluation and comparison can be cancelled between cases.
+
