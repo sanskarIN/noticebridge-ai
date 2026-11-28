@@ -673,3 +673,15 @@ test('collection tool directory opens the actual destination and preserves quest
   await directory.getByRole('button',{name:'Open Retrieval evaluation'}).click();
   await expect(root.getByRole('group',{name:'Collection retrieval evaluation lab',exact:true})).toHaveAttribute('open','');
 });
+
+test('collection question overview keeps literal values separate and links each source',async({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Application fee: INR 500']]),fixture('b.pdf',[['Application fee: INR 350']])],2);
+  await ask(page,'Application fee?');
+  await root.getByText('At a glance: collection question evidence',{exact:true}).click();
+  const overview=root.getByRole('group',{name:'Collection question at a glance',exact:true});
+  await expect(overview).toContainText('PDFs have different literal printed values');
+  await overview.getByRole('button',{name:'Inspect printed value page 1:1',exact:true}).last().click();
+  await expect(root.getByRole('region',{name:'Collection source inspection'}).locator('blockquote')).toHaveText('Application fee: INR 350');
+  await expect(root.getByLabel('Collection results').locator('blockquote')).toHaveCount(2);
+});

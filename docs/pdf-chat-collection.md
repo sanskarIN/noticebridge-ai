@@ -187,3 +187,7 @@ actually executed. Evaluation and comparison can be cancelled between cases.
 ## Workspace tool directory
 
 Use the searchable, grouped directory to jump directly to a collection tool. Availability reflects attached documents, saved question turns, source inspection and active indexing. Opening a destination preserves other tool state and never changes the selected PDFs or submits a question.
+
+## Question-centred answer overview
+
+The at-a-glance view groups saved results by question part, keeps each PDF's printed values and native coverage distinct, and exposes multiple values or missing matches without treating them as amendments. Bare recognized field questions can show literal values and nearby review candidates. Qualified questions remain ordinary evidence retrieval. Shared quotations are grouped by exact text across distinct PDFs and retain each source identity.

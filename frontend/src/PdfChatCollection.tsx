@@ -25,6 +25,7 @@ import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
 import { CollectionEvidenceExplorer, CollectionFieldOverview, CollectionQuestionMatches } from './PdfChatCollectionTools';
 
+import PdfChatCollectionAnswerSummary from './PdfChatCollectionAnswerSummary';
 import PdfChatCollectionNavigation, { focusCollectionDestination } from './PdfChatCollectionNavigation';
 import { collectionToolAnchor, type CollectionToolId } from './pdfChatCollectionNavigation';
 
@@ -384,6 +385,9 @@ export default function PdfChatCollection() {
             }} />
           <div id={collectionToolAnchor('models' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionModels key={'models:' + activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}
             documents={documents} turn={currentTurn} names={names} onInspect={inspect} /></div>
+          <PdfChatCollectionAnswerSummary key={'summary:' + activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' +
+            currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}
+            documents={documents} turn={currentTurn} names={names} onInspect={inspect} />
           <div className="chat-collection-results" aria-label="Collection results" id={collectionToolAnchor('results')} tabIndex={-1} key={activeTurn + ':' + turns.length + ':' +
             currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}>
             {currentTurn.results.map(result => <section key={result.documentId} className="chat-answer"
