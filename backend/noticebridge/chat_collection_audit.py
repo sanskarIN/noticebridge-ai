@@ -443,7 +443,7 @@ def audit_context(groups, citations: list[Fragment], strict: int, enabled: bool)
         fragments = [citations[item - 1] for item in ids]
         if any(fragment.page != page for fragment in fragments):
             invalid()
-        if any(not same_flow(left, right) for left, right in zip(fragments, fragments[1:])):
+        if any(not same_flow(left, right) for left, right in zip(fragments[:-1], fragments[1:], strict=True)):
             invalid()
         if sum(len(fragment.text.encode("utf-16-le")) // 2 for fragment in fragments) > 1400:
             invalid()
@@ -464,7 +464,7 @@ def audit_printed_fields(value, citations: list[Fragment], context: set[int]) ->
         previous = citation
         source = citations[citation - 1].text
         colon = source.find(":")
-        if not 0 < colon <= 100:
+        if colon <= 0 or len(source[:colon].encode("utf-16-le")) // 2 > 100:
             invalid()
         label = source[:colon].strip(JS_TRIM)
         text = source[colon + 1:].strip(JS_TRIM)
@@ -474,10 +474,13 @@ def audit_printed_fields(value, citations: list[Fragment], context: set[int]) ->
     return len(fields)
 
 
-def audit_part(value, source: NativeSource, enabled: bool, counts: Counter) -> tuple[str, int | None]:
+def audit_part(
+    value, source: NativeSource, enabled: bool, counts: Counter,
+) -> tuple[str, int | None]:
     part = obj(
         value,
-        "question physical_page kind coverage strict_match_count citations context_groups printed_fields",
+        "question physical_page kind coverage strict_match_count citations "
+        "context_groups printed_fields",
     )
     question = string(part["question"], 400, trimmed=True)
     page = part["physical_page"]
@@ -494,7 +497,8 @@ def audit_part(value, source: NativeSource, enabled: bool, counts: Counter) -> t
         row = obj(raw, "page ordinal text")
         fragment = source.source_at(row["page"], row["ordinal"])
         key = (fragment.page, fragment.ordinal)
-        if key in seen or (page is not None and fragment.page != page) or row["text"] != fragment.text:
+        if (key in seen or (page is not None and fragment.page != page)
+                or row["text"] != fragment.text):
             invalid()
         seen.add(key)
         citations.append(fragment)
@@ -591,7 +595,9 @@ def fingerprint_pdfs(paths: list[Path]) -> dict[str, int]:
     return result
 
 
-def audit_packet(packet_raw: bytes, snapshot_raw: bytes, pdf_paths: list[Path] | None = None) -> dict:
+def audit_packet(
+    packet_raw: bytes, snapshot_raw: bytes, pdf_paths: list[Path] | None = None,
+) -> dict:
     snapshot = parse_snapshot(snapshot_raw)
     row = obj(
         decode(packet_raw, MAX_PACKET_BYTES),

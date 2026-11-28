@@ -212,7 +212,8 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheck
         <canvas ref={canvasRef} role="img" aria-label={`${t.page} ${pageNumber}`} />
         {state === 'ready' && nativeLocation?.status === 'located' &&
           <div ref={highlightRef} className="native-location-marker" aria-hidden="true"
-            style={Object.fromEntries(Object.entries(nativeLocation.location).map(([key,value])=>[key,value+'%']))} />}
+            style={{left: nativeLocation.location.left + '%', top: nativeLocation.location.top + '%',
+              width: nativeLocation.location.width + '%', height: nativeLocation.location.height + '%'}} />}
         {state === 'ready' && highlight &&
           <div ref={highlightRef} className="evidence-highlight" style={highlight} aria-hidden="true" />}
       </div>
