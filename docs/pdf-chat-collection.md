@@ -288,3 +288,7 @@ A single optional IndexedDB checkpoint can store the current actual PDF bytes, p
 ## Local PDF.js snapshot ingestion
 
 From the frontend directory with Node.js 22 and installed dependencies, run `npm run ingest:collection -- --pdf a.pdf --pdf b.pdf --output snapshot.json`. The offline command shares the browser native-line assembly and bounded extraction algorithm, but uses PDF.js's Node legacy build and local font/CMap assets. Native results can differ between environments; use `--verify-snapshot existing.json --output replay.json` to measure actual equality rather than assume it. No remote API is used. Output is exclusive and may contain all retained private native text. The command is a local process, not a sandbox for untrusted PDFs.
+
+## Guarded collection scalar comparison
+
+For a saved recognized amount or calendar-date question, open the at-a-glance overview and explicitly expand its scalar comparison. Each selected PDF must supply exactly one supported printed value within the requested physical scope, without detected additional matching or nearby qualifications. Incomplete extraction, competing values, unsupported values and mismatched printed currency notation withhold arithmetic. Pairwise differences use the saved document selection order; they do not identify versions, changes, eligibility or official authority. Dates are differences between calendar days, not inclusive periods or time-zone calculations.

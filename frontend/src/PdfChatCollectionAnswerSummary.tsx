@@ -1,4 +1,5 @@
 import {useMemo,useState} from 'react';
+import PdfChatCollectionScalar from './PdfChatCollectionScalar';
 import type {Passage} from './pdfChatCore';
 import type {CollectionDocument,CollectionTurn,CollectionPart} from './pdfChatCollection';
 import {collectionAnswerSummary,filterCollectionAnswerRows,collectionSharedAnswerQuotes,
@@ -90,7 +91,7 @@ export default function PdfChatCollectionAnswerSummary({documents,turn,names,onI
         <option value="all">All question parts</option><option value="review">Parts needing review</option>
         <option value="no_match">No indexed matches anywhere</option><option value="printed">Recognized printed fields</option>
       </select></label>
-      {rows.map(row=><section className="chat-answer" key={row.question} aria-label={'Collection overview: '+row.question}>
+      {rows.map(row=><section className="chat-answer" key={result.rows.indexOf(row)+':'+row.question} aria-label={'Collection overview: '+row.question}>
         <h4>{row.question}</h4>
         {row.page!==undefined&&<p>Physical page {row.page} only in each PDF.</p>}
         <p>{row.matchingDocuments} of {row.cells.length} PDFs have matching indexed evidence.</p>
@@ -99,6 +100,7 @@ export default function PdfChatCollectionAnswerSummary({documents,turn,names,onI
         <div className="chat-collection-matrix">
           {row.cells.map(cell=><Cell key={cell.documentId} cell={cell} name={names.get(cell.documentId)??'Attached PDF'} onInspect={onInspect}/>)}
         </div>
+        {row.field&&<PdfChatCollectionScalar documents={documents} turn={turn} partIndex={result.rows.indexOf(row)} field={row.field.id} names={names} onInspect={onInspect}/>}
         <Shared documents={documents} row={row} names={names} onInspect={onInspect}/>
       </section>)}
       {!rows.length&&<p>No question part matches this overview filter.</p>}
