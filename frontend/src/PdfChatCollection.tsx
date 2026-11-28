@@ -1,3 +1,4 @@
+import PdfChatSourceHistory from './PdfChatSourceHistory';
 import PdfChatQuestionBrief from './PdfChatQuestionBrief';
 import PdfChatTurnDifference from './PdfChatTurnDifference';
 import PdfChatGuidedQuestions from './PdfChatGuidedQuestions';
@@ -492,6 +493,11 @@ export default function PdfChatCollection() {
           documents={documents} documentId={preview.documentId} physicalPage={preview.page} selected={preview.source} onInspect={inspect} />
         {preview.source&&<PdfChatCollectionReferenceTrail key={preview.documentId+':'+preview.source.page+':'+preview.source.ordinal}
           documents={documents} names={names} documentId={preview.documentId} source={preview.source} onInspect={inspect}/>}
+        {preview.source&&<PdfChatSourceHistory key={'source-history:'+preview.documentId+':'+preview.page+':'+preview.source.ordinal}
+          documents={documents} turns={turns} reviews={reviews} documentId={preview.documentId} source={preview.source}
+          disabled={busy} draftDisabled={!!question.trim()} onTurn={index=>{setActiveTurn(index);setPreview(null);
+            workspaceRoot.current?.querySelector<HTMLElement>('#'+collectionToolAnchor('history'))?.focus();}}
+          onDraft={step=>{setQuestion(step.question);setSelected(step.documentIds);setIncludeContext(step.includeContext);questionRef.current?.focus();}}/>}
         <p className="chat-note">Manual source inspection. Native fragment positions do not establish verified highlight geometry.</p>
         {preview.source?.position && <label className="chat-checkbox">
           <input type="checkbox" checked={showNativeLocation} onChange={event=>setShowNativeLocation(event.target.checked)}/>
