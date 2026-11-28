@@ -259,3 +259,67 @@ test('expanding strict question matches exposes additional pages without changin
   await expect(answer.getByRole('button', { name: /Inspect collection evidence page/ })).toHaveCount(0);
   await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
 });
+
+test('collection evidence review retains exact document identities and survives clearing questions', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [
+    fixture('first.pdf', [['Application fee: INR 500']]),
+    fixture('second.pdf', [['Application fee: INR 500', 'Other text']]),
+  ], 2);
+  const results = await ask(page, 'Application fee?');
+  for (const name of ['Document 1: first.pdf', 'Document 2: second.pdf']) {
+    await results.getByRole('region', { name: 'Collection result: ' + name })
+      .getByRole('button', { name: 'Inspect collection source [1]' }).click();
+    const inspection = root.getByRole('region', { name: 'Collection source inspection' });
+    await inspection.getByRole('button', { name: 'Save collection evidence', exact: true }).click();
+    await expect(inspection.getByRole('button', { name: 'Saved in collection review' })).toBeDisabled();
+    await inspection.getByRole('button', { name: 'Close collection source' }).click();
+  }
+  await root.getByText('Review saved collection evidence', { exact: true }).click();
+  const notebook = root.getByRole('group', { name: 'Collection evidence review notebook' });
+  const first = notebook.getByRole('region', { name: /Saved collection evidence: Document 1/ });
+  const second = notebook.getByRole('region', { name: /Saved collection evidence: Document 2/ });
+  await first.getByLabel('Collection review note').fill('Check payment terms');
+  await first.getByLabel('Collection review status').selectOption('needs_followup');
+  await second.getByLabel('Collection review note').fill('Other source note');
+  await notebook.getByLabel('Review collection status').selectOption('needs_followup');
+  await expect(first).toBeVisible();
+  await expect(second).toHaveCount(0);
+  await notebook.getByLabel('Review collection status').selectOption('all');
+  await root.getByRole('button', { name: 'Clear collection questions' }).click();
+  await expect(first.getByLabel('Collection review note')).toHaveValue('Check payment terms');
+  await expect(second.getByLabel('Collection review note')).toHaveValue('Other source note');
+  await root.getByRole('button', { name: 'Remove document 1' }).click();
+  await root.getByRole('button', { name: 'Confirm document removal' }).click();
+  await root.getByText('Review saved collection evidence', { exact: true }).click();
+  await expect(notebook.getByLabel('Collection review note')).toHaveValue('Other source note');
+  await expect(notebook.getByLabel('Collection review counts')).toContainText('1 / 100');
+});
+test('collection private review export and restore require approval and exact source binding', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [fixture('private.pdf', [['Application fee: INR 500']])], 1);
+  const results = await ask(page, 'Application fee?');
+  await results.getByRole('button', { name: 'Inspect collection source [1]' }).click();
+  await root.getByRole('button', { name: 'Save collection evidence', exact: true }).click();
+  await root.getByRole('button', { name: 'Close collection source' }).click();
+  await root.getByText('Review saved collection evidence', { exact: true }).click();
+  const notebook = root.getByRole('group', { name: 'Collection evidence review notebook' });
+  await notebook.getByLabel('Collection review note').fill('Private note');
+  const exportButton = notebook.getByRole('button', { name: 'Export collection review' });
+  await expect(exportButton).toBeDisabled();
+  await notebook.getByLabel('I approve exporting private collection review annotations.').check();
+  const downloadEvent = page.waitForEvent('download');
+  await exportButton.click();
+  const bytes = await readFile((await (await downloadEvent).path())!);
+  expect(bytes.toString()).toContain('Private note');
+  expect(bytes.toString()).not.toContain('Application fee: INR 500');
+  expect(bytes.toString()).not.toContain('private.pdf');
+  await expect(exportButton).toBeDisabled();
+  await notebook.getByRole('button', { name: 'Clear collection review notes' }).click();
+  await notebook.getByRole('button', { name: 'Confirm clear collection review' }).click();
+  await notebook.getByLabel('Import collection review').setInputFiles({ name: 'review.json', mimeType: 'application/json', buffer: bytes });
+  await expect(notebook.getByRole('region', { name: 'Collection review restore confirmation' })).toBeVisible();
+  await expect(notebook.getByLabel('Collection review note')).toHaveCount(0);
+  await notebook.getByRole('button', { name: 'Apply saved collection review' }).click();
+  await expect(notebook.getByLabel('Collection review note')).toHaveValue('Private note');
+});

@@ -6,6 +6,8 @@ import { admitCollectionDocument, collectionCitation, collectionStats, runCollec
   MAX_COLLECTION_TURNS, CollectionError, type CollectionDocument, type CollectionPart, type CollectionTurn,
 } from './pdfChatCollection';
 import PdfChatCollectionExchange from './PdfChatCollectionExchange';
+import PdfChatCollectionReview from './PdfChatCollectionReview';
+import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
 import { CollectionEvidenceExplorer, CollectionFieldOverview, CollectionQuestionMatches } from './PdfChatCollectionTools';
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
@@ -60,6 +62,7 @@ export default function PdfChatCollection() {
   const [documents, setDocuments] = useState<CollectionDocument[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [turns, setTurns] = useState<CollectionTurn[]>([]);
+  const [reviews, setReviews] = useState<CollectionReviewEntry[]>([]);
   const [activeTurn, setActiveTurn] = useState<number | null>(null);
   const [question, setQuestion] = useState('');
   const [includeContext, setIncludeContext] = useState(true);
@@ -152,6 +155,7 @@ export default function PdfChatCollection() {
   function removeDocument(id: string) {
     if (busy) return;
     setDocuments(old => old.filter(doc => doc.id !== id));
+    setReviews(old => removeDocumentReviews(old, id));
     setSelected(old => old.filter(key => key !== id));
     clearHistory();
     setRemoveId(null);
@@ -161,6 +165,7 @@ export default function PdfChatCollection() {
   function clearCollection() {
     if (busy) return;
     setDocuments([]);
+    setReviews([]);
     setSelected([]);
     clearHistory();
     setQuestion('');
@@ -260,7 +265,7 @@ export default function PdfChatCollection() {
               </label>
               <button type="button" className="chat-button" disabled={busy} onClick={() => {
                 setConfirmClear(false);
-                if (turns.length) setRemoveId(doc.id);
+                if (turns.length || reviews.some(entry => entry.documentId === doc.id)) setRemoveId(doc.id);
                 else removeDocument(doc.id);
               }}>Remove document {index + 1}</button>
             </div>
@@ -271,7 +276,7 @@ export default function PdfChatCollection() {
             {(doc.corpus.limited || doc.corpus.missingPages.length > 0) &&
               <p className="chat-note">Some pages or fragments may be missing from native search.</p>}
             {removeId === doc.id && <div className="chat-note" aria-label="Remove collection document confirmation">
-              <p>Removing this PDF clears all existing collection questions and source inspection to avoid stale results.</p>
+              <p>Removing this PDF clears collection questions, source inspection and any review notes saved for this PDF. Notes for other attached PDFs remain.</p>
               <div className="chat-toolbar">
                 <button type="button" className="chat-button" onClick={() => removeDocument(doc.id)}>Confirm document removal</button>
                 <button type="button" className="chat-button" onClick={() => setRemoveId(null)}>Keep document</button>
@@ -286,7 +291,7 @@ export default function PdfChatCollection() {
           }}>Clear collection</button>
         </div>
         {confirmClear && <div className="chat-note" aria-label="Clear collection confirmation">
-          <p>Remove all collection PDFs, question turns and source inspection? The original/revised chat will not change.</p>
+          <p>Remove all collection PDFs, question turns, saved review notes and source inspection? The original/revised chat will not change.</p>
           <div className="chat-toolbar">
             <button type="button" className="chat-button" disabled={busy} onClick={clearCollection}>Confirm clear collection</button>
             <button type="button" className="chat-button" onClick={() => setConfirmClear(false)}>Keep collection</button>
@@ -356,6 +361,15 @@ export default function PdfChatCollection() {
           <button type="button" className="chat-button" onClick={closePreview}>Close collection source</button>
         </div>
         {preview.source && <blockquote>{preview.source.text}</blockquote>}
+        {preview.source && <button type="button" className="chat-button" disabled={busy ||
+          reviews.length >= MAX_COLLECTION_REVIEW_ITEMS || reviews.some(entry =>
+            collectionReviewKey(entry.documentId, entry.source) === collectionReviewKey(preview.documentId, preview.source!))}
+          onClick={() => {
+            if (!preview.source) return;
+            try { setReviews(pinCollectionEvidence(documents, reviews, preview.documentId, preview.source)); }
+            catch (cause) { setError(errorText(cause)); }
+          }}>{reviews.some(entry => collectionReviewKey(entry.documentId, entry.source) ===
+            collectionReviewKey(preview.documentId, preview.source!)) ? 'Saved in collection review' : 'Save collection evidence'}</button>}
         <p className="chat-muted">{coverageText[pageCoverage(previewDoc.corpus, preview.page) === 'limited'
           ? 'partial' : pageCoverage(previewDoc.corpus, preview.page) as Exclude<CollectionPart['coverage'], 'partial'>]}</p>
         <div className="chat-toolbar">
@@ -370,6 +384,8 @@ export default function PdfChatCollection() {
           <PdfEvidencePreview file={previewDoc.file} pageNumber={preview.page} inspectionOnly />
         </Suspense>
       </section>}
+      {documents.length > 0 && !busy && <PdfChatCollectionReview key={documents.map(doc => doc.id).join(':')}
+        documents={documents} entries={reviews} names={names} onChange={setReviews} onInspect={inspect} />}
       {documents.length > 0 && <PdfChatCollectionExchange key={documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} disabled={busy}
         onApply={restored => {

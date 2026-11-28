@@ -40,3 +40,20 @@ browser performance measurements and accessibility testing before release.
 The printed-field matrix compares only recognized literal labels and values across the explicitly selected PDFs. Missing values, multiple values within one PDF, and differing single values are distinct states. It does not choose an authoritative notice. Filter the matrix to review unresolved fields, and inspect a citation in its original document and physical page.
 
 The collection evidence explorer supports literal phrases and explicit clause references. Case folding is optional and ASCII-only. Matches are native-text offsets, not visual bounding boxes. A physical-page filter never falls back to another page or document. Search results are paginated per document and do not create chat turns. For a question whose strict matches exceed the displayed citations, the expansion reconstructs all strict matches from the same index and scope without changing the original answer.
+
+## Collection evidence review
+
+Save a specific native fragment from source inspection and assign a personal
+review status and note. The document fingerprint is part of the entry identity;
+matching fragment locations or text in unrelated PDFs do not collapse.
+The notebook supports document/status/text filters and bounded pagination.
+Clearing questions does not erase notes. Removing a document requires explicit
+confirmation if it has notes and removes only that document's annotations.
+
+Export is opt-in and includes private authored notes, review flags, exact
+collection fingerprints, physical locations and SHA-256 hashes of extracted
+text, not PDF bytes or automatically copied quotations. Import stages a
+complete replacement only after the current attachment set and every saved
+text hash match. Changed extraction, malformed encoding, duplicate entries
+and noncanonical JSON fail closed. User confirmation is required to apply.
+Review flags do not establish official authority or answer correctness.

@@ -499,3 +499,8 @@
 .chat-collection-evidence-hits mark{background:#f2d47c;color:#162338;border-radius:2px}
 .chat-collection-inspection .chat-answer{margin:8px 0}
 @media(max-width:640px){.chat-collection-filter-grid,.chat-collection-matrix{grid-template-columns:1fr}}
+
+.chat-collection-review-entry{margin:12px 0;display:grid;gap:10px}
+.chat-collection-review-entry label{display:grid;gap:6px;min-width:0}
+.chat-collection-review-entry :is(select,textarea){background:#071325;color:#e8edf7;border:1px solid #50627d;border-radius:8px;padding:10px;max-width:100%;min-width:0;font:inherit}
+.chat-collection-review-entry textarea{width:100%;resize:vertical}
