@@ -15,7 +15,7 @@ async function workspace(page:Page,fixtures:ReturnType<typeof pdf>[]){
 }
 async function expand(root:Locator,name:string){
   const panel=root.getByRole('group',{name,exact:true});
-  await panel.locator('summary').first().click();
+  if(await panel.getAttribute('open')===null)await panel.locator('summary').first().click();
   return panel;
 }
 async function ask(root:Locator,question:string){
