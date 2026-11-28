@@ -41,3 +41,13 @@ test('filter and pagination retain exact source objects and the selected page', 
   expect(()=>filterCollectionFragments(rows,{text:'x'.repeat(121),nearbyOnly:false})).toThrow();
   expect(()=>collectionFragmentPage(rows,4)).toThrow();
 });
+
+test('missing geometry never earns a geometry-supported neighbor label', async () => {
+  const a = await add([], 'a', [
+    { role: 'original', page: 1, ordinal: 1, text: 'no coordinates' },
+    source(1,2,'selected',40,685),
+    { role: 'original', page: 1, ordinal: 3, text: 'no coordinates either' },
+  ]);
+  expect(collectionPageFragments([a], a.id, 1, a.corpus.passages[1]).fragments.map(row => row.relationship))
+    .toEqual(['other_fragment', 'selected', 'other_fragment']);
+});

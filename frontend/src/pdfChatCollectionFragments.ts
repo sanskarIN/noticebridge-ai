@@ -39,7 +39,7 @@ export function collectionPageFragments(documents: readonly CollectionDocument[]
   return { documentId, physicalPage, coverage: pageCoverage(doc.corpus, physicalPage),
     fragments: rows.map(source => ({
       source, relationship: source === selected ? 'selected' :
-        selected && Math.abs(source.ordinal - selected.ordinal) === 1 &&
+        selected && source.position && selected.position && Math.abs(source.ordinal - selected.ordinal) === 1 &&
         (source.ordinal < selected.ordinal ? sameTextFlow(source, selected) : sameTextFlow(selected, source))
           ? 'nearby_same_flow' : 'other_fragment',
     })) };

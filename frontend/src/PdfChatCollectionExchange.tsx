@@ -26,8 +26,12 @@ export default function PdfChatCollectionExchange({ documents, turns, disabled, 
   disabled: boolean;
   onApply: (turns: CollectionTurn[]) => void;
 }) {
-  const [planConsent, setPlanConsent] = useState(false);
-  const [reportConsent, setReportConsent] = useState(false);
+  // Tie approval to the exact immutable history reference. A new history
+  // cannot inherit a prior approval, even before an effect executes.
+  const [planApproved, setPlanApproved] = useState<readonly CollectionTurn[] | null>(null);
+  const [reportApproved, setReportApproved] = useState<readonly CollectionTurn[] | null>(null);
+  const planConsent = planApproved === turns;
+  const reportConsent = reportApproved === turns;
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -51,8 +55,8 @@ export default function PdfChatCollectionExchange({ documents, turns, disabled, 
         ? 'Private collection question plan exported locally.'
         : 'Private collection evidence report exported locally.' });
       // A new disclosure requires a new explicit approval.
-      if (kind === 'plan') setPlanConsent(false);
-      else setReportConsent(false);
+      if (kind === 'plan') setPlanApproved(null);
+      else setReportApproved(null);
     } catch (cause) {
       setFeedback({ error: true, text: failure(cause, 'Unable to export collection file.') });
     }
@@ -103,7 +107,7 @@ export default function PdfChatCollectionExchange({ documents, turns, disabled, 
       <section aria-label="Collection question plan">
         <h4>Question plan</h4>
         <label className="chat-checkbox"><input type="checkbox" checked={planConsent}
-          disabled={disabled || busy} onChange={event => setPlanConsent(event.target.checked)} />
+          disabled={disabled || busy} onChange={event => setPlanApproved(event.target.checked ? turns : null)} />
           I approve exporting private collection questions and fingerprints.</label>
         <button type="button" className="chat-button" disabled={disabled || busy || !planConsent || !turns.length}
           onClick={() => exportFile('plan')}>Export collection question plan</button>
@@ -114,7 +118,7 @@ export default function PdfChatCollectionExchange({ documents, turns, disabled, 
       <section aria-label="Collection evidence report">
         <h4>Evidence report</h4>
         <label className="chat-checkbox"><input type="checkbox" checked={reportConsent}
-          disabled={disabled || busy} onChange={event => setReportConsent(event.target.checked)} />
+          disabled={disabled || busy} onChange={event => setReportApproved(event.target.checked ? turns : null)} />
           I approve exporting private collection excerpts and questions.</label>
         <button type="button" className="chat-button" disabled={disabled || busy || !reportConsent || !turns.length}
           onClick={() => exportFile('report')}>Export collection evidence report</button>

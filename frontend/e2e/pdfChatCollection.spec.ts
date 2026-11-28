@@ -472,3 +472,21 @@ test('collection source fragment browser keeps native inspection within the sele
   await expect(inspection.locator('blockquote')).toHaveText('Payment instructions');
   await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
 });
+
+test('collection export approvals are invalidated by a change to question history', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [fixture('notice.pdf', [['Application fee: INR 500', 'Eligibility: Class 12']])], 1);
+  await ask(page, 'Application fee?');
+  await root.getByText('Save or verify private collection work', { exact: true }).click();
+  const plan = root.getByRole('button', { name: 'Export collection question plan' });
+  const report = root.getByRole('button', { name: 'Export collection evidence report' });
+  await root.getByLabel('I approve exporting private collection questions and fingerprints.').check();
+  await root.getByLabel('I approve exporting private collection excerpts and questions.').check();
+  await expect(plan).toBeEnabled();
+  await expect(report).toBeEnabled();
+  await ask(page, 'Eligibility?');
+  await expect(plan).toBeDisabled();
+  await expect(report).toBeDisabled();
+  await expect(root.getByLabel('I approve exporting private collection questions and fingerprints.')).not.toBeChecked();
+  await expect(root.getByLabel('I approve exporting private collection excerpts and questions.')).not.toBeChecked();
+});
