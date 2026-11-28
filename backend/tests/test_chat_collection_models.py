@@ -112,7 +112,9 @@ def test_request_set_rejects_missing_changed_and_swapped_files(prepared, tmp_pat
         collection.read_requests(manifest, tmp_path)
 
 
-@pytest.mark.parametrize("question,role", [("Different question?", "original"), ("Application fee?", "revised")])
+@pytest.mark.parametrize("question,role", [
+    ("Different question?", "original"), ("Application fee?", "revised"),
+])
 def test_request_must_match_manifest_question_and_single_role(question, role):
     requests = [request("A", question, role), request("B")]
     manifest = collection.parse_manifest(chat_pipeline.encode(manifest_value(requests)))
@@ -184,7 +186,9 @@ def test_invalid_config_or_incomplete_set_never_invokes_model(prepared, tmp_path
             ))
 
 
-def test_collection_cli_preserves_existing_output_on_failure(prepared, tmp_path, monkeypatch, capsys):
+def test_collection_cli_preserves_existing_output_on_failure(
+    prepared, tmp_path, monkeypatch, capsys,
+):
     _, source, _ = prepared
     output = tmp_path / "result.json"
     output.write_bytes(b"existing")

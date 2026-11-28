@@ -68,7 +68,8 @@ export default function PdfChatCollectionBatch({ documents, selected, turns, nam
     (filter === 'attention' ? row.limited || row.state !== 'all_matched' : row.state === 'no_match'));
   const current = Math.min(page, Math.max(1, Math.ceil(rows.length / BATCH_RESULTS_PAGE_SIZE)));
   const shown = batchPage(rows, current);
-  const fresh = stage?.documents === documents && stage?.history === turns;
+  const fresh = stage?.documents === documents && stage?.history === turns &&
+    stage?.result.turns.every(turn => turn.step.documentIds.join(':') === selected.join(':'));
   function reset() { setStage(null); setError(''); setFeedback(''); setPage(1); }
   async function prepare() {
     if (controller.current || !selected.length || !capacity) return;
@@ -156,7 +157,7 @@ export default function PdfChatCollectionBatch({ documents, selected, turns, nam
         <span>Page {current} of {shown.pages}</span>
         <button type="button" className="chat-button" disabled={current === shown.pages} onClick={() => setPage(current + 1)}>Next batch questions</button>
       </div>}
-      {!fresh && <p className="chat-note">The collection or history changed. This batch must be prepared again.</p>}
+      {!fresh && <p className="chat-note">The collection, selection or history changed. This batch must be prepared again.</p>}
       <div className="chat-toolbar">
         <button type="button" className="chat-button" disabled={!fresh || busy} onClick={apply}>Append prepared collection questions</button>
         <button type="button" className="chat-button" onClick={reset}>Discard prepared collection batch</button>

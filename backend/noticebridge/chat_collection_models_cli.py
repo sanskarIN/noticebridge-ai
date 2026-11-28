@@ -5,7 +5,12 @@ import asyncio
 import sys
 from pathlib import Path
 
-from .chat_collection_models import MAX_MANIFEST_BYTES, parse_manifest, read_requests, run_collection
+from .chat_collection_models import (
+    MAX_MANIFEST_BYTES,
+    parse_manifest,
+    read_requests,
+    run_collection,
+)
 from .chat_embeddings import EmbeddingError
 from .compare_cli import CliError, _destination, _publish_report
 
