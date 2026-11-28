@@ -1,3 +1,4 @@
+import PdfChatCollectionComposer from './PdfChatCollectionComposer';
 import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { MAX_QUESTION, pageCoverage, type Passage } from './pdfChatCore';
 import { readPdf } from './pdfChatExtract';
@@ -369,6 +370,7 @@ export default function PdfChatCollection() {
           to the same physical page number. Choose documents above instead of using original/revised routing phrases.</p>
         <label className="chat-checkbox"><input type="checkbox" checked={includeContext}
           onChange={event => setIncludeContext(event.target.checked)} /> Search nearby lines in each collection document</label>
+        <PdfChatCollectionComposer documents={documents} question={question} selected={selected} includeContext={includeContext} turns={turns} names={names}/>
         <div className="chat-toolbar">
           <span className="chat-muted">{question.length}/{MAX_QUESTION} · {turns.length}/{MAX_COLLECTION_TURNS} turns</span>
           <button type="submit" className="primary-button" disabled={!canAsk}>Ask collection</button>
