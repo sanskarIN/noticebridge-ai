@@ -4,7 +4,7 @@ import type {CollectionDocument,CollectionTurn} from './pdfChatCollection';
 import {emptyLocalPipelineConfig,validLocalPipelineConfig} from './pdfChatLocalPipeline';
 import {isLocalChatOrigin} from './pdfChatLocalTransport';
 import {prepareCollectionModelPlan,reviewCollectionModelResult,bundleCollectionModelResults,runCollectionLocalModels,
-  loadCollectionModelResultFile,type CollectionModelPlan,type CollectionModelReview} from './pdfChatCollectionModels';
+  loadCollectionModelResultFile,reviewCollectionModelBundle,MAX_COLLECTION_MODEL_RESULT_BYTES,type CollectionModelPlan,type CollectionModelReview} from './pdfChatCollectionModels';
 
 function save(text:string,name:string){
   const url=URL.createObjectURL(new Blob([text],{type:'application/json'}));
@@ -91,6 +91,23 @@ export default function PdfChatCollectionModels({documents,turn,names,onInspect}
     }catch{if(active(token,operation))setError('Model result rejected. Select the exact result for this PDF and request.');}
     finally{finish(token);}
   }
+  async function importBundle(event:ChangeEvent<HTMLInputElement>){
+    const file=event.currentTarget.files?.[0];event.currentTarget.value='';
+    if(!file||!plan)return;
+    const task=start();if(!task)return;
+    const {operation,token}=task;
+    setReview([]);setInputs({});setBundleConsent(false);
+    try{
+      if(!file.size||file.size>MAX_COLLECTION_MODEL_RESULT_BYTES)throw new Error('size');
+      const bytes=await file.arrayBuffer();
+      operation.signal.throwIfAborted();
+      if(bytes.byteLength!==file.size)throw new Error('size');
+      const text=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes);
+      const value=await reviewCollectionModelBundle(documents,plan,text);
+      if(active(token,operation))setReview(value);
+    }catch{if(active(token,operation))setError('Collection model bundle rejected. Every result must match this exact plan.');}
+    finally{finish(token);}
+  }
   async function direct(){
     if(!plan||!local||!localConsent||!validLocalPipelineConfig(config))return;
     const task=start();if(!task)return;
@@ -153,6 +170,12 @@ export default function PdfChatCollectionModels({documents,turn,names,onInspect}
           <input type="file" accept=".json,application/json" disabled={busy} onChange={event=>void importResult(event,entry.documentId)}/>
         </label>
       </section>)}
+      <p className="chat-muted">For offline batch processing, save the manifest and all request files to a private directory.
+        Run the collection model CLI using the exact installed model tags and digests.</p>
+      <pre>python -m noticebridge.chat_collection_models_cli noticebridge-collection-model-manifest.json --request-directory . --output collection-results.json --embedding-model MODEL:TAG --embedding-digest DIGEST --answer-model MODEL:TAG --answer-digest DIGEST --allow-local-processing</pre>
+      <label className="chat-session-file">Import complete collection model result bundle
+        <input type="file" accept=".json,application/json" disabled={busy} onChange={event=>void importBundle(event)}/>
+      </label>
       {Object.keys(inputs).length===plan.requests.length&&<>
         <label className="chat-checkbox"><input type="checkbox" checked={bundleConsent} disabled={busy}
           onChange={event=>setBundleConsent(event.target.checked)}/> I approve exporting the reviewed collection model result bundle.</label>

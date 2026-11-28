@@ -132,3 +132,7 @@ Export a private canonical snapshot of the bounded native extraction, with expli
 ## Independent collection local AI proposals
 
 Prepare bounded semantic-ranking/extractive requests for one saved question part and explicitly selected PDFs. Each request retains its own PDF identity and native source map. No text is pooled across PDFs. Empty native scopes are skipped. Preparation sends no network requests; export and optional loopback processing require explicit consent. Results are independently checked against the existing local model protocol and exact local source fragments. A portable result bundle binds all constituent results to the canonical plan manifest. Model outputs do not change the deterministic conversation or establish verified answers.
+
+### Offline collection AI runner
+
+The collection model CLI accepts the canonical manifest and a directory containing the exact named request files. It validates every file length, SHA-256, question and single-document scope before invoking the trusted local runtime. Requests run sequentially with a bounded overall deadline; incomplete runs do not publish partial bundles. The browser imports the complete result only after independently validating every nested response against the active plan. Local runtime configuration and processing are opt-in and do not certify the correctness of model proposals.
