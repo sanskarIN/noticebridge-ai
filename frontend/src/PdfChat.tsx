@@ -11,6 +11,7 @@ import PdfChatSourceReplay from './PdfChatSourceReplay';
 import PdfChatLabelWorkbench from './PdfChatLabelWorkbench';
 import PdfChatStructure from './PdfChatStructure';
 import PdfChatCorpusExport from './PdfChatCorpusExport';
+import PdfChatCollection from './PdfChatCollection';
 import PdfChatWorkspace from './PdfChatWorkspace';
 import PdfChatSessionPanel from './PdfChatSessionPanel';
 import PdfChatEvidenceReport from './PdfChatEvidenceReport';
@@ -554,6 +555,7 @@ export default function PdfChat() {
         <h2 id="chat-tools-title" tabIndex={-1}>3. Evidence and review tools</h2>
         <p className="chat-muted">Optional tools for comparing, inspecting, reviewing and exporting local evidence.
           You can ask questions without opening these panels.</p>
+        <PdfChatCollection />
         {!indexing && attached.length === 2 && <PdfChatLiteralDiff
           key={'literal-diff:' + generation.current.original + ':' + generation.current.revised}
           index={index} onInspect={inspectNative} />}

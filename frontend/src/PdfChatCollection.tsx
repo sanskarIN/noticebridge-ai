@@ -1,0 +1,369 @@
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { MAX_QUESTION, pageCoverage, type Passage } from './pdfChatCore';
+import { readPdf } from './pdfChatExtract';
+import { admitCollectionDocument, collectionCitation, collectionStats, runCollectionStep,
+  MAX_COLLECTION_DOCUMENTS, MAX_COLLECTION_BYTES, MAX_COLLECTION_PASSAGES, MAX_COLLECTION_CHARS,
+  MAX_COLLECTION_TURNS, CollectionError, type CollectionDocument, type CollectionPart, type CollectionTurn,
+} from './pdfChatCollection';
+import PdfChatCollectionExchange from './PdfChatCollectionExchange';
+
+const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
+type Preview = { documentId: string; page: number; source?: Passage };
+type BatchFeedback = { accepted: number; errors: string[]; cancelled: boolean };
+const MiB = 1024 * 1024;
+const formatBytes = (bytes: number) => (bytes / MiB).toFixed(2) + ' MiB';
+function displayName(doc: CollectionDocument, index: number): string {
+  return 'Document ' + (index + 1) + ': ' + doc.file.name;
+}
+function errorText(error: unknown): string {
+  return error instanceof CollectionError ? error.message : 'Unable to process this local PDF.';
+}
+const coverageText: Record<CollectionPart['coverage'], string> = {
+  some_text: 'Some native text was indexed; completeness is not established.',
+  partial: 'Native extraction is incomplete. Inspect the source directly.',
+  no_indexed_text: 'No searchable native text was indexed here. Scanned or image-only material may be present.',
+  not_present: 'This physical page does not exist in the PDF.',
+  not_indexed: 'This physical page was not indexed within the local limits.',
+};
+
+function CollectionAnswer({ part, onInspect }: { part: CollectionPart; onInspect: (source: Passage, target: HTMLElement) => void }) {
+  const { answer } = part;
+  return <div className="chat-collection-part">
+    <h5>{answer.question}</h5>
+    {answer.pageFilter !== undefined && <p className="chat-muted">Physical page {answer.pageFilter} only.</p>}
+    <p className={part.coverage === 'some_text' ? 'chat-muted' : 'chat-note'}>{coverageText[part.coverage]}</p>
+    {answer.kind === 'insufficient' ? <p>No matching indexed evidence. This is not proof that the document lacks the information.</p> : <>
+      <p className="chat-muted">{answer.matchedCounts.original} unique strict match(es);
+        {' '}{answer.citations.length} displayed source fragment(s).</p>
+      {answer.contextGroups.length > 0 && <p className="chat-note">Nearby-line leads are shown as separate
+        quotations. They do not establish a combined statement.</p>}
+      {answer.printedFields.length > 0 && <div className="chat-printed-fields">
+        <h5>Literal printed fields in displayed matches</h5>
+        {answer.printedFields.map(field => <p key={field.citation}>{field.label}: {field.value} [{field.citation}]</p>)}
+      </div>}
+      {answer.citations.map((source, index) => <div className="chat-citation" key={source.page + ':' + source.ordinal}>
+        <p className="chat-muted">[{index + 1}] Physical page {source.page} · fragment {source.ordinal}</p>
+        <blockquote>{source.text}</blockquote>
+        <button type="button" className="chat-button"
+          onClick={event => onInspect(source, event.currentTarget)}>Inspect collection source [{index + 1}]</button>
+      </div>)}
+    </>}
+  </div>;
+}
+
+export default function PdfChatCollection() {
+  const [documents, setDocuments] = useState<CollectionDocument[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [turns, setTurns] = useState<CollectionTurn[]>([]);
+  const [activeTurn, setActiveTurn] = useState<number | null>(null);
+  const [question, setQuestion] = useState('');
+  const [includeContext, setIncludeContext] = useState(true);
+  const [loading, setLoading] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [batch, setBatch] = useState<BatchFeedback | null>(null);
+  const [error, setError] = useState('');
+  const [removeId, setRemoveId] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const generation = useRef(0);
+  const controller = useRef<AbortController | null>(null);
+  const questionRef = useRef<HTMLTextAreaElement>(null);
+  const previewHeading = useRef<HTMLHeadingElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => () => {
+    generation.current++;
+    controller.current?.abort();
+  }, []);
+  useEffect(() => {
+    if (preview) previewHeading.current?.focus();
+  }, [preview]);
+
+  const stats = collectionStats(documents);
+  const busy = loading !== null;
+  const currentTurn = activeTurn === null ? null : turns[activeTurn] ?? null;
+  const previewDoc = preview ? documents.find(doc => doc.id === preview.documentId) : undefined;
+  const canAsk = !busy && selected.length > 0 && !!question.trim() && turns.length < MAX_COLLECTION_TURNS;
+  const names = new Map(documents.map((doc, index) => [doc.id, displayName(doc, index)]));
+
+  async function attach(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = '';
+    if (!files.length || busy || controller.current) return;
+    if (files.length > MAX_COLLECTION_DOCUMENTS) {
+      setError('Select no more than six PDFs in one batch.');
+      return;
+    }
+    const token = ++generation.current;
+    const operation = new AbortController();
+    controller.current = operation;
+    setLoading('Preparing selected PDFs…');
+    setCancelling(false);
+    setBatch(null);
+    setError('');
+    setRemoveId(null);
+    setConfirmClear(false);
+    setPreview(null);
+    let next = [...documents];
+    let nextSelected = [...selected];
+    let accepted = 0;
+    const errors: string[] = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        operation.signal.throwIfAborted();
+        if (token !== generation.current) return;
+        setLoading('Indexing collection PDF ' + (i + 1) + ' of ' + files.length + '…');
+        try {
+          const doc = await admitCollectionDocument(next, files[i], operation.signal, readPdf);
+          operation.signal.throwIfAborted();
+          if (token !== generation.current) return;
+          next = [...next, doc];
+          nextSelected = [...nextSelected, doc.id];
+          accepted++;
+          setDocuments(next);
+          setSelected(nextSelected);
+        } catch (cause) {
+          if (operation.signal.aborted) break;
+          errors.push(files[i].name.slice(0, 180) + ': ' + errorText(cause));
+        }
+      }
+    } catch (cause) {
+      if (!operation.signal.aborted) errors.push(errorText(cause));
+    } finally {
+      if (token === generation.current) {
+        controller.current = null;
+        setLoading(null);
+        setCancelling(false);
+        setBatch({ accepted, errors, cancelled: operation.signal.aborted });
+      }
+    }
+  }
+
+  function clearHistory() {
+    setTurns([]);
+    setActiveTurn(null);
+    setPreview(null);
+    setError('');
+  }
+  function removeDocument(id: string) {
+    if (busy) return;
+    setDocuments(old => old.filter(doc => doc.id !== id));
+    setSelected(old => old.filter(key => key !== id));
+    clearHistory();
+    setRemoveId(null);
+    setConfirmClear(false);
+    setBatch(null);
+  }
+  function clearCollection() {
+    if (busy) return;
+    setDocuments([]);
+    setSelected([]);
+    clearHistory();
+    setQuestion('');
+    setBatch(null);
+    setRemoveId(null);
+    setConfirmClear(false);
+  }
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canAsk) return;
+    setError('');
+    try {
+      const step = { question: question.trim(),
+        documentIds: documents.filter(doc => selected.includes(doc.id)).map(doc => doc.id), includeContext };
+      const turn = runCollectionStep(documents, step);
+      setTurns([...turns, turn]);
+      setActiveTurn(turns.length);
+      setQuestion('');
+      setPreview(null);
+    } catch (cause) { setError(errorText(cause)); }
+  }
+  function inspect(documentId: string, source: Passage, target: HTMLElement) {
+    try {
+      collectionCitation(documents, documentId, source);
+      returnFocus.current = target;
+      setPreview({ documentId, page: source.page, source });
+    } catch (cause) { setError(errorText(cause)); }
+  }
+  function closePreview() {
+    setPreview(null);
+    const target = returnFocus.current;
+    returnFocus.current = null;
+    if (target?.isConnected) target.focus();
+  }
+  function repeatQuestion() {
+    if (!currentTurn) return;
+    setQuestion(currentTurn.step.question);
+    setSelected([...currentTurn.step.documentIds]);
+    setIncludeContext(currentTurn.step.includeContext);
+    questionRef.current?.focus();
+  }
+
+  return <details className="chat-session chat-collection" id="chat-collection">
+    <summary>Search an independent PDF collection (up to six documents)</summary>
+    <section aria-label="Independent PDF collection" className="chat-collection-body">
+      <h3>Search across multiple PDFs</h3>
+      <p>Attach unrelated notices or reference PDFs, choose which documents to search, and inspect each matching source.
+        Results are grouped by document; no version order, amendment or official applicability is inferred.</p>
+      <p className="chat-note">This is a separate browser-local workspace. It does not upload files, automatically invoke AI
+        models, or change your original/revised PDF conversation. Identical PDF bytes are deduplicated.</p>
+      <div className="chat-collection-budget" aria-label="Collection processing budget">
+        <div><strong>{stats.documents} / {MAX_COLLECTION_DOCUMENTS}</strong><span>PDF documents</span></div>
+        <div><strong>{formatBytes(stats.bytes)} / {formatBytes(MAX_COLLECTION_BYTES)}</strong><span>Local PDF bytes</span></div>
+        <div><strong>{stats.passages} / {MAX_COLLECTION_PASSAGES}</strong><span>Native fragments</span></div>
+        <div><strong>{stats.chars} / {MAX_COLLECTION_CHARS}</strong><span>Retained text units</span></div>
+      </div>
+      <div className="chat-file chat-collection-upload">
+        <label>Attach collection PDFs
+          <input type="file" accept=".pdf,application/pdf" multiple
+            disabled={busy || documents.length >= MAX_COLLECTION_DOCUMENTS || stats.bytes >= MAX_COLLECTION_BYTES}
+            onChange={event => void attach(event)} />
+        </label>
+        <p className="chat-muted">10 MiB per PDF. Files are fingerprinted and extracted sequentially.
+          An invalid file does not replace other accepted documents.</p>
+        {loading && <div className="chat-toolbar">
+          <p role="status">{cancelling ? 'Cancelling collection indexing…' : loading}</p>
+          <button type="button" className="chat-button" disabled={cancelling} onClick={() => {
+            setCancelling(true); controller.current?.abort();
+          }}>Cancel collection indexing</button>
+        </div>}
+        {batch && <div aria-label="Collection attachment result">
+          <p role="status">{batch.accepted} collection PDF(s) accepted.{batch.cancelled ? ' Indexing cancelled; accepted PDFs retained.' : ''}</p>
+          {batch.errors.length > 0 && <div className="chat-error" role="alert">
+            <p>{batch.errors.length} file(s) were not admitted:</p>
+            <ul>{batch.errors.map((message, index) => <li key={index}>{message}</li>)}</ul>
+          </div>}
+        </div>}
+      </div>
+      {documents.length > 0 && <>
+        <div className="chat-toolbar">
+          <h4>Choose documents for the next question</h4>
+          <div className="chat-collection-actions">
+            <button type="button" className="chat-button" disabled={busy || selected.length === documents.length}
+              onClick={() => setSelected(documents.map(doc => doc.id))}>Select all collection PDFs</button>
+            <button type="button" className="chat-button" disabled={busy || !selected.length}
+              onClick={() => setSelected([])}>Deselect all collection PDFs</button>
+          </div>
+        </div>
+        <div className="chat-collection-documents">
+          {documents.map((doc, index) => <section key={doc.id} className="chat-file" aria-label={displayName(doc, index)}>
+            <div className="chat-toolbar">
+              <label className="chat-checkbox">
+                <input type="checkbox" disabled={busy} checked={selected.includes(doc.id)} onChange={event => {
+                  const checked = event.target.checked;
+                  setSelected(old => checked ? [...old, doc.id] : old.filter(id => id !== doc.id));
+                }} /> Search document {index + 1}
+              </label>
+              <button type="button" className="chat-button" disabled={busy} onClick={() => {
+                setConfirmClear(false);
+                if (turns.length) setRemoveId(doc.id);
+                else removeDocument(doc.id);
+              }}>Remove document {index + 1}</button>
+            </div>
+            <h5 className="chat-filename">{doc.file.name}</h5>
+            <p className="chat-muted">{formatBytes(doc.file.size)} · {doc.corpus.processedPages} of {doc.corpus.pageCount}
+              {' '}physical pages indexed · {doc.corpus.passages.length} native fragments</p>
+            <details className="chat-collection-fingerprint"><summary>Source SHA-256</summary><code>{doc.id}</code></details>
+            {(doc.corpus.limited || doc.corpus.missingPages.length > 0) &&
+              <p className="chat-note">Some pages or fragments may be missing from native search.</p>}
+            {removeId === doc.id && <div className="chat-note" aria-label="Remove collection document confirmation">
+              <p>Removing this PDF clears all existing collection questions and source inspection to avoid stale results.</p>
+              <div className="chat-toolbar">
+                <button type="button" className="chat-button" onClick={() => removeDocument(doc.id)}>Confirm document removal</button>
+                <button type="button" className="chat-button" onClick={() => setRemoveId(null)}>Keep document</button>
+              </div>
+            </div>}
+          </section>)}
+        </div>
+        <div className="chat-toolbar">
+          <span className="chat-muted">{selected.length} of {documents.length} collection documents selected.</span>
+          <button type="button" className="chat-button" disabled={busy} onClick={() => {
+            setRemoveId(null); setConfirmClear(true);
+          }}>Clear collection</button>
+        </div>
+        {confirmClear && <div className="chat-note" aria-label="Clear collection confirmation">
+          <p>Remove all collection PDFs, question turns and source inspection? The original/revised chat will not change.</p>
+          <div className="chat-toolbar">
+            <button type="button" className="chat-button" disabled={busy} onClick={clearCollection}>Confirm clear collection</button>
+            <button type="button" className="chat-button" onClick={() => setConfirmClear(false)}>Keep collection</button>
+          </div>
+        </div>}
+      </>}
+      <form className="chat-form" onSubmit={submit}>
+        <label>Collection question
+          <textarea ref={questionRef} value={question} maxLength={MAX_QUESTION}
+            rows={3} placeholder="What is the application fee?" onChange={event => setQuestion(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                if (canAsk) event.currentTarget.form?.requestSubmit();
+              }
+            }} />
+        </label>
+        <p className="chat-muted">Ask up to four explicit question parts. Use “on page 2” to limit all selected PDFs
+          to the same physical page number. Choose documents above instead of using original/revised routing phrases.</p>
+        <label className="chat-checkbox"><input type="checkbox" checked={includeContext}
+          onChange={event => setIncludeContext(event.target.checked)} /> Search nearby lines in each collection document</label>
+        <div className="chat-toolbar">
+          <span className="chat-muted">{question.length}/{MAX_QUESTION} · {turns.length}/{MAX_COLLECTION_TURNS} turns</span>
+          <button type="submit" className="primary-button" disabled={!canAsk}>Ask collection</button>
+        </div>
+        {turns.length >= MAX_COLLECTION_TURNS && <p className="chat-note">Collection conversation limit reached. Export
+          or clear the questions before continuing.</p>}
+        {error && <p role="alert" className="chat-error">{error}</p>}
+      </form>
+      {turns.length > 0 && <section className="chat-collection-history" aria-label="Collection conversation">
+        <div className="chat-toolbar">
+          <h4>Collection question history</h4>
+          <button type="button" className="chat-button" disabled={busy} onClick={clearHistory}>Clear collection questions</button>
+        </div>
+        <label className="chat-collection-history-select">View collection question
+          <select value={activeTurn ?? turns.length - 1} onChange={event => {
+            setActiveTurn(Number(event.target.value)); setPreview(null);
+          }}>
+            {turns.map((turn, index) => <option key={index} value={index}>{index + 1}. {turn.step.question}</option>)}
+          </select>
+        </label>
+        {currentTurn && <>
+          <div className="chat-user"><strong>Question {activeTurn! + 1}</strong>{currentTurn.step.question}</div>
+          <div className="chat-toolbar">
+            <p className="chat-muted">{currentTurn.results.length} document result(s). Results are not a global ranking.</p>
+            <button type="button" className="chat-button" disabled={busy} onClick={repeatQuestion}>Copy this collection question</button>
+          </div>
+          <div className="chat-collection-results" aria-label="Collection results">
+            {currentTurn.results.map(result => <section key={result.documentId} className="chat-answer"
+              aria-label={'Collection result: ' + names.get(result.documentId)}>
+              <h4>{names.get(result.documentId)}</h4>
+              {result.parts.map((part, index) => <CollectionAnswer key={index} part={part}
+                onInspect={(source, target) => inspect(result.documentId, source, target)} />)}
+            </section>)}
+          </div>
+        </>}
+      </section>}
+      {preview && previewDoc && <section className="chat-panel chat-collection-preview" aria-label="Collection source inspection">
+        <div className="chat-toolbar">
+          <h4 ref={previewHeading} tabIndex={-1}>{names.get(previewDoc.id)} · physical page {preview.page}</h4>
+          <button type="button" className="chat-button" onClick={closePreview}>Close collection source</button>
+        </div>
+        {preview.source && <blockquote>{preview.source.text}</blockquote>}
+        <p className="chat-muted">{coverageText[pageCoverage(previewDoc.corpus, preview.page) === 'limited'
+          ? 'partial' : pageCoverage(previewDoc.corpus, preview.page) as Exclude<CollectionPart['coverage'], 'partial'>]}</p>
+        <div className="chat-toolbar">
+          <button type="button" className="chat-button" disabled={preview.page <= 1}
+            onClick={() => setPreview({ documentId: preview.documentId, page: preview.page - 1 })}>Previous collection page</button>
+          <span>{preview.page} / {previewDoc.corpus.pageCount}</span>
+          <button type="button" className="chat-button" disabled={preview.page >= previewDoc.corpus.pageCount}
+            onClick={() => setPreview({ documentId: preview.documentId, page: preview.page + 1 })}>Next collection page</button>
+        </div>
+        <p className="chat-note">Manual source inspection. Native fragment positions do not establish verified highlight geometry.</p>
+        <Suspense fallback={<p role="status">Preparing collection PDF viewer…</p>}>
+          <PdfEvidencePreview file={previewDoc.file} pageNumber={preview.page} inspectionOnly />
+        </Suspense>
+      </section>}
+      {documents.length > 0 && <PdfChatCollectionExchange key={documents.map(doc => doc.id).join(':')}
+        documents={documents} turns={turns} disabled={busy}
+        onApply={restored => {
+          setTurns(restored); setActiveTurn(restored.length - 1); setQuestion(''); setPreview(null); setError('');
+        }} />}
+    </section>
+  </details>;
+}

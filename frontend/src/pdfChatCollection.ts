@@ -263,7 +263,8 @@ export function parseCollectionPlan(text: string, documents: readonly Collection
   const raw = decode(text, MAX_COLLECTION_PLAN_BYTES);
   exact(raw, ['format', 'version', 'policy', 'source_ids', 'questions']);
   if (raw.format !== PLAN_FORMAT || raw.version !== 1 || raw.policy !== PLAN_POLICY ||
-      !Array.isArray(raw.questions)) fail('plan');
+      !Array.isArray(raw.questions) || !raw.questions.length ||
+      raw.questions.length > MAX_COLLECTION_TURNS) fail('plan');
   assertSourceSet(raw.source_ids, documents);
   const steps = raw.questions.map(value => normalizeCollectionStep(value, sourceIds(documents)));
   if (text !== serializeCollectionPlan(documents, steps)) fail('plan');
