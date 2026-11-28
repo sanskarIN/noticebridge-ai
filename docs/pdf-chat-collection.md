@@ -332,3 +332,5 @@ Explicitly select two saved question parts, even parts from the same turn. Compa
 ### Independent evaluation metric audit
 
 Run `python -m noticebridge.chat_collection_evaluation_audit_cli report.json labels.json snapshot.json --output audit.json` from the installed backend environment. The independent Python implementation checks source identity, exact label text hashes, physical scopes, coverage, recorded citation coordinates, precision/recall/MRR and paired experiment gain/loss classifications. It does not rerun browser retrieval, establish that the recorded retrieval was executed, verify semantic equivalence or certify answer accuracy. The output omits source excerpts and label notes.
+
+A confirmed paired plan can be separately exported and imported against its exact label file. Run `npm run variants:collection -- --mode run --snapshot snapshot.json --labels labels.json --input plan.json --output report.json` locally, or use `--mode verify` with an existing report as input. Both paths use the same native retrieval implementation, preserve the exact label hash and never overwrite outputs. Snapshot replay does not reopen actual PDFs.

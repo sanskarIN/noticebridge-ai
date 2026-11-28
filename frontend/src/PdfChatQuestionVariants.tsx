@@ -1,3 +1,4 @@
+import PdfChatVariantPlan from './PdfChatVariantPlan';
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import type {CollectionDocument} from './pdfChatCollection';
 import {MAX_QUESTION,type Passage} from './pdfChatCore';
@@ -116,6 +117,8 @@ export default function PdfChatQuestionVariants({documents,names,onInspect}:Prop
         </fieldset>;
       })}
       <button type="button" className="chat-button" disabled={busy||!drafts.length||!drafts.every(valid)} onClick={()=>void run('evaluate')}>Run paired question experiments</button>
+      <PdfChatVariantPlan documents={documents} labelsText={labels.text} drafts={drafts} valid={drafts.length>0&&drafts.every(valid)}
+        disabled={busy} onImport={change}/>
       <label className="chat-session-file">Verify saved paired experiment<input type="file" accept=".json,application/json" disabled={busy} onChange={event=>choose(event,'verify')}/></label>
     </>}
     {busy&&<button type="button" className="chat-button" onClick={()=>active.current?.abort()}>Cancel paired experiment</button>}
