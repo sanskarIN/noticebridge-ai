@@ -328,3 +328,7 @@ Build editable question wording from fixed recognized notice topics or an explic
 ## Compare saved question searches
 
 Explicitly select two saved question parts, even parts from the same turn. Compare displayed citations by actual PDF identity and physical coordinates; show rank changes, strict/nearby channel changes, and one-sided retrieval. A PDF searched on one side only is reported separately and excluded from common-source gain/loss counts. Different wording or page restrictions are visible. The report omits native excerpts and can be reproduced against the exact saved history and native snapshot. This is a search comparison, not a notice amendment.
+
+### Independent evaluation metric audit
+
+Run `python -m noticebridge.chat_collection_evaluation_audit_cli report.json labels.json snapshot.json --output audit.json` from the installed backend environment. The independent Python implementation checks source identity, exact label text hashes, physical scopes, coverage, recorded citation coordinates, precision/recall/MRR and paired experiment gain/loss classifications. It does not rerun browser retrieval, establish that the recorded retrieval was executed, verify semantic equivalence or certify answer accuracy. The output omits source excerpts and label notes.
