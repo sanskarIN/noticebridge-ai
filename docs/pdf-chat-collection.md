@@ -284,3 +284,7 @@ The scoped planner allows different explicit document selections and nearby-line
 ## Explicit browser-local checkpoint
 
 A single optional IndexedDB checkpoint can store the current actual PDF bytes, private filenames, full native snapshot, question plan and personal review annotations. Saving and replacement require explicit consent; no automatic persistence is enabled. This is browser-profile storage, not encrypted storage, cloud sync or a durable backup. Do not use it on shared devices or for sensitive documents. Restoration freshly hashes and re-extracts each PDF, matches the canonical snapshot and replays saved work before offering an atomic replacement preview. Deletion requires confirmation and compare-and-swap transactions reject stale revisions from another tab. Browser site-data deletion can remove the stored checkpoint.
+
+## Local PDF.js snapshot ingestion
+
+From the frontend directory with Node.js 22 and installed dependencies, run `npm run ingest:collection -- --pdf a.pdf --pdf b.pdf --output snapshot.json`. The offline command shares the browser native-line assembly and bounded extraction algorithm, but uses PDF.js's Node legacy build and local font/CMap assets. Native results can differ between environments; use `--verify-snapshot existing.json --output replay.json` to measure actual equality rather than assume it. No remote API is used. Output is exclusive and may contain all retained private native text. The command is a local process, not a sandbox for untrusted PDFs.

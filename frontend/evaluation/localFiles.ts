@@ -6,7 +6,8 @@ import { dirname, resolve, basename } from 'node:path';
 
 export type LocalInput = { text: string; sha256: string; bytes: number };
 
-export function readBounded(path: string, maximum: number): LocalInput {
+export type BinaryLocalInput={data:Buffer;sha256:string;bytes:number};
+export function readBoundedBinary(path: string, maximum: number): BinaryLocalInput {
   if (!Number.isSafeInteger(maximum) || maximum < 1 || !lstatSync(path).isFile()) {
     throw new Error('Expected a bounded regular file.');
   }
@@ -26,9 +27,12 @@ export function readBounded(path: string, maximum: number): LocalInput {
       throw new Error('Input changed during read.');
     }
     const bytes = buffer.subarray(0, offset);
-    return { text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes),
-      sha256: createHash('sha256').update(bytes).digest('hex'), bytes: offset };
+    return { data:bytes, sha256:createHash('sha256').update(bytes).digest('hex'), bytes:offset };
   } finally { closeSync(descriptor); }
+}
+export function readBounded(path:string,maximum:number):LocalInput{
+  const {data,sha256,bytes}=readBoundedBinary(path,maximum);
+  return {text:new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(data),sha256,bytes};
 }
 export function localFile(root: string, name: string): string {
   if (!/^[a-z0-9][a-z0-9_-]{0,63}\.json$/.test(name)) throw new Error('Invalid input name.');
