@@ -251,12 +251,35 @@ export function collectionCitation(documents: readonly CollectionDocument[], doc
   return { file: doc.file, source: indexedCollectionCitation(documents, documentId, citation) };
 }
 
+/** Validated native corpus snapshots are ordered by physical page and
+ * ordinal. Binary search avoids repeated whole-corpus scans in large
+ * diagnostic lists, without keeping a second mutable cache of citations.
+ * A coordinate lookup does not authenticate a caller-supplied quotation. */
+export function resolveIndexedCollectionFragment(documents: readonly CollectionIndexedSource[],
+  documentId: CollectionId, page: number, ordinal: number): Passage {
+  if (!Number.isSafeInteger(page) || page < 1 || page > 80 ||
+      !Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > 999999) fail('source');
+  const doc = documents.find(candidate => candidate.id === documentId);
+  if (!doc) fail('source');
+  const rows = doc.corpus.passages;
+  let low = 0, high = rows.length;
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    const row = rows[middle];
+    if (row.page < page || (row.page === page && row.ordinal < ordinal)) low = middle + 1;
+    else high = middle;
+  }
+  const source = rows[low];
+  if (!source || source.role !== 'original' || source.page !== page || source.ordinal !== ordinal) fail('source');
+  return source;
+}
+
 export function indexedCollectionCitation(documents: readonly CollectionIndexedSource[], documentId: CollectionId,
   citation: Passage): Passage {
   const doc = documents.find(candidate => candidate.id === documentId);
   if (!doc || !citation || citation.role !== 'original') fail('source');
-  const source = doc.corpus.passages.find(row => row.page === citation.page && row.ordinal === citation.ordinal);
-  if (!source || source !== citation) fail('source');
+  const source = resolveIndexedCollectionFragment(documents, documentId, citation.page, citation.ordinal);
+  if (source !== citation) fail('source');
   return source;
 }
 

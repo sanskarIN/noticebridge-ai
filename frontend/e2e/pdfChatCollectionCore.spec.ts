@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { admitCollectionDocument, checkCollectionFile, collectionCitation, collectionStats, collectionSteps,
+import { admitCollectionDocument, checkCollectionFile, collectionCitation, resolveIndexedCollectionFragment, indexedCollectionCitation, collectionStats, collectionSteps,
   loadCollectionEvidence, loadCollectionPlan, normalizeCollectionStep, parseCollectionPlan,
   prepareCollectionFile, replayCollectionSteps, runCollectionStep, serializeCollectionEvidence,
   serializeCollectionPlan, verifyCollectionEvidence, MAX_COLLECTION_BYTES, MAX_COLLECTION_DOCUMENTS,
@@ -234,4 +234,31 @@ test('report replay is distinct from matching PDF fingerprints when extraction c
   expect(() => verifyCollectionEvidence(text, [changed, ...docs.slice(1)])).toThrow();
   expect(parseCollectionPlan(serializeCollectionPlan(docs, [question(docs)]),
     [changed, ...docs.slice(1)])).toEqual([question(docs)]);
+});
+
+test('coordinate lookup preserves exact source identity across large sparse physical page sequences',async()=>{
+  const rows:Passage[]=Array.from({length:6000},(_,i)=>({role:'original',page:Math.floor(i/100)+1,
+    ordinal:2*(i%100)+1,text:'Native line '+i}));
+  const a=await admitCollectionDocument([],pdf('large coordinate fixture'),signal(),async()=>({
+    passages:rows,pageCount:60,processedPages:60,missingPages:[],limited:false,limitedPages:[],
+  }));
+  const b=await add([a],'different source',['Native line 0']);
+  const docs=[a,b];
+  for(const source of a.corpus.passages){
+    expect(resolveIndexedCollectionFragment(docs,a.id,source.page,source.ordinal)).toBe(source);
+    expect(indexedCollectionCitation(docs,a.id,source)).toBe(source);
+  }
+  for(const [page,ordinal] of [[1,0],[1,2],[60,200],[61,1],[80,999999],[1.5,1],[1,NaN]]){
+    expect(()=>resolveIndexedCollectionFragment(docs,a.id,page,ordinal)).toThrow('source fragment');
+  }
+  expect(()=>indexedCollectionCitation(docs,b.id,a.corpus.passages[0])).toThrow('source fragment');
+  expect(()=>indexedCollectionCitation(docs,a.id,{...a.corpus.passages[0]})).toThrow('source fragment');
+});
+test('coordinate lookup reads current corpus objects rather than retaining an obsolete cache',async()=>{
+  const [a]=await fixture();
+  const first=resolveIndexedCollectionFragment([a],a.id,1,1);
+  const changed=await add([],'document A',['Different extracted line']);
+  expect(changed.id).toBe(a.id);
+  expect(resolveIndexedCollectionFragment([changed],a.id,1,1)).toBe(changed.corpus.passages[0]);
+  expect(()=>indexedCollectionCitation([changed],a.id,first)).toThrow('source fragment');
 });

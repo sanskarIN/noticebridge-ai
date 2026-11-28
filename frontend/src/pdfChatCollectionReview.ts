@@ -1,7 +1,7 @@
 /** User-authored review annotations for an independent collection.
  * A review is not a verification of the meaning or authority of a notice. */
 import type { Passage } from './pdfChatCore';
-import { collectionCitation, collectionStats, type CollectionDocument, type CollectionId } from './pdfChatCollection';
+import { collectionCitation, collectionStats, resolveIndexedCollectionFragment, type CollectionDocument, type CollectionId } from './pdfChatCollection';
 
 export const MAX_COLLECTION_REVIEW_ITEMS = 100;
 export const MAX_COLLECTION_REVIEW_NOTE = 500;
@@ -187,8 +187,8 @@ export async function parseCollectionReview(text: string, documents: readonly Co
     if (!isHash(row.document_id) || !safeNumber(row.page, 80) || !safeNumber(row.ordinal, 999999) ||
         !isHash(row.text_sha256) || !isStatus(row.status) || !validCollectionReviewNote(row.note)) invalid();
     const doc = byId.get(row.document_id);
-    const source = doc?.corpus.passages.find(passage => passage.page === row.page && passage.ordinal === row.ordinal);
-    if (!doc || !source) invalid();
+    if (!doc) invalid();
+    const source = resolveIndexedCollectionFragment(documents, doc.id, row.page, row.ordinal);
     const key = collectionReviewKey(doc.id, source);
     if (seen.has(key) || await textHash(source.text, signal) !== row.text_sha256) invalid();
     seen.add(key);

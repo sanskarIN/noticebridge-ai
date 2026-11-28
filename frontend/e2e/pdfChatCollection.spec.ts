@@ -769,3 +769,23 @@ test('literal overlap preserves source identity and independently verifies coord
   await expect(panel.getByRole('button',{name:'Compute selected PDF literal overlap'})).toBeDisabled();
   await expect(panel.getByRole('button',{name:'Export collection literal overlap'})).toHaveCount(0);
 });
+
+test('boolean evidence search uses exact fragment-local operators and does not create a chat turn',async({page})=>{
+  const root=await open(page);
+  await attach(page,[fixture('a.pdf',[['Application fee: INR 500 for rural applicants','Application fee: INR 350 refundable']]),
+    fixture('b.pdf',[['Application fee: INR 350','Rural applicants']])],2);
+  const panel=root.getByRole('group',{name:'Boolean literal evidence search',exact:true});
+  await panel.locator('summary').first().click();
+  const input=panel.getByLabel('Boolean evidence expression');
+  await input.fill('"application fee" AND "rural" AND NOT "refundable"');
+  await panel.getByRole('button',{name:'Search boolean collection evidence'}).click();
+  await expect(panel).toContainText('1 matching native fragment(s) across 2 selected PDF(s).');
+  await expect(panel.locator('mark')).toHaveText(['Application fee','rural']);
+  await panel.getByRole('button',{name:'Inspect boolean match 1:1'}).click();
+  await expect(root.getByRole('region',{name:'Collection source inspection'}).locator('blockquote')).toHaveText('Application fee: INR 500 for rural applicants');
+  await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+  await input.fill('NOT "refundable"');
+  await panel.getByRole('button',{name:'Search boolean collection evidence'}).click();
+  await expect(panel.getByRole('alert')).toContainText('Each alternative must require a positive phrase');
+  await expect(panel.getByLabel('Boolean collection evidence results')).toHaveCount(0);
+});

@@ -2,7 +2,7 @@
  * Metrics describe agreement with those labels, not answer truth or document
  * completeness. No gold labels are generated from the retrieval result. */
 import { MAX_QUESTION, type Passage } from './pdfChatCore';
-import { indexedCollectionIds, indexedCollectionCitation, normalizeCollectionStep, runIndexedCollectionStep,
+import { indexedCollectionIds, indexedCollectionCitation, resolveIndexedCollectionFragment, normalizeCollectionStep, runIndexedCollectionStep,
   type CollectionIndexedSource, type CollectionTurn, type CollectionPart } from './pdfChatCollection';
 import { requestHash } from './pdfChatEmbeddingBridge';
 import { planQuestions, parseSearchQuestion } from './pdfChatInsights';
@@ -75,10 +75,7 @@ export function collectionEvalTarget(documents:readonly CollectionIndexedSource[
 export function resolveCollectionEvalFragment(documents:readonly CollectionIndexedSource[],documentId:string,
   page:number,ordinal:number):Passage{
   if(!Number.isSafeInteger(page)||page<1||page>80||!Number.isSafeInteger(ordinal)||ordinal<1||ordinal>999999)invalid();
-  const doc=documents.find(doc=>doc.id===documentId);
-  const source=doc?.corpus.passages.find(row=>row.page===page&&row.ordinal===ordinal);
-  if(!source)invalid();
-  return indexedCollectionCitation(documents,documentId,source);
+  return resolveIndexedCollectionFragment(documents,documentId,page,ordinal);
 }
 export function validateCollectionEvalCase(documents:readonly CollectionIndexedSource[],target:CollectionEvalCase):CollectionEvalCase{
   if(!target||!text(target.question,MAX_QUESTION)||target.question.trim()!==target.question||
