@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { getDocument, GlobalWorkerOptions, type PDFDocumentLoadingTask, type PDFDocumentProxy, type PDFPageProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Evidence } from './comparison';
+import type { Passage } from './pdfChatCore';
+import { locateNativeFragment, type NativeLocationResult } from './pdfChatNativeLocator';
 
 // Bundle PDF.js and its matching worker with the application. No external CDN
 // receives the user's local document or its extracted evidence.
@@ -84,22 +86,26 @@ function highlightForPage(
   };
 }
 
-export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheckedImage }: {
+export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheckedImage, inspectionOnly, nativeSource }: {
   file: File;
   pageNumber: number;
   evidence?: PdfEvidence;
   uncheckedImage?: boolean;
+  inspectionOnly?: boolean;
+  nativeSource?: Passage;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const highlightRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
+  const [nativeLocation, setNativeLocation] = useState<NativeLocationResult | null>(null);
   const [highlight, setHighlight] = useState<CSSProperties | null>(null);
   const t = previewCopy;
 
   useEffect(() => {
     let disposed = false;
+    const nativeController = new AbortController();
     let pdf: PDFDocumentProxy | null = null;
     let loadingTask: PDFDocumentLoadingTask | null = null;
     let renderTask: { cancel: () => void; promise: Promise<unknown> } | null = null;
@@ -108,6 +114,7 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheck
     setState('loading');
     setError('');
     setHighlight(null);
+    setNativeLocation(null);
 
     async function render() {
       try {
@@ -164,6 +171,10 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheck
           setHighlight(marker);
           setState('ready');
         }
+        if (nativeSource && !evidence && !disposed) {
+          const located = await locateNativeFragment(page, viewport, nativeSource, nativeController.signal);
+          if (!disposed) setNativeLocation(located);
+        }
       } catch (cause) {
         if (!disposed) {
           setError(cause instanceof Error ? cause.message : 'Unable to render the source PDF.');
@@ -174,23 +185,24 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheck
     void render();
     return () => {
       disposed = true;
+      nativeController.abort();
       renderTask?.cancel();
       // Cancel loading even if the document has not yet finished opening.
       if (loadingTask) void loadingTask.destroy();
       else if (pdf) void pdf.destroy();
     };
-  }, [file, pageNumber, evidence]);
+  }, [file, pageNumber, evidence, nativeSource]);
 
   useLayoutEffect(() => {
     const stage = stageRef.current;
     const marker = highlightRef.current;
-    if (!highlight || !stage || !marker) return;
+    if ((!highlight && nativeLocation?.status !== 'located') || !stage || !marker) return;
     const viewport = stage.getBoundingClientRect();
     const target = marker.getBoundingClientRect();
     if (target.top < viewport.top + 8 || target.bottom > viewport.bottom - 8) {
       stage.scrollTop += target.top - viewport.top - stage.clientHeight / 3;
     }
-  }, [highlight]);
+  }, [highlight, nativeLocation]);
 
   return <div className="pdf-preview-body">
     {state === 'loading' && <p role="status">{t.rendering}</p>}
@@ -198,12 +210,21 @@ export default function PdfEvidencePreview({ file, pageNumber, evidence, uncheck
     <div ref={stageRef} className="pdf-stage" role="region" aria-label={t.viewer} tabIndex={0}>
       <div className="pdf-canvas-holder">
         <canvas ref={canvasRef} role="img" aria-label={`${t.page} ${pageNumber}`} />
+        {state === 'ready' && nativeLocation?.status === 'located' &&
+          <div ref={highlightRef} className="native-location-marker" aria-hidden="true"
+            style={{left: nativeLocation.location.left + '%', top: nativeLocation.location.top + '%',
+              width: nativeLocation.location.width + '%', height: nativeLocation.location.height + '%'}} />}
         {state === 'ready' && highlight &&
           <div ref={highlightRef} className="evidence-highlight" style={highlight} aria-hidden="true" />}
       </div>
     </div>
+    {state === 'ready' && nativeSource && !evidence && <p className="preview-help" role="status">
+      {nativeLocation?.status === 'located' ? 'Candidate native line location reproduced. The marker is a layout hint, not verified glyph geometry.' :
+        nativeLocation?.status === 'unavailable' ? 'Native line location could not be reproduced. Inspect the source manually.' :
+        'Checking the selected native fragment location…'}
+    </p>}
     {state === 'ready' && <p className="preview-help">
-      {evidence ? (highlight ? t.highlight : t.geometry) : uncheckedImage ? t.uncheckedImage : t.uncovered}
+      {evidence ? (highlight ? t.highlight : t.geometry) : inspectionOnly ? 'Source page shown for manual inspection.' : uncheckedImage ? t.uncheckedImage : t.uncovered}
     </p>}
   </div>;
 }

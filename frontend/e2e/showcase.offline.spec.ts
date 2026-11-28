@@ -37,3 +37,27 @@ test('static showcase opens the evidence and exports a labeled report without an
   expect(apiCalls).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(321);
 });
+
+
+test('static showcase provides local PDF chat with page citations and no API', async ({ page }) => {
+  const requests: string[] = [];
+  await page.route('**/api/**', route => {
+    requests.push(route.request().url());
+    return route.abort();
+  });
+  await page.goto('./');
+  await page.getByRole('link', { name: 'Chat with PDFs' }).click();
+  await expect(page.getByRole('heading', { name: 'Chat with your PDFs' })).toBeVisible();
+  await page.getByRole('button', { name: 'Try fictional notices' }).click();
+  await expect(page.getByText(/extracted passages available/)).toHaveCount(2);
+  await page.getByLabel('Your question').fill('What is the application fee?');
+  await page.getByRole('button', { name: 'Ask PDF' }).click();
+  await expect(page.locator('.chat-citation blockquote')).toHaveText([
+    'Application fee: Rs. 500', 'Application fee: Rs. 350',
+  ]);
+  await page.getByRole('button', { name: 'Inspect source [1]', exact: true }).click();
+  await expect(page.getByText('Source page shown for manual inspection.')).toBeVisible();
+  expect(requests).toEqual([]);
+  await page.getByRole('link', { name: 'Return to comparison' }).click();
+  await expect(page.getByRole('button', { name: 'Try a fictional notice' })).toBeVisible();
+});

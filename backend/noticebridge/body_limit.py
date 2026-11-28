@@ -8,6 +8,7 @@ network quotas, operating-system isolation, and reverse-proxy protections.
 """
 
 import asyncio
+import os
 from tempfile import SpooledTemporaryFile
 from threading import Lock
 
@@ -16,6 +17,11 @@ from starlette.responses import JSONResponse
 from .extract import MAX_UPLOAD_BYTES
 
 MAX_COMPARE_BODY_BYTES = 2 * MAX_UPLOAD_BYTES + 1024 * 1024
+MAX_CHAT_OCR_BODY_BYTES = MAX_UPLOAD_BYTES + 1024 * 1024
+CHAT_OCR_PATH = "/api/chat/ocr"
+CHAT_PIPELINE_PATH = "/api/chat/pipeline"
+CHAT_MODELS_PATH = "/api/chat/models"
+MAX_CHAT_PIPELINE_BODY_BYTES = 3 * 1024 * 1024
 IN_MEMORY_SPOOL_BYTES = 1024 * 1024
 REPLAY_CHUNK_BYTES = 64 * 1024
 MAX_RECEIVE_SECONDS = 90
@@ -53,8 +59,40 @@ def _permitted_browser_context(scope: dict) -> bool:
     return not sites or sites[0].lower() in SAME_SITE_FETCH_CONTEXTS
 
 
+def local_chat_ocr_enabled() -> bool:
+    """Opt-in only; never enable this worker endpoint on a public server."""
+    return os.environ.get("NOTICEBRIDGE_ENABLE_LOCAL_CHAT_OCR") == "1"
+
+
+def local_chat_ai_enabled() -> bool:
+    return os.environ.get("NOTICEBRIDGE_ENABLE_LOCAL_CHAT_AI") == "1"
+
+
+def _permitted_local_context(scope: dict, approval_header: bytes) -> bool:
+    """Additional local boundary; not authentication against local clients.
+
+    Reject unexpected Host, non-loopback peers, untrusted browser origins
+    and simple cross-site multipart submissions before body buffering.
+    """
+    client = scope.get("client")
+    if not client or client[0] not in ("127.0.0.1", "::1"):
+        return False
+    headers = scope.get("headers", [])
+    hosts = [value for key, value in headers if key.lower() == b"host"]
+    approvals = [value for key, value in headers if key.lower() == approval_header]
+    return (
+        len(hosts) == 1
+        and hosts[0] in (
+            b"localhost:5173", b"127.0.0.1:5173",
+            b"localhost:8000", b"127.0.0.1:8000",
+        )
+        and approvals == [b"1"]
+        and _permitted_browser_context(scope)
+    )
+
+
 class CompareBodyLimit:
-    """Pure ASGI guard for POST /api/compare, per application process."""
+    """Pure ASGI guard for comparison and explicitly enabled local OCR uploads."""
 
     def __init__(self, app):
         self.app = app
@@ -74,13 +112,51 @@ class CompareBodyLimit:
         await response(scope, receive, send)
 
     async def __call__(self, scope, receive, send) -> None:
+        # Read-only inventory has no upload body and must pass the same
+        # local host/origin/peer/approval checks before contacting the runtime.
+        if (
+            scope["type"] == "http"
+            and scope.get("path") == CHAT_MODELS_PATH
+            and scope.get("method", "").upper() == "GET"
+        ):
+            if not local_chat_ai_enabled():
+                await self._reject(scope, receive, send, status=404, detail="Local AI is disabled")
+                return
+            if not _permitted_local_context(scope, b"x-noticebridge-local-ai"):
+                await self._reject(
+                    scope, receive, send, status=403, detail="Local AI context denied",
+                )
+                return
+            await self.app(scope, receive, send)
+            return
         if (
             scope["type"] != "http"
-            or scope.get("path") != "/api/compare"
+            or scope.get("path") not in ("/api/compare", CHAT_OCR_PATH, CHAT_PIPELINE_PATH)
             or scope.get("method", "").upper() != "POST"
         ):
             await self.app(scope, receive, send)
             return
+
+        local_ocr = scope.get("path") == CHAT_OCR_PATH
+        if local_ocr and not local_chat_ocr_enabled():
+            await self._reject(scope, receive, send, status=404, detail="Local OCR is disabled")
+            return
+        if local_ocr and not _permitted_local_context(scope, b"x-noticebridge-local-ocr"):
+            await self._reject(scope, receive, send, status=403, detail="Local OCR context denied")
+            return
+        local_ai = scope.get("path") == CHAT_PIPELINE_PATH
+        if local_ai and not local_chat_ai_enabled():
+            await self._reject(scope, receive, send, status=404, detail="Local AI is disabled")
+            return
+        if local_ai and not _permitted_local_context(scope, b"x-noticebridge-local-ai"):
+            await self._reject(scope, receive, send, status=403, detail="Local AI context denied")
+            return
+        if local_ai:
+            max_body, label = MAX_CHAT_PIPELINE_BODY_BYTES, "AI"
+        elif local_ocr:
+            max_body, label = MAX_CHAT_OCR_BODY_BYTES, "OCR"
+        else:
+            max_body, label = MAX_COMPARE_BODY_BYTES, "Comparison"
 
         # This check precedes Content-Length checks, temporary-file spooling,
         # request-slot reservation and any native PDF/OCR parsing work.
@@ -103,9 +179,9 @@ class CompareBodyLimit:
             )
             return
         declared_length = int(lengths[0]) if lengths else None
-        if declared_length is not None and declared_length > MAX_COMPARE_BODY_BYTES:
+        if declared_length is not None and declared_length > max_body:
             await self._reject(
-                scope, receive, send, status=413, detail="Comparison upload is too large"
+                scope, receive, send, status=413, detail=f"{label} upload is too large"
             )
             return
 
@@ -125,13 +201,14 @@ class CompareBodyLimit:
         try:
             await self._buffer_and_dispatch(
                 scope, receive, send, declared_length=declared_length,
+                max_body=max_body, label=label,
             )
         finally:
             with self._active_lock:
                 self._active -= 1
 
     async def _buffer_and_dispatch(
-        self, scope, receive, send, *, declared_length: int | None,
+        self, scope, receive, send, *, declared_length: int | None, max_body: int, label: str,
     ) -> None:
         try:
             upload_spool = SpooledTemporaryFile(
@@ -153,7 +230,7 @@ class CompareBodyLimit:
                 if seconds_left <= 0:
                     await self._reject(
                         scope, receive, send,
-                        status=408, detail="Comparison upload took too long",
+                        status=408, detail=f"{label} upload took too long",
                     )
                     return
                 try:
@@ -161,7 +238,7 @@ class CompareBodyLimit:
                 except TimeoutError:
                     await self._reject(
                         scope, receive, send,
-                        status=408, detail="Comparison upload took too long",
+                        status=408, detail=f"{label} upload took too long",
                     )
                     return
                 if message["type"] == "http.disconnect":
@@ -174,10 +251,10 @@ class CompareBodyLimit:
                     return
                 body = message.get("body", b"")
                 total += len(body)
-                if total > MAX_COMPARE_BODY_BYTES:
+                if total > max_body:
                     await self._reject(
                         scope, receive, send,
-                        status=413, detail="Comparison upload is too large",
+                        status=413, detail=f"{label} upload is too large",
                     )
                     return
                 try:

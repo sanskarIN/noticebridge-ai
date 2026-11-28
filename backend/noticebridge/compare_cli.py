@@ -18,8 +18,8 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-from .api import safe_filename
 from .extract import MAX_UPLOAD_BYTES, InvalidDocument, parse_ocr_selection
+from .filenames import safe_filename
 from .isolation import ProcessingFailed, ProcessingTimedOut, run_isolated_comparison
 from .models import ComparisonReport
 

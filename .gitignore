@@ -235,3 +235,4 @@ demo-output/
 .env
 .env.*
 !.env.example
+frontend/.evaluation-build/

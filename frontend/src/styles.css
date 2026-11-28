@@ -255,3 +255,5 @@
 }
 .table-review-panel li > span { min-width: 0; }
 .table-review-panel .review-button { flex-shrink: 0; }
+
+@media(max-width:640px){.topbar .top-actions{flex-wrap:wrap;justify-content:flex-end;gap:8px;min-width:0}.topbar .top-actions .repo-link{white-space:normal;font-size:12px}.topbar .brand{flex-shrink:0}}
