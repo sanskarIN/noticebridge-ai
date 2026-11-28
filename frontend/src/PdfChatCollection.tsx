@@ -1,3 +1,4 @@
+import PdfChatQuestionBrief from './PdfChatQuestionBrief';
 import PdfChatTurnDifference from './PdfChatTurnDifference';
 import PdfChatGuidedQuestions from './PdfChatGuidedQuestions';
 import PdfChatQuestionVariants from './PdfChatQuestionVariants';
@@ -429,6 +430,8 @@ export default function PdfChatCollection() {
           <PdfChatCollectionAnswerSummary key={'summary:' + activeTurn + ':' + turns.length + ':' + currentTurn.step.question + ':' +
             currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}
             documents={documents} turn={currentTurn} names={names} onInspect={inspect} />
+          <PdfChatQuestionBrief key={'question-brief:'+activeTurn+':'+JSON.stringify(currentTurn.step)}
+            documents={documents} turn={currentTurn} names={names} disabled={busy} onInspect={inspect}/>
           <div className="chat-collection-results" aria-label="Collection results" id={collectionToolAnchor('results')} tabIndex={-1} key={activeTurn + ':' + turns.length + ':' +
             currentTurn.step.question + ':' + currentTurn.step.documentIds.join(',') + ':' + currentTurn.step.includeContext}>
             {currentTurn.results.map(result => <section key={result.documentId} className="chat-answer"
