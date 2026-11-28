@@ -104,6 +104,12 @@ function wireSource(role: Role, sha256: string, corpus: Corpus) {
     })),
   };
 }
+/** Reuse snapshot admission checks for locally extracted collection documents.
+ * Return a validated copy; do not serialize private text just to validate it. */
+export function validateNativeCorpus(role: Role, digest: string, corpus: Corpus): Corpus {
+  return source(wireSource(role, digest, corpus), role).corpus;
+}
+
 function bound(text: string): void {
   if (!text || text.length > MAX_CORPUS_SNAPSHOT_BYTES ||
       new TextEncoder().encode(text).length > MAX_CORPUS_SNAPSHOT_BYTES) invalid();
