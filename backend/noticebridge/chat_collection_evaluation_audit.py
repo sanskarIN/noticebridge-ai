@@ -36,7 +36,8 @@ LABEL_POLICY = (
     "completeness or authority."
 )
 VARIANT_POLICY = (
-    "Paired retrieval against user-supplied labels and explicitly asserted equivalent question intent."
+    "Paired retrieval against user-supplied labels and explicitly asserted "
+    "equivalent question intent."
 )
 OUTCOMES = ("improved", "regressed", "tradeoff", "unchanged")
 
@@ -237,15 +238,19 @@ def summarize(rows: list[Observation]) -> dict:
 
 
 def audit_evaluation_report(report: dict, labels: list[Label], snapshot: Snapshot) -> dict:
-    row = obj(report, "format version policy authority_verified labels_sha256 metrics observations")
+    row = obj(
+        report, "format version policy authority_verified labels_sha256 metrics observations",
+    )
     header(row, "noticebridge-collection-retrieval-evaluation", LABEL_POLICY)
     observations = sequence(row["observations"], MAX_CASES, minimum=1)
     if len(observations) != len(labels):
         invalid()
     scored = []
     for value, label in zip(observations, labels, strict=True):
-        current = obj(value, "case_key coverage outcome expected_count retrieved_count correct_count "
-                      "retrieved precision recall reciprocal_rank")
+        current = obj(
+            value, "case_key coverage outcome expected_count retrieved_count "
+            "correct_count retrieved precision recall reciprocal_rank",
+        )
         observed = score(label, snapshot.sources[label.document_id], current["retrieved"])
         if not strict_equal(current, observed.evaluation_wire()):
             invalid()
@@ -272,8 +277,10 @@ def classification(a: Observation, b: Observation) -> str:
 
 
 def audit_variant_report(report: dict, labels: list[Label], snapshot: Snapshot) -> dict:
-    row = obj(report, "format version policy authority_verified equivalence_verified labels_sha256 "
-              "metrics outcomes changed_order cases")
+    row = obj(
+        report, "format version policy authority_verified equivalence_verified "
+        "labels_sha256 metrics outcomes changed_order cases",
+    )
     header(row, "noticebridge-collection-question-variants", VARIANT_POLICY)
     if row["equivalence_verified"] is not False:
         invalid()
@@ -283,8 +290,10 @@ def audit_variant_report(report: dict, labels: list[Label], snapshot: Snapshot) 
     outcomes = dict.fromkeys(OUTCOMES, 0)
     changed_order = 0
     for value in sequence(row["cases"], 24, minimum=1):
-        case = obj(value, "case_key alternative_question alternative_context equivalence_confirmed "
-                   "outcome baseline alternative shared added removed expected_added expected_removed")
+        case = obj(
+            value, "case_key alternative_question alternative_context equivalence_confirmed "
+            "outcome baseline alternative shared added removed expected_added expected_removed",
+        )
         key = string(case["case_key"], 1400)
         label = by_key.get(key)
         if label is None or key in seen or case["equivalence_confirmed"] is not True:
@@ -295,10 +304,12 @@ def audit_variant_report(report: dict, labels: list[Label], snapshot: Snapshot) 
         if (question_page(question) != label.page or
                 question == label.question and context == label.include_context):
             invalid()
-        a_raw = obj(case["baseline"], "coverage outcome retrieved expected_found expected_missed "
-                    "unexpected precision recall reciprocal_rank")
-        b_raw = obj(case["alternative"], "coverage outcome retrieved expected_found expected_missed "
-                    "unexpected precision recall reciprocal_rank")
+        observation_keys = (
+            "coverage outcome retrieved expected_found expected_missed "
+            "unexpected precision recall reciprocal_rank"
+        )
+        a_raw = obj(case["baseline"], observation_keys)
+        b_raw = obj(case["alternative"], observation_keys)
         source = snapshot.sources[label.document_id]
         a = score(label, source, a_raw["retrieved"])
         b = score(label, source, b_raw["retrieved"], alternative_context=context)

@@ -70,7 +70,10 @@ def artifacts():
         "format": "noticebridge-collection-native-snapshot", "version": 1,
         "policy": audit.SNAPSHOT_POLICY, "authority_verified": False,
         "sources": [
-            native(a, [["Clause 4.2(a) Private eligibility", "😀 See Clause 4.2(a) and Section 9."], []]),
+            native(a, [
+                ["Clause 4.2(a) Private eligibility", "😀 See Clause 4.2(a) and Section 9."],
+                [],
+            ]),
             native(b, [["Clause 4.2(a) Private rule", "See Annexure B."]]),
         ],
     })

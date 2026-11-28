@@ -27,7 +27,9 @@ BRIEF_POLICY = (
     "completeness or publisher authority."
 )
 DIFF_FORMAT = "noticebridge-collection-question-part-difference"
-DIFF_POLICY = "Comparison of displayed native retrieval only; not notice changes, relevance or authority."
+DIFF_POLICY = (
+    "Comparison of displayed native retrieval only; not notice changes, relevance or authority."
+)
 
 
 def turns(packet: dict) -> list[dict]:
@@ -242,7 +244,9 @@ def audit_question_artifact(
         left, right = candidate.get("left"), candidate.get("right")
         if not isinstance(left, dict) or not isinstance(right, dict):
             invalid()
-        expected = recompute_difference(packet, snapshot, left.get("pointer"), right.get("pointer"))
+        expected = recompute_difference(
+            packet, snapshot, left.get("pointer"), right.get("pointer"),
+        )
         counts = {
             "documents": len(expected["documents"]),
             **{key: expected[key] for key in (

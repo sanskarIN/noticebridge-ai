@@ -61,11 +61,11 @@ test('brief replay rejects altered hashes, source text and question metadata',as
   await expect(exportQuestionBrief(docs,{...turn,results:[]},0,true,signal())).rejects.toThrow();
 });
 test('reading copy quotes control sequences and exact replay does not import answers',async()=>{
-  const a=await add([],'a',[['Notice: <script>alert(1)</script>','Notice: text with "quotes"']]),docs=[a];
-  const snapshot=serializeCollectionSnapshot(docs),step={question:'Notice?',documentIds:[a.id],includeContext:false};
+  const a=await add([],'a',[['Certificate: <script>alert(1)</script>','Certificate: text with "quotes"']]),docs=[a];
+  const snapshot=serializeCollectionSnapshot(docs),step={question:'Certificate?',documentIds:[a.id],includeContext:false};
   const brief=await buildQuestionBrief(snapshot,step,0,signal());
   expect(brief.sources[0].citations.length).toBe(2);
   const copy=questionBriefReadingCopy(brief);
-  expect(copy).toContain(JSON.stringify('Notice: text with "quotes"'));
+  expect(copy).toContain(JSON.stringify('Certificate: text with "quotes"'));
   expect(await verifyQuestionBrief(encodeQuestionBrief(brief),snapshot,signal())).toEqual(brief);
 });

@@ -158,7 +158,9 @@ def audit_usage(report_raw: bytes, packet_raw: bytes, snapshot_raw: bytes) -> di
     return {
         "format": "noticebridge-collection-citation-usage-audit",
         "version": 1,
-        "policy": "Independent recomputation of recorded native citation edges from a review packet.",
+        "policy": (
+            "Independent recomputation of recorded native citation edges from a review packet."
+        ),
         "authority_verified": False,
         "retrieval_replayed": False,
         "native_extraction_replayed": False,

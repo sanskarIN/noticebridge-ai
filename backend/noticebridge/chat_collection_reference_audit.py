@@ -26,7 +26,9 @@ from .chat_collection_audit import (
 MAX_REFERENCE_BYTES = 12 * 1024 * 1024
 MAX_OCCURRENCES = 36000
 FORMAT = "noticebridge-collection-reference-index"
-POLICY = "Explicit native reference candidates only; not clause equivalence, completeness or authority."
+POLICY = (
+    "Explicit native reference candidates only; not clause equivalence, completeness or authority."
+)
 KINDS = ("clause", "section", "paragraph", "rule", "article", "annexure", "schedule")
 NUMERIC_KINDS = frozenset(KINDS[:5])
 IDENTIFIER = (

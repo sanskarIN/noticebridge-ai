@@ -34,13 +34,13 @@ export default function PdfChatGuidedQuestions({documents,selected,turns,names,i
         <label className="chat-checkbox"><input type="checkbox" checked={context} onChange={event=>{setContext(event.target.checked);setReplace(null);}}/> Search nearby lines</label>
       </fieldset>
       <fieldset className="chat-citation" disabled={disabled||parts.length>=MAX_GUIDE_PARTS}><legend>Add a guided topic</legend>
-        <label>Topic group<select value={group} onChange={event=>setGroup(event.target.value as typeof group)}>
+        <label>Topic group<select aria-label="Topic group" value={group} onChange={event=>setGroup(event.target.value as typeof group)}>
           <option value="all">All topics</option>{Object.entries(GUIDE_GROUPS).map(([key,label])=><option key={key} value={key}>{label}</option>)}
         </select></label>
         <label>Find topic<input maxLength={100} value={query} onChange={event=>setQuery(event.target.value)}/></label>
         <label className="chat-checkbox"><input type="checkbox" checked={recognized} onChange={event=>setRecognized(event.target.checked)}/>
           Only topics with recognized printed labels in these PDFs</label>
-        <label>Notice topic<select value={options.some(row=>row.id===choice)?choice:''} onChange={event=>setChoice(event.target.value as GuideId)}>
+        <label>Notice topic<select aria-label="Notice topic" value={options.some(row=>row.id===choice)?choice:''} onChange={event=>setChoice(event.target.value as GuideId)}>
           <option value="">Choose a topic</option>{options.map(option=>{
             const count=inventory.find(row=>row.id===option.id)?.documentsWithField??0;
             return <option key={option.id} value={option.id}>{option.label}{count?' ('+count+' PDF(s) with printed labels)':''}</option>;
@@ -50,7 +50,7 @@ export default function PdfChatGuidedQuestions({documents,selected,turns,names,i
         <p className="chat-muted">A missing printed label is not proof that the topic is absent; ordinary free-text questions remain available.</p>
       </fieldset>
       <fieldset className="chat-citation" disabled={disabled||parts.length>=MAX_GUIDE_PARTS}><legend>Add an explicit printed reference</legend>
-        <label>Reference type<select value={referenceKind} onChange={event=>setReferenceKind(event.target.value as ReferenceKind)}>
+        <label>Reference type<select aria-label="Reference type" value={referenceKind} onChange={event=>setReferenceKind(event.target.value as ReferenceKind)}>
           {kinds.map(kind=><option key={kind} value={kind}>{kind}</option>)}
         </select></label>
         <label>Printed identifier<input value={identifier} maxLength={32} placeholder="4.2(a)" onChange={event=>setIdentifier(event.target.value)}/></label>
