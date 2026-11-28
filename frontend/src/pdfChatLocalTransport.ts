@@ -71,6 +71,19 @@ export async function readBoundedJson(response: Response, maximum: number,
   }
 }
 
+/** Apply the same stale-response and destination checks to every local
+ * service, including read-only discovery. Cancel rejected bodies. */
+export function validateLocalResponse(response: Response, expectedUrl: string, signal: AbortSignal): void {
+  if (signal.aborted) {
+    discardBody(response);
+    signal.throwIfAborted();
+  }
+  if (response.redirected || (response.url && response.url !== expectedUrl)) {
+    discardBody(response);
+    throw new Error('Unexpected local service destination.');
+  }
+}
+
 export async function localChatRequest(service: LocalChatService, body: FormData,
   signal: AbortSignal, origin = globalThis.location?.origin, fetcher: typeof fetch = fetch): Promise<string> {
   if (!isLocalChatOrigin(origin ?? '') || !Object.prototype.hasOwnProperty.call(ENDPOINTS, service)) {
@@ -82,13 +95,6 @@ export async function localChatRequest(service: LocalChatService, body: FormData
     method: 'POST', body, signal, credentials: 'omit', redirect: 'error', cache: 'no-store',
     headers: { [endpoint.header]: '1' },
   });
-  if (signal.aborted) {
-    discardBody(response);
-    signal.throwIfAborted();
-  }
-  if (response.redirected || (response.url && response.url !== origin + endpoint.path)) {
-    discardBody(response);
-    throw new Error('Unexpected local service destination.');
-  }
+  validateLocalResponse(response, origin + endpoint.path, signal);
   return readBoundedJson(response, endpoint.maxBytes, signal);
 }

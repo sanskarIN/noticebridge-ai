@@ -233,3 +233,85 @@ def test_per_role_limits_and_batch_bounds():
 def test_vector_normalization_handles_extreme_values():
     vector = emb._unit_vector([1e308, 1e308], 2)
     assert vector[0] == pytest.approx(2 ** -0.5)
+
+
+@pytest.mark.parametrize("question", ["😀" * 201, "a" + "😀" * 200, "\ud800"])
+def test_question_budget_matches_browser_utf16(question):
+    with pytest.raises(emb.EmbeddingError):
+        emb.parse_request(raw(question=question))
+
+
+@pytest.mark.parametrize("text", ["😀" * 451, "a" + "😀" * 450, "\udfff"])
+def test_passage_budget_matches_browser_utf16(text):
+    with pytest.raises(emb.EmbeddingError):
+        emb.parse_request(raw([{"id": "original:1:1", "text": text}]))
+
+
+def test_exact_utf16_boundary_preserves_literal_text_and_unicode():
+    question = "😀" * 200
+    text = "😀" * 450
+    result = emb.parse_request(raw([{"id": "original:1:1", "text": text}], question=question))
+    assert result.question == question
+    assert result.passages[0].text == text
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"model": None}, {"model": 123}, {"model": ["fixture:latest"]},
+    {"digest": None}, {"digest": 123}, {"digest": b"a" * 64},
+])
+def test_invalid_model_metadata_fails_with_fixed_error_before_network(kwargs):
+    with pytest.raises(emb.EmbeddingError):
+        run(lambda _: pytest.fail("Unexpected network call"), **kwargs)
+
+
+@pytest.mark.parametrize("duplicate", [
+    {"name": MODEL, "model": "other:latest", "digest": DIGEST},
+    {"name": MODEL, "digest": DIGEST},
+    {"name": MODEL, "model": MODEL, "digest": "b" * 64},
+    {"name": MODEL, "model": MODEL, "digest": DIGEST, "remote_host": "example.invalid"},
+])
+def test_any_duplicate_tag_prevents_inference(duplicate):
+    def handler(req):
+        assert req.url.path == "/api/tags"
+        value = inventory()
+        value["models"].append(duplicate)
+        return response(value)
+    with pytest.raises(emb.EmbeddingError, match="digest"):
+        run(handler)
+
+
+def test_duplicate_tag_after_inference_discards_entire_result():
+    calls = []
+    def handler(req):
+        calls.append(req.url.path)
+        if req.url.path == "/api/tags" and calls.count("/api/tags") == 2:
+            value = inventory()
+            value["models"].append({"name": MODEL, "model": "conflict:latest"})
+            return response(value)
+        return good(req)
+    with pytest.raises(emb.EmbeddingError, match="digest"):
+        run(handler)
+    assert calls == ["/api/tags", "/api/embed", "/api/embed", "/api/tags"]
+
+
+@pytest.mark.parametrize("headers", [
+    {"Content-Type": "text/html"}, {"Content-Type": "application/jsonx"},
+    {"Content-Length": "-1"}, {"Content-Length": "1, 2"},
+    {"Content-Length": "1e2"}, {"Content-Length": "99999999999"},
+    {"Content-Length": str(emb.MAX_RESPONSE_BYTES + 1)},
+])
+def test_rejects_invalid_response_headers_before_streaming(headers):
+    class NeverRead(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            pytest.fail("Invalid response body was consumed")
+            yield b""
+    with pytest.raises(emb.EmbeddingError):
+        run(lambda _: httpx.Response(200, stream=NeverRead(), headers=headers))
+
+
+def test_explicit_json_type_with_charset_is_supported():
+    def handler(req):
+        result = good(req)
+        result.headers["Content-Type"] = "Application/JSON; charset=utf-8"
+        return result
+    assert run(handler)["candidate_count"] == len(ROWS)

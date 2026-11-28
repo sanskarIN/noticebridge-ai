@@ -222,3 +222,43 @@ def test_cli_does_not_publish_partial_result(tmp_path, monkeypatch, capsys):
     output.write_bytes(b"existing")
     assert chat_pipeline_cli.main(args) == 2
     assert output.read_bytes() == b"existing"
+
+
+@pytest.mark.parametrize("ranking", [
+    None, {}, {"ranks": None}, {"ranks": []}, {"ranks": {}},
+    {"ranks": {"original": ["original:1:1", "original:2:1"]}},
+    {"ranks": {"original": ["original:1:1", "original:2:1"],
+               "revised": ["revised:1:1"], "unknown": []}},
+    {"ranks": {"original": ["original:1:1"], "revised": ["revised:1:1"]}},
+    {"ranks": {"original": ["original:1:1", "original:1:1"], "revised": ["revised:1:1"]}},
+    {"ranks": {"original": ["original:1:1", "revised:1:1"], "revised": ["revised:1:1"]}},
+    {"ranks": {"original": ["original:1:1", "original:999:1"], "revised": ["revised:1:1"]}},
+    {"ranks": {"original": ["original:1:1", {}], "revised": ["revised:1:1"]}},
+    {"ranks": {"original": "original:1:1", "revised": ["revised:1:1"]}},
+    {"ranks": {"original": ["original:1:1", "original:2:1"], "revised": ["revised:1:1"]},
+     "request_sha256": "f" * 64},
+])
+def test_pipeline_rejects_malformed_or_cross_source_ranking(ranking):
+    with pytest.raises(EmbeddingError):
+        pipeline.selection_request(request(), ranking)
+
+
+def test_single_source_ranking_does_not_invent_other_source():
+    req = request(passages=ROWS[:2], baseline=[ROWS[0]["id"]])
+    ranks = {"ranks": {"original": [ROWS[1]["id"], ROWS[0]["id"]]},
+             "request_sha256": req.embedding.sha256}
+    selected = pipeline.selection_request(req, ranks)
+    assert [row.id for row in selected.passages] == [ROWS[0]["id"], ROWS[1]["id"]]
+    with pytest.raises(EmbeddingError):
+        pipeline.selection_request(req, {"ranks": {**ranks["ranks"], "revised": []}})
+
+
+def test_corrupted_ranking_never_reaches_extractive_model(monkeypatch):
+    async def malformed(*args, **kwargs):
+        return {"ranks": {"original": ["revised:1:1", "original:2:1"], "revised": ["revised:1:1"]}}
+    async def never(*args, **kwargs):
+        pytest.fail("Malformed ranking reached second model")
+    monkeypatch.setattr(pipeline.chat_embeddings, "retrieve_local", malformed)
+    monkeypatch.setattr(pipeline.chat_extractive, "extract_local", never)
+    with pytest.raises(EmbeddingError):
+        run(lambda _: pytest.fail("Unexpected model call"))

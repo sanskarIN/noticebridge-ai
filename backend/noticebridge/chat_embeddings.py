@@ -53,7 +53,9 @@ def _text(value: object, limit: int) -> str:
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
         raise EmbeddingError("Invalid text length.")
     try:
-        value.encode("utf-8", errors="strict")
+        # Match browser String.length, which counts UTF-16 code units.
+        if len(value.encode("utf-16-le", errors="strict")) // 2 > limit:
+            raise EmbeddingError("Invalid text length.")
     except UnicodeError:
         raise EmbeddingError("Invalid text encoding.") from None
     return value
@@ -98,9 +100,10 @@ def parse_request(raw: bytes) -> Request:
 
 
 def validate_model(model: str, digest: str) -> None:
-    if len(model) > 96 or not MODEL_NAME.fullmatch(model) or "cloud" in model.casefold():
+    if (not isinstance(model, str) or len(model) > 96
+            or not MODEL_NAME.fullmatch(model) or "cloud" in model.casefold()):
         raise EmbeddingError("Specify an installed local embedding model.")
-    if not DIGEST.fullmatch(digest):
+    if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
         raise EmbeddingError("Specify the installed model's exact SHA-256 digest.")
 
 
@@ -117,6 +120,16 @@ async def _json_response(client: httpx.AsyncClient, method: str, path: str, **kw
         # Do not negotiate compressed data or accept compressed response bodies.
         if response.headers.get("content-encoding", "identity").lower() != "identity":
             raise EmbeddingError("Unexpected compressed response.")
+        # Some local runtime versions omit Content-Type. Reject an explicitly
+        # incompatible type, but continue validating bounded JSON itself.
+        media_type = response.headers.get("content-type")
+        if media_type is not None and media_type.split(";", 1)[0].strip().lower() != "application/json":
+            raise EmbeddingError("Unexpected local response type.")
+        declared = response.headers.get("content-length")
+        if declared is not None and (
+            not re.fullmatch(r"[0-9]{1,10}", declared) or int(declared) > MAX_RESPONSE_BYTES
+        ):
+            raise EmbeddingError("Local response exceeds its size budget.")
         async for part in response.aiter_raw(chunk_size=16384):
             if len(content) + len(part) > MAX_RESPONSE_BYTES:
                 raise EmbeddingError("Local response exceeds its size budget.")
@@ -129,11 +142,11 @@ async def _check_pin(client: httpx.AsyncClient, model: str, digest: str) -> None
     rows = raw.get("models") if isinstance(raw, dict) else None
     if not isinstance(rows, list) or len(rows) > 1024:
         raise EmbeddingError("Invalid local model inventory.")
-    matches = [
-        row for row in rows if isinstance(row, dict)
-        and row.get("name") == model and row.get("model", model) == model
-    ]
-    if len(matches) != 1 or matches[0].get("digest") != digest:
+    # Reject every duplicate name, even if a duplicate reports a mismatched
+    # model field. Discovery already excludes all ambiguous tags.
+    matches = [row for row in rows if isinstance(row, dict) and row.get("name") == model]
+    if (len(matches) != 1 or matches[0].get("model", model) != model
+            or matches[0].get("digest") != digest):
         raise EmbeddingError("Installed model does not match the requested digest.")
     # Remote models may have local manifests. Require local-only configuration
     # separately; inventory inspection cannot prove absence of cloud execution.

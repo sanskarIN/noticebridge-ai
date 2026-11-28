@@ -73,7 +73,30 @@ def parse_request(raw: bytes) -> PipelineRequest:
 def selection_request(request: PipelineRequest, ranking: dict) -> chat_selection.SelectionRequest:
     """Baseline first, then validated dense ranks, independently per role."""
     sources = {row.id: row for row in request.embedding.passages}
+    # Validate the exact per-role contract before selecting any text for the
+    # second model. A ranking is candidate advice, not evidence authority.
+    if not isinstance(ranking, dict) or not isinstance(ranking.get("ranks"), dict):
+        raise EmbeddingError("Invalid pipeline ranking.")
     ranks = ranking["ranks"]
+    expected_counts = {
+        role: sum(key.startswith(role + ":") for key in sources)
+        for role in ("original", "revised")
+    }
+    if set(ranks) != {role for role, count in expected_counts.items() if count}:
+        raise EmbeddingError("Invalid pipeline ranking roles.")
+    for role, ids in ranks.items():
+        if not isinstance(ids, list) or len(ids) != min(
+            expected_counts[role], chat_embeddings.MAX_RESULTS_PER_ROLE,
+        ):
+            raise EmbeddingError("Invalid pipeline ranking count.")
+        seen_ranks = set()
+        for key in ids:
+            if (not isinstance(key, str) or key not in sources
+                    or not key.startswith(role + ":") or key in seen_ranks):
+                raise EmbeddingError("Invalid pipeline ranked evidence.")
+            seen_ranks.add(key)
+    if "request_sha256" in ranking and ranking["request_sha256"] != request.embedding.sha256:
+        raise EmbeddingError("Pipeline ranking request mismatch.")
     chosen = []
     seen = set()
     counts = {"original": 0, "revised": 0}

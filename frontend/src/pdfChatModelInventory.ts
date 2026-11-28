@@ -1,5 +1,5 @@
 /** Explicit, read-only discovery of runtime-reported local tags and pins. */
-import { isLocalChatOrigin, readBoundedJson } from './pdfChatLocalTransport';
+import { isLocalChatOrigin, readBoundedJson, validateLocalResponse } from './pdfChatLocalTransport';
 import { validLocalPipelineConfig, type LocalPipelineConfig } from './pdfChatLocalPipeline';
 
 export const MAX_LOCAL_MODELS = 1024;
@@ -72,8 +72,8 @@ export async function requestLocalModelInventory(signal: AbortSignal, consent: b
     method: 'GET', signal, credentials: 'omit', redirect: 'error', cache: 'no-store',
     headers: { 'X-NoticeBridge-Local-AI': '1' },
   });
-  if (response.redirected || (response.url && response.url !== origin + PATH)) invalid();
-  const text = await readBoundedJson(response, MAX_MODEL_INVENTORY_BYTES);
+  validateLocalResponse(response, origin + PATH, signal);
+  const text = await readBoundedJson(response, MAX_MODEL_INVENTORY_BYTES, signal);
   signal.throwIfAborted();
   return parseLocalModelInventory(text);
 }

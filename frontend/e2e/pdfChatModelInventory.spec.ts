@@ -113,3 +113,37 @@ test('bounded reader and parser reject malformed remote responses', async () => 
     await expect(requestLocalModelInventory(signal(), true, origin, async () => result)).rejects.toThrow();
   }
 });
+
+test('inventory cancellation terminates a stalled read even if injected fetch ignores abort', async () => {
+  const controller = new AbortController();
+  let cancelled = 0;
+  let reading!: () => void;
+  const started = new Promise<void>(resolve => { reading = resolve; });
+  const stream = new ReadableStream<Uint8Array>({
+    pull() { reading(); },
+    cancel() { cancelled++; return new Promise<void>(() => {}); },
+  });
+  const task = requestLocalModelInventory(controller.signal, true, origin,
+    async () => new Response(stream, { headers: { 'Content-Type': 'application/json' } }));
+  await started;
+  controller.abort();
+  await expect(task).rejects.toThrow('abort');
+  expect(cancelled).toBe(1);
+  expect(stream.locked).toBe(false);
+});
+test('inventory discards late responses and rejected destinations without decoding', async () => {
+  for (const mode of ['abort', 'redirect', 'wrong-url']) {
+    const controller = new AbortController();
+    let cancelled = 0;
+    const fetcher: typeof fetch = async () => {
+      const stream = new ReadableStream<Uint8Array>({ cancel() { cancelled++; } });
+      const result = new Response(stream, { headers: { 'Content-Type': 'application/json' } });
+      if (mode === 'abort') controller.abort();
+      if (mode === 'redirect') Object.defineProperty(result, 'redirected', { value: true });
+      if (mode === 'wrong-url') Object.defineProperty(result, 'url', { value: origin + '/api/other' });
+      return result;
+    };
+    await expect(requestLocalModelInventory(controller.signal, true, origin, fetcher)).rejects.toThrow();
+    expect(cancelled).toBe(1);
+  }
+});
