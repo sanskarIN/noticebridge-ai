@@ -27,6 +27,7 @@ import { resolveCollectionPage } from './pdfChatCollectionLayout';
 import { collectionReviewKey, MAX_COLLECTION_REVIEW_ITEMS, pinCollectionEvidence, removeDocumentReviews, type CollectionReviewEntry } from './pdfChatCollectionReview';
 import { CollectionEvidenceExplorer, CollectionFieldOverview, CollectionQuestionMatches } from './PdfChatCollectionTools';
 
+import PdfChatBooleanEvidence from './PdfChatBooleanEvidence';
 import PdfChatCollectionOverlap from './PdfChatCollectionOverlap';
 import PdfChatCollectionTableComparison from './PdfChatCollectionTableComparison';
 import PdfChatCollectionAnswerSummary from './PdfChatCollectionAnswerSummary';
@@ -413,6 +414,7 @@ export default function PdfChatCollection() {
         <div id={collectionToolAnchor('fields' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionFieldOverview documents={documents} selected={selected} names={names} onInspect={inspect}
           onAsk={value => { setQuestion(value); questionRef.current?.focus(); }} /></div>
         <div id={collectionToolAnchor('literal' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><CollectionEvidenceExplorer documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
+        <div id={collectionToolAnchor('boolean-search')} tabIndex={-1} className="chat-collection-destination"><PdfChatBooleanEvidence documents={documents} selected={selected} names={names} onInspect={inspect}/></div>
         <div id={collectionToolAnchor('dates' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionDates documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
         <div id={collectionToolAnchor('requirements' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionRequirements documents={documents} selected={selected} names={names} onInspect={inspect} /></div>
         <div id={collectionToolAnchor('outline' as CollectionToolId)} tabIndex={-1} className="chat-collection-destination"><PdfChatCollectionOutline documents={documents} selected={selected} names={names} onInspect={inspect} /></div>

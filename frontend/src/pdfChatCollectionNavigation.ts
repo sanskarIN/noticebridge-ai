@@ -2,7 +2,7 @@
  * Navigation only changes visibility/focus, never document scope or answers. */
 export type CollectionToolGroup='ask'|'inspect'|'review'|'exchange'|'experiments';
 export type CollectionToolId=
-  'sources'|'question'|'batch'|'history'|'models'|'results'|'fields'|'literal'|
+  'sources'|'question'|'batch'|'history'|'models'|'results'|'fields'|'literal'|'boolean-search'|
   'dates'|'requirements'|'outline'|'tables'|'table-comparison'|'overlap'|'pages'|'preview'|'review'|'review-queue'|'workspace'|
   'ocr'|'evaluation'|'packet'|'replay'|'exchange';
 export type CollectionToolState={documents:number;selected:number;turns:number;preview:boolean;busy:boolean};
@@ -30,6 +30,8 @@ export const COLLECTION_TOOLS:readonly CollectionTool[]=[
     keywords:['fee','eligibility','deadline','amount','matrix'],requirement:'documents',blockedDuringIndexing:true},
   {id:'literal',group:'inspect',title:'Literal text search',description:'Find explicit text and reference candidates.',
     keywords:['find','reference','keyword','clause','search'],requirement:'documents',blockedDuringIndexing:true},
+  {id:'boolean-search',group:'inspect',title:'Boolean phrase search',description:'Combine quoted literal phrases with explicit AND, OR and NOT.',
+    keywords:['boolean','phrase','exclude','operator','search'],requirement:'selection',blockedDuringIndexing:true},
   {id:'dates',group:'inspect',title:'Printed dates and times',description:'Inspect indexed date and time candidates.',
     keywords:['timeline','schedule','deadline','calendar'],requirement:'documents',blockedDuringIndexing:true},
   {id:'requirements',group:'inspect',title:'Requirement wording',description:'Inspect mandatory, prohibited and exception cues.',
