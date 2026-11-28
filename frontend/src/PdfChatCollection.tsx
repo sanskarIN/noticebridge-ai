@@ -312,7 +312,7 @@ export default function PdfChatCollection() {
       </>}
       <form className="chat-form" onSubmit={submit}>
         <label>Collection question
-          <textarea ref={questionRef} value={question} maxLength={MAX_QUESTION}
+          <textarea aria-label="Collection question" ref={questionRef} value={question} maxLength={MAX_QUESTION}
             rows={3} placeholder="What is the application fee?" onChange={event => setQuestion(event.target.value)}
             onKeyDown={event => {
               if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
@@ -371,14 +371,14 @@ export default function PdfChatCollection() {
         </>}
       </section>}
       {documents.length > 0 && !busy && <div className="chat-collection-tools"
-        key={documents.map(doc => doc.id).join(':') + '/' + selected.join(':')}>
+        key={'tools:' + documents.map(doc => doc.id).join(':') + '/' + selected.join(':')}>
         <CollectionFieldOverview documents={documents} selected={selected} names={names} onInspect={inspect}
           onAsk={value => { setQuestion(value); questionRef.current?.focus(); }} />
         <CollectionEvidenceExplorer documents={documents} selected={selected} names={names} onInspect={inspect} />
         <CollectionTableExplorer documents={documents} selected={selected} names={names} onInspect={inspect}
           onAsk={(documentId, value) => { setSelected([documentId]); setQuestion(value); questionRef.current?.focus(); }} />
       </div>}
-      {documents.length > 0 && !busy && <CollectionPageNavigator key={documents.map(doc => doc.id).join(':')}
+      {documents.length > 0 && !busy && <CollectionPageNavigator key={'coverage:' + documents.map(doc => doc.id).join(':')}
         documents={documents} names={names} onInspect={inspectPage} />}
       {preview && previewDoc && <section className="chat-panel chat-collection-preview" aria-label="Collection source inspection">
         <div className="chat-toolbar">
@@ -409,15 +409,15 @@ export default function PdfChatCollection() {
           <PdfEvidencePreview file={previewDoc.file} pageNumber={preview.page} inspectionOnly />
         </Suspense>
       </section>}
-      {documents.length > 0 && !busy && <PdfChatCollectionReview key={documents.map(doc => doc.id).join(':')}
+      {documents.length > 0 && !busy && <PdfChatCollectionReview key={'review:' + documents.map(doc => doc.id).join(':')}
         documents={documents} entries={reviews} names={names} onChange={setReviews} onInspect={inspect} />}
-      {documents.length > 0 && !busy && <PdfChatCollectionWorkspace key={documents.map(doc => doc.id).join(':')}
+      {documents.length > 0 && !busy && <PdfChatCollectionWorkspace key={'workspace:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} reviews={reviews} onApply={workspace => {
           setTurns(workspace.turns); setReviews(workspace.reviews);
           setActiveTurn(workspace.turns.length ? workspace.turns.length - 1 : null);
           setQuestion(''); setPreview(null); setError('');
         }} />}
-      {documents.length > 0 && <PdfChatCollectionExchange key={documents.map(doc => doc.id).join(':')}
+      {documents.length > 0 && <PdfChatCollectionExchange key={'exchange:' + documents.map(doc => doc.id).join(':')}
         documents={documents} turns={turns} disabled={busy}
         onApply={restored => {
           setTurns(restored); setActiveTurn(restored.length - 1); setQuestion(''); setPreview(null); setError('');

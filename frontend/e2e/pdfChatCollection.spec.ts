@@ -404,7 +404,7 @@ test('collection history revision requires explicit approval to discard later qu
   await root.getByLabel('View collection question').selectOption('0');
   const actions = root.getByRole('region', { name: 'Collection history actions' });
   await actions.getByRole('button', { name: 'Edit collection question' }).click();
-  await actions.getByLabel('Revised collection question').fill('Application fee on page 2?');
+  await actions.getByRole('textbox', { name: 'Revised collection question', exact: true }).fill('Application fee on page 2?');
   const apply = actions.getByRole('button', { name: 'Apply revised collection question' });
   await expect(apply).toBeDisabled();
   await actions.getByLabel('I approve discarding 1 later collection question turn(s).').check();
@@ -417,4 +417,25 @@ test('collection history revision requires explicit approval to discard later qu
   await actions.getByRole('button', { name: 'Remove collection question', exact: true }).click();
   await actions.getByRole('button', { name: 'Confirm collection question removal' }).click();
   await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+});
+
+test('collection sibling panels remain unique through question and selection changes', async ({ page }) => {
+  const root = await open(page);
+  const warnings: string[] = [];
+  page.on('console', message => {
+    if (/same key|duplicate key/i.test(message.text())) warnings.push(message.text());
+  });
+  await attach(page, [
+    fixture('first.pdf', [['Application fee: INR 500']]),
+    fixture('second.pdf', [['Application fee: INR 350']]),
+  ], 2);
+  const panels = ['Collection page coverage', 'Collection evidence review notebook', 'Complete private collection workspace'];
+  for (let i = 0; i < 3; i++) {
+    await ask(page, 'Application fee?');
+    await root.getByLabel('Search document 2', { exact: true }).setChecked(i % 2 === 0);
+    for (const name of panels) await expect(root.getByRole('group', { name, exact: true })).toHaveCount(1);
+    await expect(root.getByRole('textbox', { name: 'Collection question', exact: true })).toHaveCount(1);
+    await expect(root.getByText('Save or verify private collection work', { exact: true })).toHaveCount(1);
+  }
+  expect(warnings).toEqual([]);
 });

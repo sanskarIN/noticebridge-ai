@@ -26,6 +26,7 @@ export function CollectionPageNavigator({ documents, names, onInspect }: Props &
   const current = collectionPageList(visible, page);
   function jump(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    event.stopPropagation();
     try {
       const source = resolveCollectionPage(documents, document.id, input);
       setError(false);
