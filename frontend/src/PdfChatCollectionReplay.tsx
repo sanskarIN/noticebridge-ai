@@ -1,3 +1,4 @@
+import PdfChatSnapshotDifference from './PdfChatSnapshotDifference';
 import {useEffect,useRef,useState,type ChangeEvent} from 'react';
 import {readPdf} from './pdfChatExtract';
 import type {CollectionDocument} from './pdfChatCollection';
@@ -80,6 +81,7 @@ export default function PdfChatCollectionReplay({documents}: {documents:readonly
       onChange={event=>setApproved(event.target.checked?documents:null)}/> I approve exporting the private native collection text.</label>
     <button type="button" className="chat-button" disabled={approved!==documents||!documents.length}
       onClick={exportSnapshot}>Export native collection snapshot</button>
+    <PdfChatSnapshotDifference/>
     <h4>Independent source replay</h4>
     <p>Choose a previously exported snapshot and independently select the actual PDF files. The order and filenames do not determine matching.</p>
     <label className="chat-session-file">Collection replay snapshot file

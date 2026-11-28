@@ -300,3 +300,7 @@ Explicit broad questions such as `Summarize this notice?`, `List the requirement
 ## Evaluate optional collection model proposals
 
 After independently validating local model results, import human-authored retrieval labels from the evaluation lab. Exact PDF identity, question wording and context settings determine paired cases; missing labels, missing results and native-empty scopes are reported separately. Compare the first four baseline and fused candidate fragments, and the unique extractive proposal fragments. Shortlist label recall distinguishes a missing candidate from a ranking failure. Fragment-level agreement is not substring-level answer correctness or historical execution authentication. Private evaluation exports contain model metadata, question text and coordinates, but not automatic source excerpts or label notes.
+
+## Native snapshot difference diagnostics
+
+Compare two canonical collection snapshots from independent extraction runs. The diagnostic aligns only identical claimed source fingerprints and exact physical fragment coordinates. It distinguishes text-only, geometry-only, combined and one-sided coordinate differences, and exposes coverage metadata separately. Imported snapshot content is not a reopened PDF. A count-and-coordinate report omits private fragment text and can be reproduced against the two exact snapshots; it does not verify PDF bytes, authenticity, completeness or semantic notice changes.
