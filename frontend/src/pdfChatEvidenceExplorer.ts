@@ -1,5 +1,5 @@
 /** Native evidence navigation. Search hits are not verified answers. */
-import { MAX_PASSAGES, MAX_QUESTION, knownQuestionField, queryTerms, rankedMatches,
+import { MAX_PASSAGES, MAX_QUESTION, knownQuestionField, queryTerms, rankedMatches, pageScopedIndex,
   type Answer, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
 import { parseSearchQuestion } from './pdfChatInsights';
 
@@ -138,9 +138,7 @@ export function searchAllQuestionMatches(index: SearchIndex, answer: Answer): Ex
   const terms = queryTerms(content);
   if (!terms.length || terms.length > 16) return result([]);
   const field = knownQuestionField(terms);
-  const selected = page === undefined ? index : {
-    ...index, rows: index.rows.filter(row => row.passage.page === page),
-  };
+  const selected = page === undefined ? index : pageScopedIndex(index, page);
   const roles: Role[] = answer.scope === 'both' ? ['original', 'revised'] : [answer.scope];
   return result(roles.flatMap(role => rankedMatches(selected, terms, role, field)
     .map(source => ({ source, ranges: [] }))));

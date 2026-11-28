@@ -1,4 +1,4 @@
-import { answerQuestion, resolveQuestion, MAX_QUESTION, type Answer, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
+import { answerQuestion, resolveQuestion, pageScopedIndex, MAX_QUESTION, type Answer, type Passage, type Role, type Scope, type SearchIndex } from './pdfChatCore';
 import { extractKnownField } from './pdfChatOverview';
 import { scalarComparisonIntent, type ScalarIntent } from './pdfChatScalarIntent';
 import { noticeFieldIntent, type NoticeIntent } from './pdfChatNoticeIntent';
@@ -169,9 +169,7 @@ export function answerScopedQuestions(
     // not replace a requested but absent source with the other document.
     // Keep original corpus term statistics; restrict candidates, not ranking
     // normalization. Physical page references are not printed page labels.
-    const selected = page === undefined ? index : {
-      ...index, rows: index.rows.filter(row => row.passage.page === page),
-    };
+    const selected = page === undefined ? index : pageScopedIndex(index, page);
     const answer = answerQuestion(selected, content || '?', scope, includeContext);
     return { ...answer, question: part, ...(page === undefined ? {} : { pageFilter: page }) };
   });

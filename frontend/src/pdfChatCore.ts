@@ -63,6 +63,106 @@ function terms(text: string): string[] {
 }
 export type IndexedPassage = { passage: Passage; counts: Map<string, number>; length: number; field: ExtractedField | null };
 export type SearchIndex = { rows: IndexedPassage[]; df: Map<string, number>; average: number; corpusSize: number };
+// Internal acceleration only: callers still see the same SearchIndex shape.
+// Indexes constructed by buildIndex and pageScopedIndex are treated as
+// immutable snapshots. Foreign or spread/filter views retain the scan path.
+type RoleLookup = {
+  all: number[];
+  terms: Map<string, number[]>;
+  fields: Map<FieldId, number[]>;
+  readingOrder: IndexedPassage[];
+};
+type RetrievalLookup = {
+  rows: IndexedPassage[];
+  roles: Record<Role, RoleLookup>;
+  pages: Map<number, IndexedPassage[]>;
+  views: Map<number, SearchIndex>;
+};
+const lookups = new WeakMap<SearchIndex, RetrievalLookup>();
+const MAX_CACHED_PAGE_VIEWS = 8;
+function emptyRoleLookup(): RoleLookup {
+  return { all: [], terms: new Map(), fields: new Map(), readingOrder: [] };
+}
+function appendPosting<K>(map: Map<K, number[]>, key: K, ordinal: number): void {
+  const existing = map.get(key);
+  if (existing) existing.push(ordinal);
+  else map.set(key, [ordinal]);
+}
+function createLookup(rows: IndexedPassage[]): RetrievalLookup {
+  const roles = { original: emptyRoleLookup(), revised: emptyRoleLookup() };
+  const pages = new Map<number, IndexedPassage[]>();
+  rows.forEach((row, ordinal) => {
+    const role = roles[row.passage.role];
+    role.all.push(ordinal);
+    role.readingOrder.push(row);
+    for (const word of row.counts.keys()) appendPosting(role.terms, word, ordinal);
+    if (row.field) appendPosting(role.fields, row.field.definition.id, ordinal);
+    const page = pages.get(row.passage.page);
+    if (page) page.push(row);
+    else pages.set(row.passage.page, [row]);
+  });
+  for (const role of Object.values(roles)) {
+    role.readingOrder.sort((a, b) => a.passage.page - b.passage.page ||
+      a.passage.ordinal - b.passage.ordinal);
+  }
+  return { rows, roles, pages, views: new Map() };
+}
+function lookupFor(index: SearchIndex): RetrievalLookup | undefined {
+  const lookup = lookups.get(index);
+  return lookup?.rows === index.rows ? lookup : undefined;
+}
+
+/** Restrict candidates to a physical PDF page, retaining full-corpus BM25
+ * statistics. Repeated questions share a bounded cache of derived indexes.
+ * Do not rebuild document frequency from the page: that changes ranking. */
+export function pageScopedIndex(index: SearchIndex, page: number): SearchIndex {
+  if (!Number.isSafeInteger(page) || page < 1 || page > 80) throw new Error('Invalid physical PDF page.');
+  const lookup = lookupFor(index);
+  if (!lookup) return { ...index, rows: index.rows.filter(row => row.passage.page === page) };
+  const existing = lookup.views.get(page);
+  if (existing) {
+    lookup.views.delete(page);
+    lookup.views.set(page, existing);
+    return existing;
+  }
+  const view = { ...index, rows: lookup.pages.get(page) ?? [] };
+  lookups.set(view, createLookup(view.rows));
+  lookup.views.set(page, view);
+  if (lookup.views.size > MAX_CACHED_PAGE_VIEWS) {
+    const oldest = lookup.views.keys().next();
+    if (!oldest.done) lookup.views.delete(oldest.value);
+  }
+  return view;
+}
+
+/** A lexical match must contain every query term, so its row must appear
+ * in the rarest role-specific posting. Add field-alias rows independently:
+ * a known field can match even when no lexical term is shared. Preserve
+ * original input order for stable ranking ties and duplicate resolution. */
+function candidateOrdinals(lookup: RoleLookup, words: string[], field: FieldId | null): number[] {
+  let shortest = lookup.all;
+  for (const word of words) {
+    const posting = lookup.terms.get(word);
+    if (!posting) { shortest = []; break; }
+    if (posting.length < shortest.length) shortest = posting;
+  }
+  const known = field === null ? undefined : lookup.fields.get(field);
+  if (!known?.length || shortest === lookup.all) return shortest;
+  if (!shortest.length) return known;
+  // Both input postings are already ordered by their source array index.
+  // Linear merge deduplicates without building a Set or sorting all rows.
+  const merged: number[] = [];
+  let left = 0, right = 0;
+  while (left < shortest.length && right < known.length) {
+    const a = shortest[left], b = known[right];
+    if (a <= b) { merged.push(a); left++; if (a === b) right++; }
+    else { merged.push(b); right++; }
+  }
+  while (left < shortest.length) merged.push(shortest[left++]);
+  while (right < known.length) merged.push(known[right++]);
+  return merged;
+}
+
 export function buildIndex(passages: Passage[]): SearchIndex {
   if (passages.length > MAX_PASSAGES) throw new Error('Passage budget exceeded.');
   const df = new Map<string, number>();
@@ -74,7 +174,9 @@ export function buildIndex(passages: Passage[]): SearchIndex {
     for (const word of counts.keys()) df.set(word, (df.get(word) ?? 0) + 1);
     return { passage, counts, length: words.length, field: extractKnownField(passage) };
   });
-  return { rows, df, corpusSize: rows.length, average: Math.max(1, rows.reduce((n, row) => n + row.length, 0) / Math.max(1, rows.length)) };
+  const index = { rows, df, corpusSize: rows.length, average: Math.max(1, rows.reduce((n, row) => n + row.length, 0) / Math.max(1, rows.length)) };
+  lookups.set(index, createLookup(rows));
+  return index;
 }
 
 export function queryTerms(question: string): string[] {
@@ -121,16 +223,22 @@ export function rankedMatches(index: SearchIndex, words: string[], role: Role, f
   // Full query-term coverage prevents a result based solely on a generic
   // shared word such as "application". This is intentionally conservative.
   const scores = [];
-  for (const row of index.rows) {
+  const lookup = lookupFor(index);
+  const candidates = lookup ? candidateOrdinals(lookup.roles[role], words, field) : null;
+  const count = candidates?.length ?? index.rows.length;
+  const weighted = words.map(word => {
+    const df = index.df.get(word) ?? 0;
+    return { word, idf: Math.log(1 + (index.corpusSize - df + 0.5) / (df + 0.5)) };
+  });
+  for (let i = 0; i < count; i++) {
+    const row = index.rows[candidates ? candidates[i] : i];
     if (row.passage.role !== role) continue;
     const lexical = words.every(word => row.counts.has(word));
     const known = field !== null && row.field?.definition.id === field;
     if (!lexical && !known) continue;
     let score = 0;
-    for (const word of words) {
-      const df = index.df.get(word) ?? 0;
+    for (const { word, idf } of weighted) {
       const tf = row.counts.get(word) ?? 0;
-      const idf = Math.log(1 + (index.corpusSize - df + 0.5) / (df + 0.5));
       score += idf * tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * row.length / index.average));
     }
     scores.push({ passage: row.passage, score });
@@ -168,7 +276,7 @@ export function sameTextFlow(first: Passage, next: Passage): boolean {
  */
 export function contextualMatches(index: SearchIndex, words: string[], role: Role): Passage[][] {
   if (words.length < 2 || words.length > 16) return [];
-  const rows = index.rows.filter(row => row.passage.role === role)
+  const rows = lookupFor(index)?.roles[role].readingOrder ?? index.rows.filter(row => row.passage.role === role)
     .sort((a, b) => a.passage.page - b.passage.page || a.passage.ordinal - b.passage.ordinal);
   const candidates: { rows: IndexedPassage[]; score: number }[] = [];
   const covers = (window: IndexedPassage[]) =>
