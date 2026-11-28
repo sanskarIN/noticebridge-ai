@@ -34,3 +34,9 @@ certifies the extracted text, meaning or official authority.
 
 This feature still requires independently reviewed real-notice evaluation,
 browser performance measurements and accessibility testing before release.
+
+## Collection inspection tools
+
+The printed-field matrix compares only recognized literal labels and values across the explicitly selected PDFs. Missing values, multiple values within one PDF, and differing single values are distinct states. It does not choose an authoritative notice. Filter the matrix to review unresolved fields, and inspect a citation in its original document and physical page.
+
+The collection evidence explorer supports literal phrases and explicit clause references. Case folding is optional and ASCII-only. Matches are native-text offsets, not visual bounding boxes. A physical-page filter never falls back to another page or document. Search results are paginated per document and do not create chat turns. For a question whose strict matches exceed the displayed citations, the expansion reconstructs all strict matches from the same index and scope without changing the original answer.

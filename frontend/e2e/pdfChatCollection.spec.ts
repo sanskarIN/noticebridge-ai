@@ -156,3 +156,106 @@ test('narrow collection layout keeps search usable and does not overflow the vie
   }));
   expect(width.scroll).toBeLessThanOrEqual(width.client + 2);
 });
+
+test('field matrix shows distinct literal values, retains coverage and can prefill a question', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [
+    fixture('first.pdf', [['Application fee: INR 500', 'Eligibility: Class 12']]),
+    fixture('second.pdf', [['Application fee: INR 350', 'Eligibility: Class 12']]),
+    fixture('third.pdf', [['Eligibility: Class 12']]),
+  ], 3);
+  await root.getByText('Compare recognized printed fields across selected collection PDFs', { exact: true }).click();
+  const matrix = root.locator('details').filter({ has: root.getByText('Compare recognized printed fields across selected collection PDFs', { exact: true }) });
+  await matrix.getByLabel('Find collection field').fill('fee');
+  await expect(matrix.getByText('No recognized field in one or more selected documents.')).toBeVisible();
+  await expect(matrix.getByText('INR 500', { exact: true })).toBeVisible();
+  await expect(matrix.getByText('INR 350', { exact: true })).toBeVisible();
+  await expect(matrix.getByText('No recognized indexed value.', { exact: true })).toHaveCount(1);
+  await matrix.getByRole('region', { name: 'Printed field: Document 2: second.pdf' })
+    .getByRole('button', { name: 'Inspect collection field page 1' }).click();
+  const source = root.getByRole('region', { name: 'Collection source inspection' });
+  await expect(source.locator('blockquote')).toHaveText('Application fee: INR 350');
+  await source.getByRole('button', { name: 'Close collection source' }).click();
+  await matrix.getByLabel('Find collection field').fill('eligibility');
+  await expect(matrix.getByText('Same single literal value in all selected documents.')).toBeVisible();
+  await matrix.getByLabel('Collection field filter').selectOption('review');
+  await expect(matrix.getByText('No recognized fields match this filter.')).toBeVisible();
+  await matrix.getByLabel('Find collection field').fill('fee');
+  await matrix.getByRole('button', { name: /Ask collection about.*fee/i }).click();
+  await expect(root.getByLabel('Collection question', { exact: true })).toHaveValue(/fee/i);
+  await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+});
+
+test('collection literal search keeps physical page coverage and exact document identity', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [
+    fixture('two-pages.pdf', [['Application fee: INR 500'], ['Application fee: INR 250']]),
+    fixture('one-page.pdf', [['Application fee: INR 350']]),
+  ], 2);
+  await root.getByText('Explore exact text and references across collection PDFs', { exact: true }).click();
+  await root.getByLabel('Collection evidence search text').fill('application fee');
+  await root.getByLabel('Collection evidence physical page (optional)').fill('2');
+  await root.getByRole('button', { name: 'Search collection evidence', exact: true }).click();
+  const results = root.getByLabel('Collection evidence search results');
+  await expect(results.locator('mark')).toHaveText('Application fee');
+  const first = results.getByRole('region', { name: 'Collection evidence: Document 1: two-pages.pdf' });
+  await expect(first).toContainText('INR 250');
+  await expect(first).not.toContainText('INR 500');
+  await expect(results.getByRole('region', { name: 'Collection evidence: Document 2: one-page.pdf' }))
+    .toContainText('Physical page does not exist.');
+  await first.getByRole('button', { name: /Inspect collection evidence page 2/ }).click();
+  await expect(root.getByRole('region', { name: 'Collection source inspection' }).locator('blockquote'))
+    .toHaveText('Application fee: INR 250');
+  await root.getByRole('button', { name: 'Close collection source' }).click();
+  await root.getByLabel('Search document 2', { exact: true }).uncheck();
+  await expect(results).toHaveCount(0);
+  await expect(root.getByLabel('Collection conversation')).toHaveCount(0);
+});
+
+test('explicit references and case-sensitive phrases do not silently broaden the search', async ({ page }) => {
+  const root = await open(page);
+  await attach(page, [
+    fixture('references.pdf', [['Clause 4.2: Eligibility', 'Clause 4.20: Different provision']]),
+    fixture('mentions.pdf', [['See clause 4.2 for details']]),
+  ], 2);
+  await root.getByText('Explore exact text and references across collection PDFs', { exact: true }).click();
+  await root.getByLabel('Collection evidence mode').selectOption('reference');
+  await root.getByLabel('Collection evidence search text').fill('Clause 4.2');
+  await root.getByRole('button', { name: 'Search collection evidence', exact: true }).click();
+  const results = root.getByLabel('Collection evidence search results');
+  await expect(results.locator('mark')).toHaveCount(2);
+  await expect(results).not.toContainText('Different provision');
+  await expect(results.getByText(/Fragment starts with reference/)).toHaveCount(1);
+  await expect(results.getByText(/Reference appears within fragment/)).toHaveCount(1);
+  await root.getByLabel('Collection evidence mode').selectOption('literal');
+  await root.getByLabel('Collection evidence search text').fill('Clause 4.2:');
+  await root.getByLabel('Ignore ASCII case in collection evidence').uncheck();
+  await root.getByRole('button', { name: 'Search collection evidence', exact: true }).click();
+  await expect(results.locator('mark')).toHaveText('Clause 4.2:');
+  await root.getByLabel('Collection evidence physical page (optional)').fill('0');
+  await root.getByRole('button', { name: 'Search collection evidence', exact: true }).click();
+  await expect(root.getByText(/Enter a valid literal phrase or explicit reference/)).toBeVisible();
+  await expect(results).toHaveCount(0);
+});
+
+test('expanding strict question matches exposes additional pages without changing citations', async ({ page }) => {
+  const root = await open(page);
+  const pages = Array.from({ length: 14 }, (_, i) => ['Application fee: INR ' + (100 + i)]);
+  await attach(page, [fixture('fees.pdf', pages)], 1);
+  const answer = await ask(page, 'Application fee?');
+  const before = await answer.locator('blockquote').allTextContents();
+  expect(before.length).toBeGreaterThan(0);
+  expect(before.length).toBeLessThan(14);
+  await answer.getByRole('button', { name: 'Show all collection question matches' }).click();
+  await expect(answer.getByText('14 indexed fragment match(es).')).toBeVisible();
+  await expect(answer.getByRole('button', { name: /Inspect collection evidence page/ })).toHaveCount(12);
+  await answer.getByRole('button', { name: 'Next collection matches' }).click();
+  await expect(answer.getByRole('button', { name: /Inspect collection evidence page/ })).toHaveCount(2);
+  await expect(answer.getByRole('button', { name: 'Next collection matches' })).toBeDisabled();
+  expect(await answer.locator('blockquote').allTextContents()).toEqual(before);
+  await answer.getByRole('button', { name: 'Previous collection matches' }).click();
+  await expect(answer.getByRole('button', { name: /Inspect collection evidence page/ })).toHaveCount(12);
+  await answer.getByRole('button', { name: 'Hide all collection question matches' }).click();
+  await expect(answer.getByRole('button', { name: /Inspect collection evidence page/ })).toHaveCount(0);
+  await expect(root.getByLabel('View collection question').locator('option')).toHaveCount(1);
+});

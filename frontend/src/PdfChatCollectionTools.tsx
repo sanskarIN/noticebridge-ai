@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { explorerPage, highlightedSegments, MAX_LITERAL_CHARS, type ExplorerHit } from './pdfChatEvidenceExplorer';
 import { collectionFieldMatrix, collectionFieldPage, collectionQuestionEvidence,
-  filterCollectionFields, parseCollectionEvidencePage, searchCollectionEvidence,
+  filterCollectionFields, parseCollectionEvidencePage, searchCollectionEvidence, COLLECTION_FIELD_PAGE_SIZE,
   type CollectionCoverage, type CollectionField, type CollectionEvidenceResult, type MatrixFilter } from './pdfChatCollectionTools';
 import type { Answer, Passage } from './pdfChatCore';
 import type { CollectionDocument } from './pdfChatCollection';
@@ -85,7 +85,7 @@ export function CollectionFieldOverview({ documents, selected, names, onInspect,
   const fields = useMemo(() => open && selected.length ? collectionFieldMatrix(documents, selected) : [],
     [open, documents, selected]);
   const visible = filterCollectionFields(fields, filter, needle);
-  const current = collectionFieldPage(visible, Math.min(page, Math.max(1, Math.ceil(visible.length / 6))));
+  const current = collectionFieldPage(visible, Math.min(page, Math.max(1, Math.ceil(visible.length / COLLECTION_FIELD_PAGE_SIZE))));
   return <details className="chat-collection-inspection" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>Compare recognized printed fields across selected collection PDFs</summary>
     <p className="chat-muted">This is a literal field inventory, not a verified summary, revision relationship,
