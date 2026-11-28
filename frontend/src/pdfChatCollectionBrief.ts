@@ -4,7 +4,7 @@ import {collectionCitation,runCollectionStep,type CollectionDocument,type Collec
 import {parsePageFilter,parseRequirementQuestion} from './pdfChatInsights';
 import {buildNoticeOverview,type OverviewValue,type FieldDefinition} from './pdfChatOverview';
 import {detectOutlineHeading,type OutlineHeading} from './pdfChatStructure';
-import {requirementCues,requirementKinds,type RequirementKind,type RequirementCue} from './pdfChatRequirements';
+import {requirementCues,type RequirementKind,type RequirementCue} from './pdfChatRequirements';
 import {questionReferences,searchReference,type Reference,type ExplorerHit} from './pdfChatEvidenceExplorer';
 import {pageScopedIndex,type Passage} from './pdfChatCore';
 export const BRIEF_PAGE_SIZE=8;

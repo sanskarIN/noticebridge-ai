@@ -41,7 +41,7 @@ function validateReview(documents:readonly CollectionDocument[],plan:CollectionM
       ranking.candidates.length>8||ranking.candidates.length!==uniqueSources(ranking.candidates.map(row=>row.passage)).length||
       !Number.isSafeInteger(value.review.selectionCount)||value.review.selectionCount<1||value.review.selectionCount>12)invalid();
   function local(source:Passage){
-    if(entry.request.embedding.allowed.get(passageId(source))!==source)invalid();
+    if(entry!.request.embedding.allowed.get(passageId(source))!==source)invalid();
     return collectionCitation(documents,value.documentId,source).source;
   }
   for(const row of ranking.candidates)local(row.passage);
