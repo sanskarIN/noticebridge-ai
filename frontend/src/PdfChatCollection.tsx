@@ -6,6 +6,7 @@ import { admitCollectionDocument, collectionCitation, collectionStats, runCollec
   MAX_COLLECTION_TURNS, CollectionError, type CollectionDocument, type CollectionPart, type CollectionTurn,
 } from './pdfChatCollection';
 import PdfChatCollectionExchange from './PdfChatCollectionExchange';
+import { CollectionEvidenceExplorer, CollectionFieldOverview, CollectionQuestionMatches } from './PdfChatCollectionTools';
 
 const PdfEvidencePreview = lazy(() => import('./PdfEvidencePreview'));
 type Preview = { documentId: string; page: number; source?: Passage };
@@ -26,7 +27,10 @@ const coverageText: Record<CollectionPart['coverage'], string> = {
   not_indexed: 'This physical page was not indexed within the local limits.',
 };
 
-function CollectionAnswer({ part, onInspect }: { part: CollectionPart; onInspect: (source: Passage, target: HTMLElement) => void }) {
+function CollectionAnswer({ part, documents, documentId, onInspect }: {
+  part: CollectionPart; documents: readonly CollectionDocument[]; documentId: string;
+  onInspect: (documentId: string, source: Passage, target: HTMLElement) => void;
+}) {
   const { answer } = part;
   return <div className="chat-collection-part">
     <h5>{answer.question}</h5>
@@ -45,8 +49,9 @@ function CollectionAnswer({ part, onInspect }: { part: CollectionPart; onInspect
         <p className="chat-muted">[{index + 1}] Physical page {source.page} · fragment {source.ordinal}</p>
         <blockquote>{source.text}</blockquote>
         <button type="button" className="chat-button"
-          onClick={event => onInspect(source, event.currentTarget)}>Inspect collection source [{index + 1}]</button>
+          onClick={event => onInspect(documentId, source, event.currentTarget)}>Inspect collection source [{index + 1}]</button>
       </div>)}
+      <CollectionQuestionMatches documents={documents} documentId={documentId} answer={answer} onInspect={onInspect} />
     </>}
   </div>;
 }
@@ -329,16 +334,22 @@ export default function PdfChatCollection() {
             <p className="chat-muted">{currentTurn.results.length} document result(s). Results are not a global ranking.</p>
             <button type="button" className="chat-button" disabled={busy} onClick={repeatQuestion}>Copy this collection question</button>
           </div>
-          <div className="chat-collection-results" aria-label="Collection results">
+          <div className="chat-collection-results" aria-label="Collection results" key={activeTurn}>
             {currentTurn.results.map(result => <section key={result.documentId} className="chat-answer"
               aria-label={'Collection result: ' + names.get(result.documentId)}>
               <h4>{names.get(result.documentId)}</h4>
-              {result.parts.map((part, index) => <CollectionAnswer key={index} part={part}
-                onInspect={(source, target) => inspect(result.documentId, source, target)} />)}
+              {result.parts.map((part, index) => <CollectionAnswer key={index} part={part} documents={documents} documentId={result.documentId}
+                onInspect={inspect} />)}
             </section>)}
           </div>
         </>}
       </section>}
+      {documents.length > 0 && !busy && <div className="chat-collection-tools"
+        key={documents.map(doc => doc.id).join(':') + '/' + selected.join(':')}>
+        <CollectionFieldOverview documents={documents} selected={selected} names={names} onInspect={inspect}
+          onAsk={value => { setQuestion(value); questionRef.current?.focus(); }} />
+        <CollectionEvidenceExplorer documents={documents} selected={selected} names={names} onInspect={inspect} />
+      </div>}
       {preview && previewDoc && <section className="chat-panel chat-collection-preview" aria-label="Collection source inspection">
         <div className="chat-toolbar">
           <h4 ref={previewHeading} tabIndex={-1}>{names.get(previewDoc.id)} · physical page {preview.page}</h4>
